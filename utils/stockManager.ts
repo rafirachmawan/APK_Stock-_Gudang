@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+// Struktur data barang
 export interface Barang {
   kode: string;
   nama: string;
@@ -11,6 +12,7 @@ export interface Barang {
   waktuInput: string;
 }
 
+// Fungsi utama menghitung stok akhir
 export const getCurrentStock = async (): Promise<Barang[]> => {
   try {
     const [masuk, keluar] = await Promise.all([
@@ -23,10 +25,19 @@ export const getCurrentStock = async (): Promise<Barang[]> => {
 
     const stockMap = new Map<string, Barang>();
 
-    // Proses data masuk
+    // Gabungkan semua input barang masuk
     dataMasuk.forEach((item) => {
       if (!stockMap.has(item.kode)) {
-        stockMap.set(item.kode, { ...item });
+        stockMap.set(item.kode, {
+          kode: item.kode,
+          nama: item.nama,
+          stokLarge: item.stokLarge,
+          stokMedium: item.stokMedium,
+          stokSmall: item.stokSmall,
+          ed: item.ed,
+          catatan: "", // opsional, tidak dijumlah
+          waktuInput: "", // opsional
+        });
       } else {
         const existing = stockMap.get(item.kode)!;
         existing.stokLarge += item.stokLarge;
@@ -35,13 +46,19 @@ export const getCurrentStock = async (): Promise<Barang[]> => {
       }
     });
 
-    // Proses data keluar
+    // Kurangi stok dari barang keluar
     dataKeluar.forEach((item) => {
-      if (!stockMap.has(item.kode)) return;
-      const existing = stockMap.get(item.kode)!;
-      existing.stokLarge -= item.stokLarge;
-      existing.stokMedium -= item.stokMedium;
-      existing.stokSmall -= item.stokSmall;
+      const existing = stockMap.get(item.kode);
+      if (existing) {
+        existing.stokLarge -= item.stokLarge;
+        existing.stokMedium -= item.stokMedium;
+        existing.stokSmall -= item.stokSmall;
+
+        // Hindari nilai negatif
+        if (existing.stokLarge < 0) existing.stokLarge = 0;
+        if (existing.stokMedium < 0) existing.stokMedium = 0;
+        if (existing.stokSmall < 0) existing.stokSmall = 0;
+      }
     });
 
     return Array.from(stockMap.values());
@@ -51,6 +68,7 @@ export const getCurrentStock = async (): Promise<Barang[]> => {
   }
 };
 
+// Fungsi hapus barang berdasarkan kode dan waktuInput
 export const deleteBarang = async (
   kode: string,
   waktuInput: string
@@ -71,7 +89,7 @@ export const deleteBarang = async (
   }
 };
 
-//
+// Struktur master barang
 export interface MasterBarang {
   kode: string;
   nama: string;
@@ -79,7 +97,7 @@ export interface MasterBarang {
   kategori: string;
 }
 
-// Fungsi untuk mendapatkan data master barang
+// Mendapatkan master barang
 export const getMasterBarang = async (): Promise<MasterBarang[]> => {
   try {
     const jsonValue = await AsyncStorage.getItem("masterBarang");
@@ -90,7 +108,7 @@ export const getMasterBarang = async (): Promise<MasterBarang[]> => {
   }
 };
 
-// Fungsi untuk menambah barang masuk dengan referensi ke master barang
+// Tambah barang masuk
 export const addBarangMasuk = async (barang: Barang): Promise<boolean> => {
   try {
     const jsonValue = await AsyncStorage.getItem("barangMasuk");
@@ -104,7 +122,7 @@ export const addBarangMasuk = async (barang: Barang): Promise<boolean> => {
   }
 };
 
-// Fungsi untuk update barang masuk
+// Update barang masuk
 export const updateBarangMasuk = async (
   kodeLama: string,
   waktuInputLama: string,
