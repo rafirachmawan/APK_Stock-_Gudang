@@ -1,5 +1,5 @@
+// ...import tetap
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
@@ -32,8 +32,6 @@ type DropDownItem = {
 };
 
 export default function InScreen() {
-  const router = useRouter();
-
   const [form, setForm] = useState<BarangForm>({
     kode: "",
     nama: "",
@@ -231,28 +229,13 @@ export default function InScreen() {
             </View>
           ))}
 
-          {/* Tombol Simpan Barang */}
+          {/* Tombol Simpan */}
           <TouchableOpacity
             style={styles.buttonContainer}
             onPress={handleSubmit}
           >
             <Text style={styles.buttonText}>Simpan Barang</Text>
           </TouchableOpacity>
-
-          {/* Tombol Lihat Detail */}
-          {form.kode ? (
-            <TouchableOpacity
-              style={styles.buttonContainer}
-              onPress={() =>
-                router.push({
-                  pathname: "/stockDetail/[kode]",
-                  params: { kode: form.kode },
-                })
-              }
-            >
-              <Text style={styles.buttonText}>Lihat Detail Kode Ini</Text>
-            </TouchableOpacity>
-          ) : null}
         </ScrollView>
       </View>
     </KeyboardAvoidingView>
