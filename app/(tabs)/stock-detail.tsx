@@ -1,7 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useFocusEffect } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -54,9 +55,12 @@ export default function StockDetailScreen() {
     }
   };
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  // ✅ Refresh data setiap kali halaman difokuskan
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [])
+  );
 
   const handleDelete = async (item: Barang) => {
     Alert.alert(

@@ -12,14 +12,14 @@ export default function HomeScreen() {
   return (
     <ThemedView style={styles.container}>
       <ThemedText type="title" style={styles.title}>
-        📊 Dashboard Gudang
+        📊 Dasboard Stock Gudang
       </ThemedText>
 
       <ThemedView style={styles.contentBox}>
         <ThemedText type="subtitle">Selamat datang!</ThemedText>
         <ThemedText>
-          Gunakan menu di bawah untuk mengelola barang masuk, barang keluar, dan
-          melihat riwayat stok.
+          Gunakan menu di kiri atas untuk mengelola barang masuk, barang keluar,
+          dan melihat riwayat stok.
         </ThemedText>
       </ThemedView>
 
