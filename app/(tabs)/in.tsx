@@ -63,9 +63,13 @@ export default function InScreen() {
         FileSystem.cacheDirectory + "temp-list.xlsx"
       );
 
-      const { uri } = await downloadResumable.downloadAsync();
+      const result = await downloadResumable.downloadAsync();
 
-      const fileContent = await FileSystem.readAsStringAsync(uri, {
+      if (!result || !result.uri) {
+        throw new Error("Gagal mengunduh file Excel.");
+      }
+
+      const fileContent = await FileSystem.readAsStringAsync(result.uri, {
         encoding: FileSystem.EncodingType.Base64,
       });
 
@@ -240,29 +244,33 @@ export default function InScreen() {
             />
           </View>
 
-          {/* Input fields */}
-          {[
-            ["Stok Besar (Large)", "stokLarge"],
-            ["Stok Sedang (Medium)", "stokMedium"],
-            ["Stok Kecil (Small)", "stokSmall"],
-            ["Expired Date (ED)", "ed"],
-            ["Catatan", "catatan"],
-          ].map(([label, key]) => (
-            <View key={key} style={styles.inputWrapper}>
-              <Text style={styles.label}>{label}</Text>
-              <TextInput
-                style={styles.input}
-                value={form[key as keyof BarangForm]}
-                onChangeText={(text) =>
-                  handleChange(key as keyof BarangForm, text)
-                }
-                keyboardType={key.includes("stok") ? "numeric" : "default"}
-                placeholderTextColor="#999"
-              />
-            </View>
-          ))}
+          {["stokLarge", "stokMedium", "stokSmall", "ed", "catatan"].map(
+            (key, index) => (
+              <View key={key} style={styles.inputWrapper}>
+                <Text style={styles.label}>
+                  {
+                    [
+                      "Stok Besar (Large)",
+                      "Stok Sedang (Medium)",
+                      "Stok Kecil (Small)",
+                      "Expired Date (ED)",
+                      "Catatan",
+                    ][index]
+                  }
+                </Text>
+                <TextInput
+                  style={styles.input}
+                  value={form[key as keyof BarangForm]}
+                  onChangeText={(text) =>
+                    handleChange(key as keyof BarangForm, text)
+                  }
+                  keyboardType={key.includes("stok") ? "numeric" : "default"}
+                  placeholderTextColor="#999"
+                />
+              </View>
+            )
+          )}
 
-          {/* Tombol Simpan */}
           <TouchableOpacity
             style={styles.buttonContainer}
             onPress={handleSubmit}

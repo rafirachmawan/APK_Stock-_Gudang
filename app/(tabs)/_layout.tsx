@@ -14,9 +14,7 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
 
   useEffect(() => {
-    LogBox.ignoreLogs([
-      "VirtualizedLists should never be nested", // ✅ Menghilangkan warning DropDownPicker + ScrollView
-    ]);
+    LogBox.ignoreLogs(["VirtualizedLists should never be nested"]);
   }, []);
 
   return (
@@ -25,11 +23,14 @@ export default function RootLayout() {
         <Drawer.Screen name="dashboard" options={{ title: "Dashboard" }} />
         <Drawer.Screen name="in" options={{ title: "Barang Masuk" }} />
         <Drawer.Screen name="out" options={{ title: "Barang Keluar" }} />
-
         <Drawer.Screen name="generate" options={{ title: "Generate" }} />
+        <Drawer.Screen
+          name="stock-detail"
+          options={{ title: "Stock Detail" }}
+        />
+        <Drawer.Screen name="out-detail" options={{ title: "Out Detail" }} />
       </Drawer>
       <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
-      <Drawer.Screen name="stock-detail" options={{ title: "Stock Detail" }} />
     </ThemeProvider>
   );
 }

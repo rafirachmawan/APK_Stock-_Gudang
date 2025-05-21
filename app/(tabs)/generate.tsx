@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useIsFocused } from "@react-navigation/native";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
@@ -23,10 +24,13 @@ export default function GenerateScreen() {
   const [generatedProducts, setGeneratedProducts] = useState<Product[]>([]);
   const [generatedItems, setGeneratedItems] = useState<string[]>([]); // Menyimpan kode+principle
   const [isLoading, setIsLoading] = useState(true);
+  const isFocused = useIsFocused();
 
   useEffect(() => {
-    loadProducts();
-  }, []);
+    if (isFocused) {
+      loadProducts();
+    }
+  }, [isFocused]);
 
   const loadProducts = async () => {
     try {
@@ -44,7 +48,6 @@ export default function GenerateScreen() {
   };
 
   const generateRandomProduct = () => {
-    // Filter produk yang belum pernah di-generate (kode+principle unik)
     const availableProducts = allProducts.filter(
       (product) =>
         !generatedItems.includes(`${product.kode}|${product.principle}`)
@@ -55,21 +58,18 @@ export default function GenerateScreen() {
       return;
     }
 
-    // Ambil random index dari produk yang tersedia
     const randomIndex = Math.floor(Math.random() * availableProducts.length);
     const selectedProduct = availableProducts[randomIndex];
 
-    // Cari semua produk dengan kode DAN principle yang sama
     const sameProducts = allProducts.filter(
       (product) =>
         product.kode === selectedProduct.kode &&
         product.principle === selectedProduct.principle
     );
 
-    // Update state
     setGeneratedProducts(sameProducts);
-    setGeneratedItems([
-      ...generatedItems,
+    setGeneratedItems((prev) => [
+      ...prev,
       `${selectedProduct.kode}|${selectedProduct.principle}`,
     ]);
   };
@@ -159,8 +159,6 @@ export default function GenerateScreen() {
     </View>
   );
 }
-
-// Styles tetap sama seperti sebelumnya
 
 const styles = StyleSheet.create({
   container: {
@@ -254,5 +252,14 @@ const styles = StyleSheet.create({
     marginTop: 20,
     color: "#666",
     fontSize: 16,
+  },
+  infoContainer: {
+    marginTop: 15,
+  },
+  infoText: {
+    fontSize: 14,
+    color: "#444",
+    textAlign: "center",
+    marginTop: 4,
   },
 });
