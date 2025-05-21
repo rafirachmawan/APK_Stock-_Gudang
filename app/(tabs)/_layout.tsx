@@ -25,13 +25,11 @@ export default function RootLayout() {
         <Drawer.Screen name="dashboard" options={{ title: "Dashboard" }} />
         <Drawer.Screen name="in" options={{ title: "Barang Masuk" }} />
         <Drawer.Screen name="out" options={{ title: "Barang Keluar" }} />
-        <Drawer.Screen
-          name="stock-detail"
-          options={{ title: "Stock Detail" }}
-        />
+
         <Drawer.Screen name="generate" options={{ title: "Generate" }} />
       </Drawer>
       <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
+      <Drawer.Screen name="stock-detail" options={{ title: "Stock Detail" }} />
     </ThemeProvider>
   );
 }

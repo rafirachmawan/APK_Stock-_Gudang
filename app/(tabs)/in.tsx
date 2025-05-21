@@ -1,5 +1,6 @@
 // ...import tetap
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as FileSystem from "expo-file-system";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
@@ -13,8 +14,11 @@ import {
   View,
 } from "react-native";
 import DropDownPicker from "react-native-dropdown-picker";
-import { masterBarangList } from "../../utils/masterBarang";
+import * as XLSX from "xlsx";
 import { Barang } from "../../utils/stockManager";
+
+const EXCEL_URL =
+  "https://docs.google.com/spreadsheets/d/1c9E19bcynRxJg_47GFu0GWE6LbldI5L8_YFSxxCsFwI/export?format=xlsx";
 
 interface BarangForm {
   kode: string;
@@ -42,6 +46,7 @@ export default function InScreen() {
     catatan: "",
   });
 
+  const [masterBarangList, setMasterBarangList] = useState<any[]>([]);
   const [brand, setBrand] = useState("");
   const [brandItems, setBrandItems] = useState<DropDownItem[]>([]);
   const [kodeItems, setKodeItems] = useState<DropDownItem[]>([]);
@@ -51,14 +56,42 @@ export default function InScreen() {
   const [kodeOpen, setKodeOpen] = useState(false);
   const [namaOpen, setNamaOpen] = useState(false);
 
+  const importExcelFromUrl = async () => {
+    try {
+      const downloadResumable = FileSystem.createDownloadResumable(
+        EXCEL_URL,
+        FileSystem.cacheDirectory + "temp-list.xlsx"
+      );
+
+      const { uri } = await downloadResumable.downloadAsync();
+
+      const fileContent = await FileSystem.readAsStringAsync(uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      const workbook = XLSX.read(fileContent, { type: "base64" });
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+      setMasterBarangList(jsonData);
+
+      const uniqueBrands = Array.from(
+        new Set(jsonData.map((item: any) => item.brand))
+      ).map((brand) => ({
+        label: brand,
+        value: brand,
+      }));
+
+      setBrandItems(uniqueBrands);
+      Alert.alert("Sukses", `Ditemukan ${jsonData.length} item.`);
+    } catch (error) {
+      console.error("Gagal fetch dari URL:", error);
+      Alert.alert("Error", "Gagal memuat data dari spreadsheet.");
+    }
+  };
+
   useEffect(() => {
-    const uniqueBrands = Array.from(
-      new Set(masterBarangList.map((item) => item.brand))
-    ).map((brand) => ({
-      label: brand,
-      value: brand,
-    }));
-    setBrandItems(uniqueBrands);
+    importExcelFromUrl();
   }, []);
 
   useEffect(() => {
@@ -140,7 +173,7 @@ export default function InScreen() {
           nestedScrollEnabled
           contentContainerStyle={{ paddingBottom: 100 }}
         >
-          <Text style={styles.title}>Input Barang Masuk</Text>
+          <Text style={styles.title}>Form Barang Masuk</Text>
 
           {/* Dropdown Brand */}
           <View style={{ zIndex: 3000 }}>

@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useIsFocused } from "@react-navigation/native";
 import React, { useEffect, useState } from "react";
 import {
@@ -16,18 +17,13 @@ import {
   getCurrentStock,
 } from "../../utils/stockManager";
 
-import { MasterBarang } from "../../utils/stockManager";
-
 export default function StockScreen() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [stockData, setStockData] = useState<Barang[]>([]);
   const [selectedItem, setSelectedItem] = useState<Barang | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [barangKeluar, setBarangKeluar] = useState<Barang[]>([]);
   const isFocused = useIsFocused();
-  const [selectedMaster, setSelectedMaster] = useState<MasterBarang | null>(
-    null
-  );
-  const [masterBarang, setMasterBarang] = useState<MasterBarang[]>([]);
 
   useEffect(() => {
     if (isFocused) {
@@ -73,6 +69,22 @@ export default function StockScreen() {
     );
   };
 
+  const handleItemPress = async (item: Barang) => {
+    setSelectedItem(item);
+    try {
+      const keluarData = await AsyncStorage.getItem("barangKeluar");
+      const parsedKeluar = keluarData ? JSON.parse(keluarData) : [];
+      const filteredKeluar = parsedKeluar.filter(
+        (bk: Barang) => bk.kode === item.kode
+      );
+      setBarangKeluar(filteredKeluar);
+    } catch (error) {
+      console.error("Gagal memuat data barang keluar:", error);
+      setBarangKeluar([]);
+    }
+    setModalVisible(true);
+  };
+
   const filteredData = stockData.filter(
     (item) =>
       item.nama.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -80,13 +92,7 @@ export default function StockScreen() {
   );
 
   const renderItem = ({ item }: { item: Barang }) => (
-    <TouchableOpacity
-      style={styles.card}
-      onPress={() => {
-        setSelectedItem(item);
-        setModalVisible(true);
-      }}
-    >
+    <TouchableOpacity style={styles.card} onPress={() => handleItemPress(item)}>
       <Text style={styles.cardTitle}>
         {item.nama} ({item.kode})
       </Text>
@@ -183,6 +189,45 @@ export default function StockScreen() {
                   <Text style={styles.modalValue}>
                     {selectedItem.waktuInput}
                   </Text>
+                </View>
+
+                <View style={{ marginTop: 20 }}>
+                  <Text style={[styles.modalTitle, { fontSize: 18 }]}>
+                    Riwayat Barang Keluar
+                  </Text>
+                  {barangKeluar.length === 0 ? (
+                    <Text style={{ color: "#aaa", textAlign: "center" }}>
+                      Belum ada pengeluaran
+                    </Text>
+                  ) : (
+                    barangKeluar.map((keluar, index) => (
+                      <View
+                        key={index}
+                        style={{
+                          marginVertical: 8,
+                          borderBottomWidth: 1,
+                          borderBottomColor: "#444",
+                          paddingBottom: 8,
+                        }}
+                      >
+                        <Text style={styles.modalLabel}>
+                          Tanggal: {keluar.waktuInput}
+                        </Text>
+                        <Text style={styles.modalLabel}>
+                          Large: {keluar.stokLarge}
+                        </Text>
+                        <Text style={styles.modalLabel}>
+                          Medium: {keluar.stokMedium}
+                        </Text>
+                        <Text style={styles.modalLabel}>
+                          Small: {keluar.stokSmall}
+                        </Text>
+                        <Text style={styles.modalLabel}>
+                          Catatan: {keluar.catatan || "-"}
+                        </Text>
+                      </View>
+                    ))
+                  )}
                 </View>
 
                 <View style={styles.modalButtonContainer}>
