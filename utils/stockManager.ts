@@ -10,6 +10,7 @@ export interface Barang {
   ed: string;
   catatan: string;
   waktuInput: string;
+  principle: string; // ✅ Menambahkan properti principle (brand)
 }
 
 // Fungsi utama menghitung stok akhir
@@ -37,6 +38,7 @@ export const getCurrentStock = async (): Promise<Barang[]> => {
           ed: item.ed,
           catatan: "", // opsional, tidak dijumlah
           waktuInput: "", // opsional
+          principle: item.principle,
         });
       } else {
         const existing = stockMap.get(item.kode)!;

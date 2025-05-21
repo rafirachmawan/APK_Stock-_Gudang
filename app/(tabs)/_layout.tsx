@@ -24,10 +24,7 @@ export default function RootLayout() {
         <Drawer.Screen name="in" options={{ title: "Barang Masuk" }} />
         <Drawer.Screen name="out" options={{ title: "Barang Keluar" }} />
         <Drawer.Screen name="generate" options={{ title: "Generate" }} />
-        <Drawer.Screen
-          name="stock-detail"
-          options={{ title: "Stock Detail" }}
-        />
+        <Drawer.Screen name="stock-detail" options={{ title: "In Detail" }} />
         <Drawer.Screen name="out-detail" options={{ title: "Out Detail" }} />
       </Drawer>
       <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />

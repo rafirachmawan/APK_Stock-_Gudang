@@ -1,14 +1,17 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useIsFocused } from "@react-navigation/native";
+import * as FileSystem from "expo-file-system";
+import * as Sharing from "expo-sharing";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
   FlatList,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+import * as XLSX from "xlsx";
 
 interface Product {
   kode: string;
@@ -21,141 +24,137 @@ interface Product {
 
 export default function GenerateScreen() {
   const [allProducts, setAllProducts] = useState<Product[]>([]);
-  const [generatedProducts, setGeneratedProducts] = useState<Product[]>([]);
-  const [generatedItems, setGeneratedItems] = useState<string[]>([]); // Menyimpan kode+principle
-  const [isLoading, setIsLoading] = useState(true);
-  const isFocused = useIsFocused();
+  const [generatedBrands, setGeneratedBrands] = useState<string[]>([]);
+  const [currentBrand, setCurrentBrand] = useState<string | null>(null);
+  const [brandProducts, setBrandProducts] = useState<Product[]>([]);
+  const [stockInputs, setStockInputs] = useState<
+    Record<string, { L: string; M: string; S: string }>
+  >({});
 
   useEffect(() => {
-    if (isFocused) {
-      loadProducts();
-    }
-  }, [isFocused]);
+    loadProducts();
+  }, []);
 
   const loadProducts = async () => {
-    try {
-      const storedProducts = await AsyncStorage.getItem("barangMasuk");
-      if (storedProducts) {
-        const products: Product[] = JSON.parse(storedProducts);
-        setAllProducts(products);
-      }
-      setIsLoading(false);
-    } catch (error) {
-      console.error("Error loading products:", error);
-      Alert.alert("Error", "Gagal memuat data produk");
-      setIsLoading(false);
+    const stored = await AsyncStorage.getItem("barangMasuk");
+    if (stored) {
+      setAllProducts(JSON.parse(stored));
     }
   };
 
-  const generateRandomProduct = () => {
-    const availableProducts = allProducts.filter(
-      (product) =>
-        !generatedItems.includes(`${product.kode}|${product.principle}`)
+  const generateNextBrand = () => {
+    const uniqueBrands = Array.from(
+      new Set(allProducts.map((p) => p.principle))
+    );
+    const availableBrands = uniqueBrands.filter(
+      (b) => !generatedBrands.includes(b)
     );
 
-    if (availableProducts.length === 0) {
-      Alert.alert("Info", "Semua produk sudah di-generate");
+    if (availableBrands.length === 0) {
+      Alert.alert("Info", "Semua brand telah digenerate");
       return;
     }
 
-    const randomIndex = Math.floor(Math.random() * availableProducts.length);
-    const selectedProduct = availableProducts[randomIndex];
+    const nextBrand =
+      availableBrands[Math.floor(Math.random() * availableBrands.length)];
+    const filtered = allProducts.filter((p) => p.principle === nextBrand);
 
-    const sameProducts = allProducts.filter(
-      (product) =>
-        product.kode === selectedProduct.kode &&
-        product.principle === selectedProduct.principle
-    );
+    setCurrentBrand(nextBrand);
+    setBrandProducts(filtered);
+    setGeneratedBrands((prev) => [...prev, nextBrand]);
+    setStockInputs({});
+  };
 
-    setGeneratedProducts(sameProducts);
-    setGeneratedItems((prev) => [
+  const handleStockChange = (
+    kode: string,
+    type: "L" | "M" | "S",
+    value: string
+  ) => {
+    setStockInputs((prev) => ({
       ...prev,
-      `${selectedProduct.kode}|${selectedProduct.principle}`,
-    ]);
+      [kode]: {
+        L: type === "L" ? value : prev[kode]?.L || "",
+        M: type === "M" ? value : prev[kode]?.M || "",
+        S: type === "S" ? value : prev[kode]?.S || "",
+      },
+    }));
   };
 
-  const resetGeneration = () => {
-    setGeneratedProducts([]);
-    setGeneratedItems([]);
-    Alert.alert("Reset", "Daftar generate telah direset");
+  const exportToExcel = async () => {
+    if (!currentBrand) return;
+    const exportData = brandProducts.map((item, index) => ({
+      No: index + 1,
+      Brand: item.principle,
+      Kode: item.kode,
+      Nama: item.nama,
+      Large: stockInputs[item.kode]?.L || "",
+      Medium: stockInputs[item.kode]?.M || "",
+      Small: stockInputs[item.kode]?.S || "",
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "BrandData");
+
+    const wbout = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
+    const uri = FileSystem.documentDirectory + `generate-${currentBrand}.xlsx`;
+    await FileSystem.writeAsStringAsync(uri, wbout, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    await Sharing.shareAsync(uri);
   };
 
-  const getUniqueProductsCount = () => {
-    const uniqueKeys = new Set(
-      allProducts.map((p) => `${p.kode}|${p.principle}`)
-    );
-    return uniqueKeys.size - generatedItems.length;
+  const resetBrands = () => {
+    setGeneratedBrands([]);
+    setCurrentBrand(null);
+    setBrandProducts([]);
+    setStockInputs({});
   };
 
-  const renderProductItem = ({ item }: { item: Product }) => (
-    <View style={styles.productItem}>
-      <Text style={styles.productName}>
-        {item.nama} ({item.kode})
-      </Text>
-      <Text style={styles.principleText}>Principle: {item.principle}</Text>
-      <View style={styles.stockRow}>
-        <Text style={styles.stockText}>L: {item.stokLarge}</Text>
-        <Text style={styles.stockText}>M: {item.stokMedium}</Text>
-        <Text style={styles.stockText}>S: {item.stokSmall}</Text>
+  const renderItem = ({ item }: { item: Product }) => (
+    <View style={styles.itemBox}>
+      <Text style={styles.itemText}>{item.nama}</Text>
+      <View style={styles.row}>
+        {(["L", "M", "S"] as const).map((size) => (
+          <TextInput
+            key={size}
+            placeholder={size}
+            placeholderTextColor="#888"
+            style={styles.input}
+            value={stockInputs[item.kode]?.[size] || ""}
+            onChangeText={(text) => handleStockChange(item.kode, size, text)}
+            keyboardType="numeric"
+          />
+        ))}
       </View>
     </View>
   );
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Generate Product</Text>
+      <Text style={styles.title}>Generate Brand</Text>
+      <TouchableOpacity style={styles.button} onPress={generateNextBrand}>
+        <Text style={styles.buttonText}>Generate Brand</Text>
+      </TouchableOpacity>
 
-      {isLoading ? (
-        <Text>Memuat data...</Text>
-      ) : (
+      {currentBrand && (
         <>
-          <View style={styles.buttonContainer}>
-            <TouchableOpacity
-              style={[styles.actionButton, styles.generateButton]}
-              onPress={generateRandomProduct}
-            >
-              <Text style={styles.buttonText}>GENERATE</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.actionButton, styles.resetButton]}
-              onPress={resetGeneration}
-            >
-              <Text style={styles.buttonText}>RESET</Text>
-            </TouchableOpacity>
-          </View>
-
-          {generatedProducts.length > 0 && (
-            <View style={styles.resultContainer}>
-              <Text style={styles.principleName}>
-                {generatedProducts[0].nama} ({generatedProducts[0].kode})
-              </Text>
-              <Text style={styles.principleText}>
-                Principle: {generatedProducts[0].principle}
-              </Text>
-              <FlatList
-                data={generatedProducts}
-                renderItem={renderProductItem}
-                keyExtractor={(item, index) => `${item.kode}-${index}`}
-                contentContainerStyle={styles.productList}
-              />
-            </View>
-          )}
-
-          <View style={styles.infoContainer}>
-            <Text style={styles.infoText}>
-              Produk unik tersisa: {getUniqueProductsCount()}
-            </Text>
-            <Text style={styles.infoText}>
-              Total di-generate: {generatedItems.length}
-            </Text>
-          </View>
-
-          {getUniqueProductsCount() === 0 && allProducts.length > 0 && (
-            <Text style={styles.emptyText}>Semua produk sudah di-generate</Text>
-          )}
+          <Text style={styles.subTitle}>Brand: {currentBrand}</Text>
+          <FlatList
+            data={brandProducts}
+            renderItem={renderItem}
+            keyExtractor={(item) => item.kode}
+            contentContainerStyle={{ paddingBottom: 40 }}
+          />
+          <TouchableOpacity style={styles.exportBtn} onPress={exportToExcel}>
+            <Text style={styles.buttonText}>Export to Excel</Text>
+          </TouchableOpacity>
         </>
       )}
+
+      <TouchableOpacity style={styles.resetBtn} onPress={resetBrands}>
+        <Text style={styles.resetText}>🔄 Reset Semua Brand</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -163,103 +162,70 @@ export default function GenerateScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: "#121212",
+    padding: 16,
   },
   title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 20,
-    textAlign: "center",
-    color: "#333",
-  },
-  buttonContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 20,
-  },
-  actionButton: {
-    padding: 15,
-    borderRadius: 8,
-    alignItems: "center",
-    flex: 1,
-    marginHorizontal: 5,
-  },
-  generateButton: {
-    backgroundColor: "#4CAF50",
-  },
-  resetButton: {
-    backgroundColor: "#f44336",
-  },
-  buttonText: {
-    color: "white",
-    fontWeight: "bold",
-    fontSize: 16,
-  },
-  resultContainer: {
-    backgroundColor: "white",
-    borderRadius: 10,
-    padding: 15,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  principleName: {
     fontSize: 20,
     fontWeight: "bold",
-    color: "#333",
-    marginBottom: 10,
+    color: "#fff",
+    marginBottom: 12,
     textAlign: "center",
   },
-  productList: {
-    paddingBottom: 10,
-  },
-  productItem: {
-    padding: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
-    marginBottom: 10,
-  },
-  productName: {
+  subTitle: {
+    color: "#fff",
     fontSize: 16,
-    color: "#333",
+    marginVertical: 10,
+    textAlign: "center",
+  },
+  button: {
+    backgroundColor: "#4caf50",
+    padding: 12,
+    borderRadius: 6,
+    marginBottom: 16,
+    alignItems: "center",
+  },
+  buttonText: {
+    color: "#fff",
     fontWeight: "bold",
   },
-  principleText: {
-    fontSize: 14,
-    color: "#555",
-    marginVertical: 5,
+  exportBtn: {
+    backgroundColor: "#2196f3",
+    padding: 12,
+    borderRadius: 6,
+    marginVertical: 10,
+    alignItems: "center",
   },
-  stockRow: {
-    flexDirection: "row",
-    marginTop: 5,
-  },
-  stockText: {
-    fontSize: 14,
-    color: "#666",
-    marginRight: 15,
-  },
-  remainingText: {
+  resetBtn: {
     marginTop: 10,
-    textAlign: "center",
-    color: "#666",
+    alignItems: "center",
+  },
+  resetText: {
+    color: "#ccc",
+    fontSize: 14,
     fontStyle: "italic",
   },
-  emptyText: {
-    textAlign: "center",
-    marginTop: 20,
-    color: "#666",
-    fontSize: 16,
+  itemBox: {
+    backgroundColor: "#1e1e1e",
+    padding: 10,
+    marginBottom: 8,
+    borderRadius: 6,
   },
-  infoContainer: {
-    marginTop: 15,
-  },
-  infoText: {
+  itemText: {
+    color: "#fff",
     fontSize: 14,
-    color: "#444",
+    marginBottom: 6,
+  },
+  row: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  input: {
+    backgroundColor: "#333",
+    color: "#fff",
+    borderRadius: 4,
+    padding: 8,
+    width: "30%",
     textAlign: "center",
-    marginTop: 4,
   },
 });

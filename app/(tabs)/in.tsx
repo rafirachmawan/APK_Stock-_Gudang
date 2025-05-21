@@ -1,4 +1,3 @@
-// ...import tetap
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystem from "expo-file-system";
 import React, { useEffect, useState } from "react";
@@ -142,6 +141,7 @@ export default function InScreen() {
       ed: form.ed.trim(),
       catatan: form.catatan.trim(),
       waktuInput: new Date().toISOString(),
+      principle: brand || "-", // ✅ FIX ERROR
     };
 
     try {
@@ -179,7 +179,6 @@ export default function InScreen() {
         >
           <Text style={styles.title}>Form Barang Masuk</Text>
 
-          {/* Dropdown Brand */}
           <View style={{ zIndex: 3000 }}>
             <Text style={styles.label}>Master Brand</Text>
             <DropDownPicker
@@ -198,7 +197,6 @@ export default function InScreen() {
             />
           </View>
 
-          {/* Dropdown Kode */}
           <View style={{ zIndex: 2000 }}>
             <Text style={styles.label}>Kode Barang</Text>
             <DropDownPicker
@@ -221,7 +219,6 @@ export default function InScreen() {
             />
           </View>
 
-          {/* Dropdown Nama */}
           <View style={{ zIndex: 1000 }}>
             <Text style={styles.label}>Nama Barang</Text>
             <DropDownPicker
