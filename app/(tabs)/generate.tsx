@@ -24,6 +24,7 @@ interface Product {
 
 export default function GenerateScreen() {
   const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const [brandMap, setBrandMap] = useState<Record<string, Product[]>>({});
   const [generatedBrands, setGeneratedBrands] = useState<string[]>([]);
   const [currentBrand, setCurrentBrand] = useState<string | null>(null);
   const [brandProducts, setBrandProducts] = useState<Product[]>([]);
@@ -38,15 +39,24 @@ export default function GenerateScreen() {
   const loadProducts = async () => {
     const stored = await AsyncStorage.getItem("barangMasuk");
     if (stored) {
-      setAllProducts(JSON.parse(stored));
+      const products: Product[] = JSON.parse(stored);
+      setAllProducts(products);
+
+      const grouped: Record<string, Product[]> = {};
+      for (const item of products) {
+        const brand = item.principle || "UNKNOWN";
+        if (!grouped[brand]) {
+          grouped[brand] = [];
+        }
+        grouped[brand].push(item);
+      }
+      setBrandMap(grouped);
     }
   };
 
   const generateNextBrand = () => {
-    const uniqueBrands = Array.from(
-      new Set(allProducts.map((p) => p.principle))
-    );
-    const availableBrands = uniqueBrands.filter(
+    const allBrandNames = Object.keys(brandMap);
+    const availableBrands = allBrandNames.filter(
       (b) => !generatedBrands.includes(b)
     );
 
@@ -57,10 +67,9 @@ export default function GenerateScreen() {
 
     const nextBrand =
       availableBrands[Math.floor(Math.random() * availableBrands.length)];
-    const filtered = allProducts.filter((p) => p.principle === nextBrand);
 
     setCurrentBrand(nextBrand);
-    setBrandProducts(filtered);
+    setBrandProducts(brandMap[nextBrand]);
     setGeneratedBrands((prev) => [...prev, nextBrand]);
     setStockInputs({});
   };
