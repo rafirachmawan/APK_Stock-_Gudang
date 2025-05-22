@@ -1,18 +1,54 @@
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { StyleSheet, View } from "react-native";
+import { Alert, StyleSheet, TouchableOpacity, View } from "react-native";
+import { syncDownload, syncUpload } from "../../utils/firebase";
 
 export default function HomeScreen() {
-  // Dummy data—nanti ganti dengan data real dari AsyncStorage / API
+  // Dummy data untuk tampilan dashboard
   const totalMasuk = 120;
   const totalKeluar = 45;
   const stokSaatIni = 75;
 
+  // Fungsi Upload (dengan konfirmasi)
+  const handleUpload = () => {
+    Alert.alert(
+      "Konfirmasi",
+      "Upload akan menggantikan seluruh data di Firebase dengan data lokal.\nApakah kamu yakin?",
+      [
+        { text: "Batal", style: "cancel" },
+        {
+          text: "Lanjutkan",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await syncUpload();
+              Alert.alert("✅ Berhasil", "Data berhasil diunggah ke Firebase");
+            } catch (error) {
+              console.error(error);
+              Alert.alert("❌ Gagal", "Gagal mengupload data ke Firebase");
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // Fungsi Download dari Cloud
+  const handleDownload = async () => {
+    try {
+      await syncDownload();
+      Alert.alert("✅ Berhasil", "Data berhasil diunduh dari Firebase");
+    } catch (error) {
+      console.error(error);
+      Alert.alert("❌ Gagal", "Gagal mengunduh data dari Firebase");
+    }
+  };
+
   return (
     <ThemedView style={styles.container}>
       <ThemedText type="title" style={styles.title}>
-        📊 Dasboard Stock Gudang
+        📊 Dashboard Stock Gudang
       </ThemedText>
 
       <ThemedView style={styles.contentBox}>
@@ -46,6 +82,18 @@ export default function HomeScreen() {
           <ThemedText type="title">{stokSaatIni}</ThemedText>
         </ThemedView>
       </View>
+
+      <View style={styles.syncContainer}>
+        <TouchableOpacity style={styles.syncButton} onPress={handleUpload}>
+          <ThemedText style={styles.syncText}>⬆️ Upload ke Cloud</ThemedText>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.syncButton} onPress={handleDownload}>
+          <ThemedText style={styles.syncText}>
+            ⬇️ Download dari Cloud
+          </ThemedText>
+        </TouchableOpacity>
+      </View>
     </ThemedView>
   );
 }
@@ -58,6 +106,13 @@ const styles = StyleSheet.create({
   },
   title: {
     textAlign: "center",
+  },
+  contentBox: {
+    marginTop: 20,
+    backgroundColor: "#222",
+    padding: 16,
+    borderRadius: 12,
+    gap: 8,
   },
   cardsContainer: {
     flexDirection: "row",
@@ -72,19 +127,24 @@ const styles = StyleSheet.create({
     backgroundColor: "#1e293b",
     alignItems: "center",
     gap: 8,
-    // shadow untuk iOS
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
-    // elevation untuk Android
     elevation: 5,
   },
-  contentBox: {
-    marginTop: 20,
-    backgroundColor: "#222",
-    padding: 16,
-    borderRadius: 12,
-    gap: 8,
+  syncContainer: {
+    marginTop: 32,
+    gap: 12,
+  },
+  syncButton: {
+    backgroundColor: "#2563eb",
+    padding: 14,
+    borderRadius: 10,
+  },
+  syncText: {
+    color: "#fff",
+    fontWeight: "bold",
+    textAlign: "center",
   },
 });

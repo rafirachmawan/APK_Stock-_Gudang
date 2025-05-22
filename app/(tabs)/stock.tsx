@@ -52,12 +52,7 @@ export default function StockScreen() {
           onPress: async () => {
             const success = await deleteBarang(item.kode, item.waktuInput);
             if (success) {
-              setStockData((prev) =>
-                prev.filter(
-                  (i) =>
-                    !(i.kode === item.kode && i.waktuInput === item.waktuInput)
-                )
-              );
+              await loadStockData(); // ⬅️ Reload ulang dari AsyncStorage, bukan hanya dari state
               setModalVisible(false);
               Alert.alert("Sukses", "Barang berhasil dihapus");
             } else {

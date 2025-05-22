@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "510255992661",
+    "project_id": "stockgudang-2c399",
+    "storage_bucket": "stockgudang-2c399.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:510255992661:android:605bd663ff5d839d1ee9dc",
+        "android_client_info": {
+          "package_name": "com.StockGudang.appname"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDH-0zRYEORIkIfiUlh2Vbd4ZebruFlWtA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
