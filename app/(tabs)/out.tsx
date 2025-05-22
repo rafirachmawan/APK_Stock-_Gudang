@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useIsFocused } from "@react-navigation/native";
 import { useEffect, useState } from "react";
 import {
   Alert,
@@ -31,23 +32,29 @@ export default function OutScreen() {
   const [kodeOpen, setKodeOpen] = useState(false);
   const [kodeItems, setKodeItems] = useState<DropDownItem[]>([]);
 
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const currentStock = await getCurrentStock();
-        setDataMasuk(currentStock);
+  const isFocused = useIsFocused(); // detect when screen is focused
 
-        const kodeList = currentStock.map((item) => ({
-          label: `${item.kode} (${item.nama})`,
-          value: item.kode,
-        }));
-        setKodeItems(kodeList);
-      } catch (error) {
-        console.error("Gagal mengambil data:", error);
-      }
-    };
-    loadData();
-  }, []);
+  const loadData = async () => {
+    try {
+      const currentStock = await getCurrentStock();
+      setDataMasuk(currentStock);
+
+      const kodeList = currentStock.map((item) => ({
+        label: `${item.kode} (${item.nama})`,
+        value: item.kode,
+      }));
+      setKodeItems(kodeList);
+    } catch (error) {
+      console.error("Gagal mengambil data:", error);
+    }
+  };
+
+  // 🔁 Load ulang data setiap kali layar ini difokuskan
+  useEffect(() => {
+    if (isFocused) {
+      loadData();
+    }
+  }, [isFocused]);
 
   // Update nama barang otomatis saat kode berubah
   useEffect(() => {
@@ -98,6 +105,7 @@ export default function OutScreen() {
       catatan,
       ed: barang.ed,
       waktuInput: new Date().toISOString(),
+      principle: barang.principle,
     };
 
     try {
