@@ -24,7 +24,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 
-// Koleksi
+// Nama koleksi di Firebase
 const COLLECTION_IN = "barangMasuk";
 const COLLECTION_OUT = "barangKeluar";
 
@@ -98,5 +98,16 @@ export const syncUpload = async () => {
   } catch (error) {
     console.error("Gagal syncUpload:", error);
     throw error;
+  }
+};
+
+// 🗑️ Reset semua histori dari penyimpanan lokal (AsyncStorage)
+export const resetSemuaHistory = async (): Promise<void> => {
+  try {
+    await AsyncStorage.removeItem("barangMasuk");
+    await AsyncStorage.removeItem("barangKeluar");
+    console.log("✅ Semua histori berhasil dihapus dari lokal");
+  } catch (error) {
+    console.error("❌ Gagal menghapus histori:", error);
   }
 };

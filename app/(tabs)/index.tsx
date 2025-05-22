@@ -2,15 +2,17 @@ import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Alert, StyleSheet, TouchableOpacity, View } from "react-native";
-import { syncDownload, syncUpload } from "../../utils/firebase";
+import {
+  resetSemuaHistory,
+  syncDownload,
+  syncUpload,
+} from "../../utils/firebase";
 
 export default function HomeScreen() {
-  // Dummy data untuk tampilan dashboard
   const totalMasuk = 120;
   const totalKeluar = 45;
   const stokSaatIni = 75;
 
-  // Fungsi Upload (dengan konfirmasi)
   const handleUpload = () => {
     Alert.alert(
       "Konfirmasi",
@@ -34,7 +36,6 @@ export default function HomeScreen() {
     );
   };
 
-  // Fungsi Download dari Cloud
   const handleDownload = async () => {
     try {
       await syncDownload();
@@ -43,6 +44,27 @@ export default function HomeScreen() {
       console.error(error);
       Alert.alert("❌ Gagal", "Gagal mengunduh data dari Firebase");
     }
+  };
+
+  const handleReset = () => {
+    Alert.alert(
+      "Reset Histori",
+      "Semua data barang masuk & keluar di device ini akan dihapus. Lanjutkan?",
+      [
+        { text: "Batal", style: "cancel" },
+        {
+          text: "Hapus",
+          style: "destructive",
+          onPress: async () => {
+            await resetSemuaHistory();
+            Alert.alert(
+              "✅ Histori dihapus",
+              "Semua data lokal telah di-reset."
+            );
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -91,6 +113,15 @@ export default function HomeScreen() {
         <TouchableOpacity style={styles.syncButton} onPress={handleDownload}>
           <ThemedText style={styles.syncText}>
             ⬇️ Download dari Cloud
+          </ThemedText>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.syncButton, { backgroundColor: "#dc2626" }]}
+          onPress={handleReset}
+        >
+          <ThemedText style={styles.syncText}>
+            🗑️ Reset Semua Histori
           </ThemedText>
         </TouchableOpacity>
       </View>
