@@ -10,7 +10,7 @@ import {
 } from "firebase/firestore";
 import { Barang } from "./stockManager";
 
-// ✅ Konfigurasi Firebase dari google-services.json
+// ✅ Konfigurasi Firebase
 const firebaseConfig = {
   apiKey: "AIzaSyDH-0zRYEORIkIfiUlh2Vbd4ZebruFlWtA",
   authDomain: "stockgudang-2c399.firebaseapp.com",
@@ -24,37 +24,79 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 
-const COLLECTION = "barangMasuk"; // Nama koleksi di Firestore
+// Koleksi
+const COLLECTION_IN = "barangMasuk";
+const COLLECTION_OUT = "barangKeluar";
 
-// 🔽 Ambil semua data dari Firebase dan simpan ke local AsyncStorage
+// 🔽 Download semua data dari Firebase ke local AsyncStorage
 export const syncDownload = async () => {
-  const snapshot = await getDocs(collection(db, COLLECTION));
-  const data: Barang[] = [];
-  snapshot.forEach((doc) => {
-    data.push(doc.data() as Barang);
-  });
-  await AsyncStorage.setItem("barangMasuk", JSON.stringify(data));
+  try {
+    // Download barangMasuk
+    const snapshotIn = await getDocs(collection(db, COLLECTION_IN));
+    const dataIn: Barang[] = [];
+    snapshotIn.forEach((doc) => {
+      dataIn.push(doc.data() as Barang);
+    });
+    await AsyncStorage.setItem("barangMasuk", JSON.stringify(dataIn));
+
+    // Download barangKeluar
+    const snapshotOut = await getDocs(collection(db, COLLECTION_OUT));
+    const dataOut: Barang[] = [];
+    snapshotOut.forEach((doc) => {
+      dataOut.push(doc.data() as Barang);
+    });
+    await AsyncStorage.setItem("barangKeluar", JSON.stringify(dataOut));
+  } catch (error) {
+    console.error("Gagal syncDownload:", error);
+    throw error;
+  }
 };
 
-// 🔼 Sinkronisasi penuh: Hapus data lama di Firebase, lalu upload ulang dari lokal
+// 🔼 Upload semua data dari local ke Firebase (sinkronisasi penuh)
 export const syncUpload = async () => {
-  const jsonValue = await AsyncStorage.getItem("barangMasuk");
-  const localData: Barang[] = jsonValue ? JSON.parse(jsonValue) : [];
+  try {
+    // Ambil data lokal
+    const [inValue, outValue] = await Promise.all([
+      AsyncStorage.getItem("barangMasuk"),
+      AsyncStorage.getItem("barangKeluar"),
+    ]);
 
-  // Ambil semua ID dari Firestore
-  const snapshot = await getDocs(collection(db, COLLECTION));
-  const firebaseIds = snapshot.docs.map((doc) => doc.id);
-  const localIds = localData.map((item) => `${item.kode}-${item.waktuInput}`);
+    const dataIn: Barang[] = inValue ? JSON.parse(inValue) : [];
+    const dataOut: Barang[] = outValue ? JSON.parse(outValue) : [];
 
-  // 🗑️ Hapus dokumen di Firebase yang tidak ada di lokal
-  const toDelete = firebaseIds.filter((id) => !localIds.includes(id));
-  for (const id of toDelete) {
-    await deleteDoc(doc(db, COLLECTION, id));
-  }
+    // ---- Sinkron barangMasuk ----
+    const snapshotIn = await getDocs(collection(db, COLLECTION_IN));
+    const firebaseInIds = snapshotIn.docs.map((doc) => doc.id);
+    const localInIds = dataIn.map((item) => `${item.kode}-${item.waktuInput}`);
 
-  // 🔼 Upload semua data lokal ke Firebase
-  for (const item of localData) {
-    const id = `${item.kode}-${item.waktuInput}`;
-    await setDoc(doc(db, COLLECTION, id), item);
+    const toDeleteIn = firebaseInIds.filter((id) => !localInIds.includes(id));
+    for (const id of toDeleteIn) {
+      await deleteDoc(doc(db, COLLECTION_IN, id));
+    }
+    for (const item of dataIn) {
+      const id = `${item.kode}-${item.waktuInput}`;
+      await setDoc(doc(db, COLLECTION_IN, id), item);
+    }
+
+    // ---- Sinkron barangKeluar ----
+    const snapshotOut = await getDocs(collection(db, COLLECTION_OUT));
+    const firebaseOutIds = snapshotOut.docs.map((doc) => doc.id);
+    const localOutIds = dataOut.map(
+      (item) => `${item.kode}-${item.waktuInput}`
+    );
+
+    const toDeleteOut = firebaseOutIds.filter(
+      (id) => !localOutIds.includes(id)
+    );
+    for (const id of toDeleteOut) {
+      await deleteDoc(doc(db, COLLECTION_OUT, id));
+    }
+    for (const item of dataOut) {
+      const id = `${item.kode}-${item.waktuInput}`;
+      await setDoc(doc(db, COLLECTION_OUT, id), item);
+    }
+  } catch (error) {
+    console.error("Gagal syncUpload:", error);
+    throw error;
   }
 };
