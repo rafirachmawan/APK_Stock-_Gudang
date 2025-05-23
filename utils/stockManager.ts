@@ -10,10 +10,10 @@ export interface Barang {
   ed: string;
   catatan: string;
   waktuInput: string;
-  principle: string; // ✅ Menambahkan properti principle (brand)
+  principle: string; // ✅ Brand/principle
 }
 
-// Fungsi utama menghitung stok akhir
+// 🔢 Hitung stok akhir berdasarkan barangMasuk dan barangKeluar
 export const getCurrentStock = async (): Promise<Barang[]> => {
   try {
     const [masuk, keluar] = await Promise.all([
@@ -26,7 +26,7 @@ export const getCurrentStock = async (): Promise<Barang[]> => {
 
     const stockMap = new Map<string, Barang>();
 
-    // Gabungkan semua input barang masuk
+    // Tambahkan barang masuk
     dataMasuk.forEach((item) => {
       if (!stockMap.has(item.kode)) {
         stockMap.set(item.kode, {
@@ -36,8 +36,8 @@ export const getCurrentStock = async (): Promise<Barang[]> => {
           stokMedium: item.stokMedium,
           stokSmall: item.stokSmall,
           ed: item.ed,
-          catatan: "", // opsional, tidak dijumlah
-          waktuInput: "", // opsional
+          catatan: "",
+          waktuInput: "",
           principle: item.principle,
         });
       } else {
@@ -48,7 +48,7 @@ export const getCurrentStock = async (): Promise<Barang[]> => {
       }
     });
 
-    // Kurangi stok dari barang keluar
+    // Kurangi dengan barang keluar
     dataKeluar.forEach((item) => {
       const existing = stockMap.get(item.kode);
       if (existing) {
@@ -56,7 +56,6 @@ export const getCurrentStock = async (): Promise<Barang[]> => {
         existing.stokMedium -= item.stokMedium;
         existing.stokSmall -= item.stokSmall;
 
-        // Hindari nilai negatif
         if (existing.stokLarge < 0) existing.stokLarge = 0;
         if (existing.stokMedium < 0) existing.stokMedium = 0;
         if (existing.stokSmall < 0) existing.stokSmall = 0;
@@ -70,7 +69,7 @@ export const getCurrentStock = async (): Promise<Barang[]> => {
   }
 };
 
-// Fungsi hapus barang berdasarkan kode dan waktuInput
+// 🧹 Hapus satu barang dari barangMasuk
 export const deleteBarang = async (
   kode: string,
   waktuInput: string
@@ -91,26 +90,7 @@ export const deleteBarang = async (
   }
 };
 
-// Struktur master barang
-export interface MasterBarang {
-  kode: string;
-  nama: string;
-  satuan: string;
-  kategori: string;
-}
-
-// Mendapatkan master barang
-export const getMasterBarang = async (): Promise<MasterBarang[]> => {
-  try {
-    const jsonValue = await AsyncStorage.getItem("masterBarang");
-    return jsonValue ? JSON.parse(jsonValue) : [];
-  } catch (error) {
-    console.error("Gagal mengambil master barang:", error);
-    return [];
-  }
-};
-
-// Tambah barang masuk
+// 🎯 Tambah barang masuk
 export const addBarangMasuk = async (barang: Barang): Promise<boolean> => {
   try {
     const jsonValue = await AsyncStorage.getItem("barangMasuk");
@@ -124,7 +104,7 @@ export const addBarangMasuk = async (barang: Barang): Promise<boolean> => {
   }
 };
 
-// Update barang masuk
+// ✏️ Update barang masuk berdasarkan kode + waktuInput
 export const updateBarangMasuk = async (
   kodeLama: string,
   waktuInputLama: string,
@@ -145,5 +125,35 @@ export const updateBarangMasuk = async (
   } catch (error) {
     console.error("Gagal mengupdate barang masuk:", error);
     return false;
+  }
+};
+
+// 📦 Struktur master barang (opsional)
+export interface MasterBarang {
+  kode: string;
+  nama: string;
+  satuan: string;
+  kategori: string;
+}
+
+// 📥 Ambil master barang
+export const getMasterBarang = async (): Promise<MasterBarang[]> => {
+  try {
+    const jsonValue = await AsyncStorage.getItem("masterBarang");
+    return jsonValue ? JSON.parse(jsonValue) : [];
+  } catch (error) {
+    console.error("Gagal mengambil master barang:", error);
+    return [];
+  }
+};
+
+// 🗑 Hapus semua data barangMasuk dan barangKeluar
+export const resetAllStock = async (): Promise<void> => {
+  try {
+    await AsyncStorage.removeItem("barangMasuk");
+    await AsyncStorage.removeItem("barangKeluar");
+    console.log("Semua stok berhasil dihapus.");
+  } catch (error) {
+    console.error("Gagal menghapus semua stok:", error);
   }
 };

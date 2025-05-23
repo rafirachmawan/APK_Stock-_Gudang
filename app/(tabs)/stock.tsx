@@ -15,6 +15,7 @@ import {
   Barang,
   deleteBarang,
   getCurrentStock,
+  resetAllStock,
 } from "../../utils/stockManager";
 
 export default function StockScreen() {
@@ -52,7 +53,7 @@ export default function StockScreen() {
           onPress: async () => {
             const success = await deleteBarang(item.kode, item.waktuInput);
             if (success) {
-              await loadStockData(); // ⬅️ Reload ulang dari AsyncStorage, bukan hanya dari state
+              await loadStockData(); // Refresh list
               setModalVisible(false);
               Alert.alert("Sukses", "Barang berhasil dihapus");
             } else {
@@ -132,6 +133,34 @@ export default function StockScreen() {
         contentContainerStyle={styles.listContent}
       />
 
+      <TouchableOpacity
+        onPress={() => {
+          Alert.alert("Konfirmasi", "Yakin ingin menghapus semua stok?", [
+            { text: "Batal", style: "cancel" },
+            {
+              text: "Hapus Semua",
+              style: "destructive",
+              onPress: async () => {
+                await resetAllStock();
+                await loadStockData();
+                Alert.alert("Berhasil", "Semua stok berhasil dihapus");
+              },
+            },
+          ]);
+        }}
+        style={{
+          backgroundColor: "#ef4444",
+          padding: 14,
+          borderRadius: 8,
+          marginTop: 12,
+          alignItems: "center",
+        }}
+      >
+        <Text style={{ color: "#fff", fontWeight: "bold" }}>
+          🗑 Hapus Semua Stok
+        </Text>
+      </TouchableOpacity>
+
       <Modal
         animationType="slide"
         transparent={true}
@@ -152,33 +181,28 @@ export default function StockScreen() {
                     {selectedItem.stokLarge}
                   </Text>
                 </View>
-
                 <View style={styles.modalRow}>
                   <Text style={styles.modalLabel}>Stok Medium:</Text>
                   <Text style={styles.modalValue}>
                     {selectedItem.stokMedium}
                   </Text>
                 </View>
-
                 <View style={styles.modalRow}>
                   <Text style={styles.modalLabel}>Stok Small:</Text>
                   <Text style={styles.modalValue}>
                     {selectedItem.stokSmall}
                   </Text>
                 </View>
-
                 <View style={styles.modalRow}>
                   <Text style={styles.modalLabel}>Expiry Date:</Text>
                   <Text style={styles.modalValue}>{selectedItem.ed}</Text>
                 </View>
-
                 <View style={styles.modalRow}>
                   <Text style={styles.modalLabel}>Catatan:</Text>
                   <Text style={styles.modalValue}>
                     {selectedItem.catatan || "-"}
                   </Text>
                 </View>
-
                 <View style={styles.modalRow}>
                   <Text style={styles.modalLabel}>Waktu Input:</Text>
                   <Text style={styles.modalValue}>
@@ -232,7 +256,6 @@ export default function StockScreen() {
                   >
                     <Text style={styles.buttonText}>Hapus Barang</Text>
                   </TouchableOpacity>
-
                   <TouchableOpacity
                     style={[styles.modalButton, styles.closeButton]}
                     onPress={() => setModalVisible(false)}
