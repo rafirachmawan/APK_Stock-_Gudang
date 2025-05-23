@@ -1,3 +1,4 @@
+// ...import tetap sama
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystem from "expo-file-system";
 import React, { useEffect, useState } from "react";
@@ -64,9 +65,8 @@ export default function InScreen() {
 
       const result = await downloadResumable.downloadAsync();
 
-      if (!result || !result.uri) {
+      if (!result || !result.uri)
         throw new Error("Gagal mengunduh file Excel.");
-      }
 
       const fileContent = await FileSystem.readAsStringAsync(result.uri, {
         encoding: FileSystem.EncodingType.Base64,
@@ -78,14 +78,27 @@ export default function InScreen() {
 
       setMasterBarangList(jsonData);
 
-      const uniqueBrands = Array.from(
-        new Set(jsonData.map((item: any) => item.brand))
-      ).map((brand) => ({
-        label: brand,
-        value: brand,
-      }));
+      setBrandItems(
+        [...new Set(jsonData.map((item: any) => item.brand))].map((brand) => ({
+          label: brand,
+          value: brand,
+        }))
+      );
 
-      setBrandItems(uniqueBrands);
+      setKodeItems(
+        [...new Set(jsonData.map((item: any) => item.kode))].map((kode) => ({
+          label: kode,
+          value: kode,
+        }))
+      );
+
+      setNamaItems(
+        [...new Set(jsonData.map((item: any) => item.nama))].map((nama) => ({
+          label: nama,
+          value: nama,
+        }))
+      );
+
       Alert.alert("Sukses", `Ditemukan ${jsonData.length} item.`);
     } catch (error) {
       console.error("Gagal fetch dari URL:", error);
@@ -99,33 +112,32 @@ export default function InScreen() {
 
   useEffect(() => {
     if (brand) {
-      const filteredKode = masterBarangList
-        .filter((item) => item.brand === brand)
-        .map((item) => ({
-          label: item.kode,
-          value: item.kode,
-        }));
-      setKodeItems(filteredKode);
-    } else {
-      setKodeItems([]);
+      const item = masterBarangList.find((item) => item.brand === brand);
+      if (item) {
+        setForm((prev) => ({ ...prev, kode: item.kode, nama: item.nama }));
+      }
     }
-    setForm((prev) => ({ ...prev, kode: "", nama: "" }));
   }, [brand]);
 
   useEffect(() => {
     if (form.kode) {
-      const filteredNama = masterBarangList
-        .filter((item) => item.kode === form.kode)
-        .map((item) => ({
-          label: item.nama,
-          value: item.nama,
-        }));
-      setNamaItems(filteredNama);
-    } else {
-      setNamaItems([]);
+      const item = masterBarangList.find((item) => item.kode === form.kode);
+      if (item) {
+        setBrand(item.brand);
+        setForm((prev) => ({ ...prev, nama: item.nama }));
+      }
     }
-    setForm((prev) => ({ ...prev, nama: "" }));
   }, [form.kode]);
+
+  useEffect(() => {
+    if (form.nama) {
+      const item = masterBarangList.find((item) => item.nama === form.nama);
+      if (item) {
+        setBrand(item.brand);
+        setForm((prev) => ({ ...prev, kode: item.kode }));
+      }
+    }
+  }, [form.nama]);
 
   const handleChange = (name: keyof BarangForm, value: string) => {
     setForm({ ...form, [name]: value });
@@ -141,7 +153,7 @@ export default function InScreen() {
       ed: form.ed.trim(),
       catatan: form.catatan.trim(),
       waktuInput: new Date().toISOString(),
-      principle: brand || "-", // ✅ FIX ERROR
+      principle: brand || "-",
     };
 
     try {
@@ -180,7 +192,7 @@ export default function InScreen() {
           <Text style={styles.title}>Form Barang Masuk</Text>
 
           <View style={{ zIndex: 3000 }}>
-            <Text style={styles.label}>Master Brand</Text>
+            <Text style={styles.label}>Brand</Text>
             <DropDownPicker
               open={brandOpen}
               setOpen={setBrandOpen}
@@ -191,78 +203,78 @@ export default function InScreen() {
               searchable
               style={styles.dropdown}
               dropDownContainerStyle={styles.dropdownContainer}
-              textStyle={{ color: "#fff" }}
-              labelStyle={{ color: "#fff" }}
-              placeholderStyle={{ color: "#aaa" }}
+              textStyle={styles.dropdownText}
+              labelStyle={styles.dropdownText}
+              placeholderStyle={styles.dropdownPlaceholder}
+              listMode="SCROLLVIEW"
             />
           </View>
 
           <View style={{ zIndex: 2000 }}>
-            <Text style={styles.label}>Kode Barang</Text>
+            <Text style={styles.label}>Kode</Text>
             <DropDownPicker
               open={kodeOpen}
               setOpen={setKodeOpen}
               value={form.kode}
-              setValue={(callback) => {
-                const value = callback(form.kode);
-                setForm((prev) => ({ ...prev, kode: value, nama: "" }));
+              setValue={(cb) => {
+                const v = cb(form.kode);
+                setForm((prev) => ({ ...prev, kode: v }));
               }}
               items={kodeItems}
-              placeholder="Pilih Kode"
               searchable
-              disabled={!brand}
+              placeholder="Pilih Kode"
               style={styles.dropdown}
               dropDownContainerStyle={styles.dropdownContainer}
-              textStyle={{ color: "#fff" }}
-              labelStyle={{ color: "#fff" }}
-              placeholderStyle={{ color: "#aaa" }}
+              textStyle={styles.dropdownText}
+              labelStyle={styles.dropdownText}
+              placeholderStyle={styles.dropdownPlaceholder}
+              listMode="SCROLLVIEW"
             />
           </View>
 
           <View style={{ zIndex: 1000 }}>
-            <Text style={styles.label}>Nama Barang</Text>
+            <Text style={styles.label}>Nama</Text>
             <DropDownPicker
               open={namaOpen}
               setOpen={setNamaOpen}
               value={form.nama}
-              setValue={(callback) => {
-                const value = callback(form.nama);
-                setForm((prev) => ({ ...prev, nama: value }));
+              setValue={(cb) => {
+                const v = cb(form.nama);
+                setForm((prev) => ({ ...prev, nama: v }));
               }}
               items={namaItems}
-              placeholder="Pilih Nama Barang"
               searchable
-              disabled={!form.kode}
+              placeholder="Pilih Nama"
               style={styles.dropdown}
               dropDownContainerStyle={styles.dropdownContainer}
-              textStyle={{ color: "#fff" }}
-              labelStyle={{ color: "#fff" }}
-              placeholderStyle={{ color: "#aaa" }}
+              textStyle={styles.dropdownText}
+              labelStyle={styles.dropdownText}
+              placeholderStyle={styles.dropdownPlaceholder}
+              listMode="SCROLLVIEW"
             />
           </View>
 
           {["stokLarge", "stokMedium", "stokSmall", "ed", "catatan"].map(
-            (key, index) => (
+            (key, i) => (
               <View key={key} style={styles.inputWrapper}>
                 <Text style={styles.label}>
                   {
                     [
-                      "Stok Besar (Large)",
-                      "Stok Sedang (Medium)",
-                      "Stok Kecil (Small)",
-                      "Expired Date (ED)",
+                      "Stok Large",
+                      "Stok Medium",
+                      "Stok Small",
+                      "ED",
                       "Catatan",
-                    ][index]
+                    ][i]
                   }
                 </Text>
                 <TextInput
                   style={styles.input}
                   value={form[key as keyof BarangForm]}
-                  onChangeText={(text) =>
-                    handleChange(key as keyof BarangForm, text)
-                  }
+                  onChangeText={(t) => handleChange(key as keyof BarangForm, t)}
                   keyboardType={key.includes("stok") ? "numeric" : "default"}
                   placeholderTextColor="#999"
+                  placeholder={key}
                 />
               </View>
             )
@@ -300,6 +312,7 @@ const styles = StyleSheet.create({
   },
   inputWrapper: {
     marginBottom: 16,
+    zIndex: 0,
   },
   input: {
     borderWidth: 1,
@@ -317,6 +330,12 @@ const styles = StyleSheet.create({
   dropdownContainer: {
     borderColor: "#444",
     backgroundColor: "#222",
+  },
+  dropdownText: {
+    color: "#fff",
+  },
+  dropdownPlaceholder: {
+    color: "#aaa",
   },
   buttonContainer: {
     marginTop: 20,
