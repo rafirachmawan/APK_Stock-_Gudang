@@ -1,8 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useFocusEffect } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
+  Alert,
   FlatList,
   StyleSheet,
   Text,
@@ -29,15 +31,51 @@ interface HasilItem {
 export default function HasilGenerateScreen() {
   const [hasil, setHasil] = useState<HasilItem[]>([]);
 
-  useEffect(() => {
-    loadHasil();
-  }, []);
-
   const loadHasil = async () => {
     const data = await AsyncStorage.getItem("hasilGenerate");
     if (data) {
       setHasil(JSON.parse(data));
     }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      loadHasil();
+    }, [])
+  );
+
+  const saveHasil = async (data: HasilItem[]) => {
+    await AsyncStorage.setItem("hasilGenerate", JSON.stringify(data));
+    setHasil(data);
+  };
+
+  const hapusSemua = () => {
+    Alert.alert("Konfirmasi", "Yakin ingin menghapus semua hasil generate?", [
+      { text: "Batal", style: "cancel" },
+      {
+        text: "Hapus Semua",
+        style: "destructive",
+        onPress: async () => {
+          await AsyncStorage.removeItem("hasilGenerate");
+          setHasil([]);
+        },
+      },
+    ]);
+  };
+
+  const hapusSatu = (index: number) => {
+    Alert.alert("Konfirmasi", "Yakin ingin menghapus generate ini?", [
+      { text: "Batal", style: "cancel" },
+      {
+        text: "Hapus",
+        style: "destructive",
+        onPress: async () => {
+          const baru = [...hasil];
+          baru.splice(index, 1);
+          await saveHasil(baru);
+        },
+      },
+    ]);
   };
 
   const exportExcel = async () => {
@@ -76,9 +114,14 @@ export default function HasilGenerateScreen() {
       <FlatList
         data={hasil}
         keyExtractor={(item, index) => `${item.brand}-${index}`}
-        renderItem={({ item }) => (
+        renderItem={({ item, index }) => (
           <View style={styles.card}>
-            <Text style={styles.brand}>{item.brand}</Text>
+            <View style={styles.cardHeader}>
+              <Text style={styles.brand}>{item.brand}</Text>
+              <TouchableOpacity onPress={() => hapusSatu(index)}>
+                <Text style={styles.hapus}>🗑️</Text>
+              </TouchableOpacity>
+            </View>
             <Text style={styles.date}>Tanggal Generate: {item.waktu}</Text>
             {item.data.map((d, idx) => (
               <Text key={`${d.kode}-${idx}`} style={styles.item}>
@@ -91,6 +134,13 @@ export default function HasilGenerateScreen() {
 
       <TouchableOpacity style={styles.exportButton} onPress={exportExcel}>
         <Text style={styles.exportText}>📤 Export Semua ke Excel</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[styles.exportButton, { backgroundColor: "#ef4444" }]}
+        onPress={hapusSemua}
+      >
+        <Text style={styles.exportText}>🗑️ Hapus Semua Generate</Text>
       </TouchableOpacity>
     </View>
   );
@@ -111,9 +161,16 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 12,
   },
-  brand: { fontWeight: "bold", color: "#4ade80", marginBottom: 4 },
+  cardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  brand: { fontWeight: "bold", color: "#4ade80" },
   date: { color: "#aaa", marginBottom: 6, fontStyle: "italic" },
   item: { color: "#ccc", fontSize: 14 },
+  hapus: { color: "#f87171", fontSize: 16 },
   exportButton: {
     backgroundColor: "#3b82f6",
     padding: 14,

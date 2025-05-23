@@ -1,19 +1,18 @@
+// GenerateScreen.tsx
+import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import * as FileSystem from "expo-file-system";
-import * as Sharing from "expo-sharing";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
   FlatList,
-  Platform,
+  Modal,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
-import { TextInput } from "react-native-gesture-handler";
-import * as XLSX from "xlsx";
 
 interface Product {
   kode: string;
@@ -25,7 +24,6 @@ interface Product {
 }
 
 export default function GenerateScreen() {
-  const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [brandMap, setBrandMap] = useState<Record<string, Product[]>>({});
   const [generatedBrands, setGeneratedBrands] = useState<string[]>([]);
   const [currentBrand, setCurrentBrand] = useState<string | null>(null);
@@ -33,54 +31,47 @@ export default function GenerateScreen() {
   const [stockInputs, setStockInputs] = useState<
     Record<string, { L: string; M: string; S: string; ed: string }>
   >({});
-  const [tanggal, setTanggal] = useState("");
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [activeEdKode, setActiveEdKode] = useState<string | null>(null);
+  const [tanggal, setTanggal] = useState<string>("");
+  const [showDateModal, setShowDateModal] = useState(false);
+  const [showEdModal, setShowEdModal] = useState<null | string>(null);
+  const [tempDate, setTempDate] = useState<Date>(new Date());
 
   useEffect(() => {
-    loadProducts();
+    const load = async () => {
+      const stored = await AsyncStorage.getItem("barangMasuk");
+      if (stored) {
+        const products: Product[] = JSON.parse(stored);
+        const grouped: Record<string, Product[]> = {};
+        const seen = new Set<string>();
+
+        for (const item of products) {
+          const key = `${item.kode}-${item.nama}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+
+          const brand = item.principle || "UNKNOWN";
+          if (!grouped[brand]) grouped[brand] = [];
+          grouped[brand].push(item);
+        }
+        setBrandMap(grouped);
+      }
+    };
+    load();
   }, []);
 
-  const loadProducts = async () => {
-    const stored = await AsyncStorage.getItem("barangMasuk");
-    if (stored) {
-      const products: Product[] = JSON.parse(stored);
-      setAllProducts(products);
-
-      const grouped: Record<string, Product[]> = {};
-      const seen = new Set<string>();
-
-      for (const item of products) {
-        const uniqueKey = `${item.kode}-${item.nama}`;
-        if (seen.has(uniqueKey)) continue;
-        seen.add(uniqueKey);
-
-        const brand = item.principle || "UNKNOWN";
-        if (!grouped[brand]) grouped[brand] = [];
-        grouped[brand].push(item);
-      }
-      setBrandMap(grouped);
-    }
-  };
-
   const generateNextBrand = () => {
-    const allBrandNames = Object.keys(brandMap);
-    const availableBrands = allBrandNames.filter(
-      (b) => !generatedBrands.includes(b)
-    );
-
-    if (availableBrands.length === 0) {
+    const allBrands = Object.keys(brandMap);
+    const available = allBrands.filter((b) => !generatedBrands.includes(b));
+    if (available.length === 0) {
       Alert.alert("Info", "Semua brand telah digenerate");
       return;
     }
-
-    const nextBrand =
-      availableBrands[Math.floor(Math.random() * availableBrands.length)];
-    setCurrentBrand(nextBrand);
-    setBrandProducts(brandMap[nextBrand]);
-    setGeneratedBrands((prev) => [...prev, nextBrand]);
-    setStockInputs({});
+    const next = available[Math.floor(Math.random() * available.length)];
+    setCurrentBrand(next);
+    setBrandProducts(brandMap[next]);
+    setGeneratedBrands((prev) => [...prev, next]);
     setTanggal("");
+    setStockInputs({});
   };
 
   const handleStockChange = (
@@ -100,13 +91,7 @@ export default function GenerateScreen() {
   };
 
   const saveGeneratedResult = async () => {
-    if (!currentBrand || brandProducts.length === 0) return;
-
-    if (!tanggal) {
-      Alert.alert("Peringatan", "Harap isi tanggal terlebih dahulu");
-      return;
-    }
-
+    if (!currentBrand || brandProducts.length === 0 || !tanggal) return;
     const result = brandProducts.map((item) => ({
       principle: item.principle,
       kode: item.kode,
@@ -118,112 +103,20 @@ export default function GenerateScreen() {
       waktu: tanggal,
     }));
 
-    try {
-      const existing = await AsyncStorage.getItem("hasilGenerate");
-      const parsed = existing ? JSON.parse(existing) : [];
-      parsed.push({
-        brand: currentBrand,
-        data: result,
-        waktu: new Date().toISOString(),
-      });
-      await AsyncStorage.setItem("hasilGenerate", JSON.stringify(parsed));
-      Alert.alert("Sukses", "Data generate berhasil disimpan");
-    } catch (e) {
-      Alert.alert("Gagal", "Tidak bisa menyimpan data");
-      console.error(e);
-    }
-  };
-
-  const exportToExcel = async () => {
-    if (!currentBrand) return;
-
-    const exportData = brandProducts.map((item, index) => ({
-      No: index + 1,
-      Brand: item.principle,
-      Kode: item.kode,
-      Nama: item.nama,
-      Large: stockInputs[item.kode]?.L || "",
-      Medium: stockInputs[item.kode]?.M || "",
-      Small: stockInputs[item.kode]?.S || "",
-      ED: stockInputs[item.kode]?.ed || "",
-      Tanggal: tanggal,
-    }));
-
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "BrandData");
-
-    const wbout = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
-    const uri = FileSystem.documentDirectory + `generate-${currentBrand}.xlsx`;
-    await FileSystem.writeAsStringAsync(uri, wbout, {
-      encoding: FileSystem.EncodingType.Base64,
+    const existing = await AsyncStorage.getItem("hasilGenerate");
+    const parsed = existing ? JSON.parse(existing) : [];
+    parsed.push({
+      brand: currentBrand,
+      data: result,
+      waktu: new Date().toISOString(),
     });
-    await Sharing.shareAsync(uri);
+    await AsyncStorage.setItem("hasilGenerate", JSON.stringify(parsed));
+    Alert.alert("Sukses", "Data generate berhasil disimpan");
   };
-
-  const resetBrands = () => {
-    setGeneratedBrands([]);
-    setCurrentBrand(null);
-    setBrandProducts([]);
-    setStockInputs({});
-    setTanggal("");
-  };
-
-  const renderItem = ({ item, index }: { item: Product; index: number }) => (
-    <View style={styles.itemBox} key={`${item.kode}-${index}`}>
-      <Text style={styles.itemText}>{item.nama}</Text>
-      <View style={styles.row}>
-        {["L", "M", "S"].map((size) => (
-          <TextInput
-            key={`${item.kode}-${size}`}
-            placeholder={size}
-            placeholderTextColor="#888"
-            style={styles.input}
-            value={stockInputs[item.kode]?.[size as "L" | "M" | "S"] || ""}
-            onChangeText={(text) =>
-              handleStockChange(item.kode, size as "L" | "M" | "S", text)
-            }
-            keyboardType="numeric"
-          />
-        ))}
-      </View>
-      <TouchableOpacity
-        style={[styles.input, { marginTop: 6, width: "100%" }]}
-        onPress={() => setActiveEdKode(item.kode)}
-      >
-        <Text style={{ color: stockInputs[item.kode]?.ed ? "#fff" : "#aaa" }}>
-          {stockInputs[item.kode]?.ed || "Pilih Tanggal ED"}
-        </Text>
-      </TouchableOpacity>
-
-      {activeEdKode === item.kode && (
-        <DateTimePicker
-          value={
-            stockInputs[item.kode]?.ed
-              ? new Date(stockInputs[item.kode].ed)
-              : new Date()
-          }
-          mode="date"
-          display={Platform.OS === "ios" ? "spinner" : "default"}
-          onChange={(event, selectedDate) => {
-            setActiveEdKode(null);
-            if (selectedDate) {
-              handleStockChange(
-                item.kode,
-                "ed",
-                selectedDate.toISOString().split("T")[0]
-              );
-            }
-          }}
-        />
-      )}
-    </View>
-  );
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Generate Brand</Text>
-
       <TouchableOpacity style={styles.button} onPress={generateNextBrand}>
         <Text style={styles.buttonText}>Generate Brand</Text>
       </TouchableOpacity>
@@ -233,116 +126,164 @@ export default function GenerateScreen() {
           <Text style={styles.subTitle}>Brand: {currentBrand}</Text>
 
           <TouchableOpacity
-            style={[styles.input, { marginBottom: 10, width: "100%" }]}
-            onPress={() => setShowDatePicker(true)}
+            style={styles.dateButton}
+            onPress={() => {
+              setTempDate(tanggal ? new Date(tanggal) : new Date());
+              setShowDateModal(true);
+            }}
           >
-            <Text style={{ color: tanggal ? "#fff" : "#aaa" }}>
-              {tanggal || "Pilih Tanggal Generate"}
+            <Ionicons name="calendar" size={16} color="#fff" />
+            <Text style={styles.dateText}>
+              {tanggal ? ` ${tanggal}` : " Pilih Tanggal Generate"}
             </Text>
           </TouchableOpacity>
 
-          {showDatePicker && (
-            <DateTimePicker
-              value={tanggal ? new Date(tanggal) : new Date()}
-              mode="date"
-              display={Platform.OS === "ios" ? "spinner" : "default"}
-              onChange={(event, selectedDate) => {
-                setShowDatePicker(false);
-                if (selectedDate) {
-                  setTanggal(selectedDate.toISOString().split("T")[0]);
-                }
-              }}
-            />
-          )}
-
           <FlatList
             data={brandProducts}
-            renderItem={renderItem}
-            keyExtractor={(_, index) => `brand-item-${index}`}
-            contentContainerStyle={{ paddingBottom: 40 }}
+            renderItem={({ item }) => (
+              <View style={styles.itemBox}>
+                <Text style={styles.itemText}>{item.nama}</Text>
+                <View style={styles.row}>
+                  {["L", "M", "S"].map((size) => (
+                    <TextInput
+                      key={size}
+                      style={styles.input}
+                      placeholder={size}
+                      placeholderTextColor="#aaa"
+                      keyboardType="numeric"
+                      value={
+                        stockInputs[item.kode]?.[size as "L" | "M" | "S"] || ""
+                      }
+                      onChangeText={(val) =>
+                        handleStockChange(
+                          item.kode,
+                          size as "L" | "M" | "S",
+                          val
+                        )
+                      }
+                    />
+                  ))}
+                </View>
+                <TouchableOpacity
+                  style={styles.dateButton}
+                  onPress={() => {
+                    setTempDate(
+                      stockInputs[item.kode]?.ed
+                        ? new Date(stockInputs[item.kode].ed)
+                        : new Date()
+                    );
+                    setShowEdModal(item.kode);
+                  }}
+                >
+                  <Ionicons name="calendar" size={16} color="#fff" />
+                  <Text style={styles.dateText}>
+                    {stockInputs[item.kode]?.ed || "Pilih ED"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            keyExtractor={(item, index) => `${item.kode}-${index}`}
           />
 
-          <TouchableOpacity style={styles.exportBtn} onPress={exportToExcel}>
-            <Text style={styles.buttonText}>Export to Excel</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.exportBtn, { backgroundColor: "#10b981" }]}
-            onPress={saveGeneratedResult}
-          >
+          <TouchableOpacity style={styles.button} onPress={saveGeneratedResult}>
             <Text style={styles.buttonText}>Simpan Generate</Text>
           </TouchableOpacity>
         </>
       )}
 
-      <TouchableOpacity style={styles.resetBtn} onPress={resetBrands}>
-        <Text style={styles.resetText}>🔄 Reset Semua Brand</Text>
-      </TouchableOpacity>
+      {/* Modal Date Picker */}
+      <Modal visible={showDateModal} transparent animationType="slide">
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <DateTimePicker
+              value={tempDate}
+              mode="date"
+              display="default"
+              onChange={(e, date) => date && setTempDate(date)}
+            />
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={() => {
+                setTanggal(tempDate.toISOString().split("T")[0]);
+                setShowDateModal(false);
+              }}
+            >
+              <Text style={styles.buttonText}>Simpan Tanggal</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={!!showEdModal} transparent animationType="slide">
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <DateTimePicker
+              value={tempDate}
+              mode="date"
+              display="default"
+              onChange={(e, date) => date && setTempDate(date)}
+            />
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={() => {
+                if (showEdModal) {
+                  handleStockChange(
+                    showEdModal,
+                    "ed",
+                    tempDate.toISOString().split("T")[0]
+                  );
+                }
+                setShowEdModal(null);
+              }}
+            >
+              <Text style={styles.buttonText}>Simpan ED</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#121212",
-    padding: 16,
-  },
+  container: { flex: 1, backgroundColor: "#121212", padding: 16 },
   title: {
     fontSize: 20,
     fontWeight: "bold",
     color: "#fff",
-    marginBottom: 12,
     textAlign: "center",
   },
   subTitle: {
     color: "#fff",
     fontSize: 16,
-    marginVertical: 10,
     textAlign: "center",
+    marginVertical: 10,
   },
   button: {
     backgroundColor: "#4caf50",
     padding: 12,
     borderRadius: 6,
-    marginBottom: 16,
     alignItems: "center",
-  },
-  buttonText: {
-    color: "#fff",
-    fontWeight: "bold",
-  },
-  exportBtn: {
-    backgroundColor: "#2196f3",
-    padding: 12,
-    borderRadius: 6,
     marginVertical: 10,
-    alignItems: "center",
   },
-  resetBtn: {
-    marginTop: 10,
-    alignItems: "center",
-  },
-  resetText: {
-    color: "#ccc",
-    fontSize: 14,
-    fontStyle: "italic",
-  },
-  itemBox: {
-    backgroundColor: "#1e1e1e",
-    padding: 10,
-    marginBottom: 8,
-    borderRadius: 6,
-  },
-  itemText: {
-    color: "#fff",
-    fontSize: 14,
-    marginBottom: 6,
-  },
-  row: {
+  buttonText: { color: "#fff", fontWeight: "bold" },
+  dateButton: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#333",
+    padding: 10,
+    borderRadius: 6,
+    marginVertical: 6,
   },
+  dateText: { color: "#fff", marginLeft: 8 },
+  itemBox: {
+    backgroundColor: "#1f1f1f",
+    padding: 10,
+    borderRadius: 6,
+    marginBottom: 10,
+  },
+  itemText: { color: "#fff", fontSize: 14, marginBottom: 6 },
+  row: { flexDirection: "row", justifyContent: "space-between" },
   input: {
     backgroundColor: "#333",
     color: "#fff",
@@ -350,5 +291,24 @@ const styles = StyleSheet.create({
     padding: 8,
     width: "30%",
     textAlign: "center",
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    backgroundColor: "#1f1f1f",
+    padding: 20,
+    borderRadius: 8,
+    width: "80%",
+    alignItems: "center",
+  },
+  modalButton: {
+    marginTop: 20,
+    backgroundColor: "#10b981",
+    padding: 10,
+    borderRadius: 6,
   },
 });
