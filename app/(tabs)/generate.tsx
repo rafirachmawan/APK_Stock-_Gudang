@@ -36,27 +36,29 @@ export default function GenerateScreen() {
   const [showEdModal, setShowEdModal] = useState<null | string>(null);
   const [tempDate, setTempDate] = useState<Date>(new Date());
 
-  useEffect(() => {
-    const load = async () => {
-      const stored = await AsyncStorage.getItem("barangMasuk");
-      if (stored) {
-        const products: Product[] = JSON.parse(stored);
-        const grouped: Record<string, Product[]> = {};
-        const seen = new Set<string>();
+  const loadBrandMap = async (clearGenerated = false) => {
+    const stored = await AsyncStorage.getItem("barangMasuk");
+    if (stored) {
+      const products: Product[] = JSON.parse(stored);
+      const grouped: Record<string, Product[]> = {};
+      const seen = new Set<string>();
 
-        for (const item of products) {
-          const key = `${item.kode}-${item.nama}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
+      for (const item of products) {
+        const key = `${item.kode}-${item.nama}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
 
-          const brand = item.principle || "UNKNOWN";
-          if (!grouped[brand]) grouped[brand] = [];
-          grouped[brand].push(item);
-        }
-        setBrandMap(grouped);
+        const brand = item.principle || "UNKNOWN";
+        if (!grouped[brand]) grouped[brand] = [];
+        grouped[brand].push(item);
       }
-    };
-    load();
+      setBrandMap(grouped);
+      if (clearGenerated) setGeneratedBrands([]);
+    }
+  };
+
+  useEffect(() => {
+    loadBrandMap();
   }, []);
 
   const generateNextBrand = () => {
@@ -70,6 +72,14 @@ export default function GenerateScreen() {
     setCurrentBrand(next);
     setBrandProducts(brandMap[next]);
     setGeneratedBrands((prev) => [...prev, next]);
+    setTanggal("");
+    setStockInputs({});
+  };
+
+  const ulangGenerate = async () => {
+    await loadBrandMap(true);
+    setCurrentBrand(null);
+    setBrandProducts([]);
     setTanggal("");
     setStockInputs({});
   };
@@ -113,6 +123,10 @@ export default function GenerateScreen() {
     await AsyncStorage.setItem("hasilGenerate", JSON.stringify(parsed));
     Alert.alert("Sukses", "Data generate berhasil disimpan");
   };
+
+  const totalBrand = Object.keys(brandMap).length;
+  const totalGenerated = generatedBrands.length;
+  const remaining = totalBrand - totalGenerated;
 
   return (
     <View style={styles.container}>
@@ -191,7 +205,15 @@ export default function GenerateScreen() {
         </>
       )}
 
-      {/* Modal Date Picker */}
+      <TouchableOpacity style={styles.secondaryButton} onPress={ulangGenerate}>
+        <Text style={styles.buttonText}>Reset Generate</Text>
+      </TouchableOpacity>
+
+      <Text style={styles.infoText}>
+        Total Brand: {totalBrand} | Sudah Digenerate: {totalGenerated} | Belum:{" "}
+        {remaining}
+      </Text>
+
       <Modal visible={showDateModal} transparent animationType="slide">
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
@@ -266,6 +288,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginVertical: 10,
   },
+  secondaryButton: {
+    backgroundColor: "#f44336",
+    padding: 10,
+    borderRadius: 6,
+    alignItems: "center",
+    marginVertical: 10,
+  },
   buttonText: { color: "#fff", fontWeight: "bold" },
   dateButton: {
     flexDirection: "row",
@@ -291,6 +320,12 @@ const styles = StyleSheet.create({
     padding: 8,
     width: "30%",
     textAlign: "center",
+  },
+  infoText: {
+    textAlign: "center",
+    color: "#aaa",
+    fontSize: 12,
+    marginTop: 10,
   },
   modalContainer: {
     flex: 1,
