@@ -1,16 +1,18 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
   FlatList,
+  Platform,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+import { TextInput } from "react-native-gesture-handler";
 import * as XLSX from "xlsx";
 
 interface Product {
@@ -29,8 +31,11 @@ export default function GenerateScreen() {
   const [currentBrand, setCurrentBrand] = useState<string | null>(null);
   const [brandProducts, setBrandProducts] = useState<Product[]>([]);
   const [stockInputs, setStockInputs] = useState<
-    Record<string, { L: string; M: string; S: string }>
+    Record<string, { L: string; M: string; S: string; ed: string }>
   >({});
+  const [tanggal, setTanggal] = useState("");
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [activeEdKode, setActiveEdKode] = useState<string | null>(null);
 
   useEffect(() => {
     loadProducts();
@@ -43,11 +48,15 @@ export default function GenerateScreen() {
       setAllProducts(products);
 
       const grouped: Record<string, Product[]> = {};
+      const seen = new Set<string>();
+
       for (const item of products) {
+        const uniqueKey = `${item.kode}-${item.nama}`;
+        if (seen.has(uniqueKey)) continue;
+        seen.add(uniqueKey);
+
         const brand = item.principle || "UNKNOWN";
-        if (!grouped[brand]) {
-          grouped[brand] = [];
-        }
+        if (!grouped[brand]) grouped[brand] = [];
         grouped[brand].push(item);
       }
       setBrandMap(grouped);
@@ -67,54 +76,36 @@ export default function GenerateScreen() {
 
     const nextBrand =
       availableBrands[Math.floor(Math.random() * availableBrands.length)];
-
     setCurrentBrand(nextBrand);
     setBrandProducts(brandMap[nextBrand]);
     setGeneratedBrands((prev) => [...prev, nextBrand]);
     setStockInputs({});
+    setTanggal("");
   };
 
   const handleStockChange = (
     kode: string,
-    type: "L" | "M" | "S",
+    field: "L" | "M" | "S" | "ed",
     value: string
   ) => {
     setStockInputs((prev) => ({
       ...prev,
       [kode]: {
-        L: type === "L" ? value : prev[kode]?.L || "",
-        M: type === "M" ? value : prev[kode]?.M || "",
-        S: type === "S" ? value : prev[kode]?.S || "",
+        L: field === "L" ? value : prev[kode]?.L || "",
+        M: field === "M" ? value : prev[kode]?.M || "",
+        S: field === "S" ? value : prev[kode]?.S || "",
+        ed: field === "ed" ? value : prev[kode]?.ed || "",
       },
     }));
   };
 
-  const exportToExcel = async () => {
-    if (!currentBrand) return;
-    const exportData = brandProducts.map((item, index) => ({
-      No: index + 1,
-      Brand: item.principle,
-      Kode: item.kode,
-      Nama: item.nama,
-      Large: stockInputs[item.kode]?.L || "",
-      Medium: stockInputs[item.kode]?.M || "",
-      Small: stockInputs[item.kode]?.S || "",
-    }));
-
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "BrandData");
-
-    const wbout = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
-    const uri = FileSystem.documentDirectory + `generate-${currentBrand}.xlsx`;
-    await FileSystem.writeAsStringAsync(uri, wbout, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-    await Sharing.shareAsync(uri);
-  };
-
   const saveGeneratedResult = async () => {
     if (!currentBrand || brandProducts.length === 0) return;
+
+    if (!tanggal) {
+      Alert.alert("Peringatan", "Harap isi tanggal terlebih dahulu");
+      return;
+    }
 
     const result = brandProducts.map((item) => ({
       principle: item.principle,
@@ -123,7 +114,8 @@ export default function GenerateScreen() {
       L: stockInputs[item.kode]?.L || "0",
       M: stockInputs[item.kode]?.M || "0",
       S: stockInputs[item.kode]?.S || "0",
-      waktu: new Date().toISOString(),
+      ed: stockInputs[item.kode]?.ed || "-",
+      waktu: tanggal,
     }));
 
     try {
@@ -142,35 +134,96 @@ export default function GenerateScreen() {
     }
   };
 
+  const exportToExcel = async () => {
+    if (!currentBrand) return;
+
+    const exportData = brandProducts.map((item, index) => ({
+      No: index + 1,
+      Brand: item.principle,
+      Kode: item.kode,
+      Nama: item.nama,
+      Large: stockInputs[item.kode]?.L || "",
+      Medium: stockInputs[item.kode]?.M || "",
+      Small: stockInputs[item.kode]?.S || "",
+      ED: stockInputs[item.kode]?.ed || "",
+      Tanggal: tanggal,
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "BrandData");
+
+    const wbout = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
+    const uri = FileSystem.documentDirectory + `generate-${currentBrand}.xlsx`;
+    await FileSystem.writeAsStringAsync(uri, wbout, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    await Sharing.shareAsync(uri);
+  };
+
   const resetBrands = () => {
     setGeneratedBrands([]);
     setCurrentBrand(null);
     setBrandProducts([]);
     setStockInputs({});
+    setTanggal("");
   };
 
   const renderItem = ({ item, index }: { item: Product; index: number }) => (
-    <View style={styles.itemBox}>
+    <View style={styles.itemBox} key={`${item.kode}-${index}`}>
       <Text style={styles.itemText}>{item.nama}</Text>
       <View style={styles.row}>
-        {(["L", "M", "S"] as const).map((size) => (
+        {["L", "M", "S"].map((size) => (
           <TextInput
-            key={`${item.kode}-${size}-${index}`}
+            key={`${item.kode}-${size}`}
             placeholder={size}
             placeholderTextColor="#888"
             style={styles.input}
-            value={stockInputs[item.kode]?.[size] || ""}
-            onChangeText={(text) => handleStockChange(item.kode, size, text)}
+            value={stockInputs[item.kode]?.[size as "L" | "M" | "S"] || ""}
+            onChangeText={(text) =>
+              handleStockChange(item.kode, size as "L" | "M" | "S", text)
+            }
             keyboardType="numeric"
           />
         ))}
       </View>
+      <TouchableOpacity
+        style={[styles.input, { marginTop: 6, width: "100%" }]}
+        onPress={() => setActiveEdKode(item.kode)}
+      >
+        <Text style={{ color: stockInputs[item.kode]?.ed ? "#fff" : "#aaa" }}>
+          {stockInputs[item.kode]?.ed || "Pilih Tanggal ED"}
+        </Text>
+      </TouchableOpacity>
+
+      {activeEdKode === item.kode && (
+        <DateTimePicker
+          value={
+            stockInputs[item.kode]?.ed
+              ? new Date(stockInputs[item.kode].ed)
+              : new Date()
+          }
+          mode="date"
+          display={Platform.OS === "ios" ? "spinner" : "default"}
+          onChange={(event, selectedDate) => {
+            setActiveEdKode(null);
+            if (selectedDate) {
+              handleStockChange(
+                item.kode,
+                "ed",
+                selectedDate.toISOString().split("T")[0]
+              );
+            }
+          }}
+        />
+      )}
     </View>
   );
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Generate Brand</Text>
+
       <TouchableOpacity style={styles.button} onPress={generateNextBrand}>
         <Text style={styles.buttonText}>Generate Brand</Text>
       </TouchableOpacity>
@@ -178,10 +231,34 @@ export default function GenerateScreen() {
       {currentBrand && (
         <>
           <Text style={styles.subTitle}>Brand: {currentBrand}</Text>
+
+          <TouchableOpacity
+            style={[styles.input, { marginBottom: 10, width: "100%" }]}
+            onPress={() => setShowDatePicker(true)}
+          >
+            <Text style={{ color: tanggal ? "#fff" : "#aaa" }}>
+              {tanggal || "Pilih Tanggal Generate"}
+            </Text>
+          </TouchableOpacity>
+
+          {showDatePicker && (
+            <DateTimePicker
+              value={tanggal ? new Date(tanggal) : new Date()}
+              mode="date"
+              display={Platform.OS === "ios" ? "spinner" : "default"}
+              onChange={(event, selectedDate) => {
+                setShowDatePicker(false);
+                if (selectedDate) {
+                  setTanggal(selectedDate.toISOString().split("T")[0]);
+                }
+              }}
+            />
+          )}
+
           <FlatList
             data={brandProducts}
             renderItem={renderItem}
-            keyExtractor={(item, index) => `${item.kode}-${index}`}
+            keyExtractor={(_, index) => `brand-item-${index}`}
             contentContainerStyle={{ paddingBottom: 40 }}
           />
 

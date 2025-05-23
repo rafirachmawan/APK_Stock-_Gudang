@@ -1,5 +1,4 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useIsFocused } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import React, { useEffect, useState } from "react";
@@ -22,13 +21,17 @@ interface HasilItem {
     L: string;
     M: string;
     S: string;
+    ed: string;
     waktu: string;
   }[];
 }
 
 export default function HasilGenerateScreen() {
   const [hasil, setHasil] = useState<HasilItem[]>([]);
-  const isFocused = useIsFocused();
+
+  useEffect(() => {
+    loadHasil();
+  }, []);
 
   const loadHasil = async () => {
     const data = await AsyncStorage.getItem("hasilGenerate");
@@ -36,12 +39,6 @@ export default function HasilGenerateScreen() {
       setHasil(JSON.parse(data));
     }
   };
-
-  useEffect(() => {
-    if (isFocused) {
-      loadHasil();
-    }
-  }, [isFocused]);
 
   const exportExcel = async () => {
     if (hasil.length === 0) return;
@@ -55,7 +52,8 @@ export default function HasilGenerateScreen() {
         Large: d.L,
         Medium: d.M,
         Small: d.S,
-        Waktu: d.waktu,
+        ED: d.ed || "",
+        Tanggal: d.waktu,
       }))
     );
 
@@ -74,20 +72,23 @@ export default function HasilGenerateScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.header}>Hasil Generate</Text>
+
       <FlatList
         data={hasil}
         keyExtractor={(item, index) => `${item.brand}-${index}`}
         renderItem={({ item }) => (
           <View style={styles.card}>
             <Text style={styles.brand}>{item.brand}</Text>
+            <Text style={styles.date}>Tanggal Generate: {item.waktu}</Text>
             {item.data.map((d, idx) => (
               <Text key={`${d.kode}-${idx}`} style={styles.item}>
-                {d.nama} - L:{d.L}, M:{d.M}, S:{d.S}
+                {d.nama} - L:{d.L}, M:{d.M}, S:{d.S}, ED:{d.ed}
               </Text>
             ))}
           </View>
         )}
       />
+
       <TouchableOpacity style={styles.exportButton} onPress={exportExcel}>
         <Text style={styles.exportText}>📤 Export Semua ke Excel</Text>
       </TouchableOpacity>
@@ -111,6 +112,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   brand: { fontWeight: "bold", color: "#4ade80", marginBottom: 4 },
+  date: { color: "#aaa", marginBottom: 6, fontStyle: "italic" },
   item: { color: "#ccc", fontSize: 14 },
   exportButton: {
     backgroundColor: "#3b82f6",
