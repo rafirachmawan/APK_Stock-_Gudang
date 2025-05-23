@@ -120,13 +120,13 @@ export default function GenerateScreen() {
     setStockInputs({});
   };
 
-  const renderItem = ({ item }: { item: Product }) => (
+  const renderItem = ({ item, index }: { item: Product; index: number }) => (
     <View style={styles.itemBox}>
       <Text style={styles.itemText}>{item.nama}</Text>
       <View style={styles.row}>
         {(["L", "M", "S"] as const).map((size) => (
           <TextInput
-            key={size}
+            key={`${item.kode}-${size}-${index}`}
             placeholder={size}
             placeholderTextColor="#888"
             style={styles.input}
@@ -152,7 +152,7 @@ export default function GenerateScreen() {
           <FlatList
             data={brandProducts}
             renderItem={renderItem}
-            keyExtractor={(item) => item.kode}
+            keyExtractor={(item, index) => `${item.kode}-${index}`}
             contentContainerStyle={{ paddingBottom: 40 }}
           />
           <TouchableOpacity style={styles.exportBtn} onPress={exportToExcel}>
