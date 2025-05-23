@@ -1,4 +1,3 @@
-// app/_layout.tsx
 import { useColorScheme } from "@/hooks/useColorScheme";
 import {
   DarkTheme,
@@ -26,6 +25,10 @@ export default function RootLayout() {
         <Drawer.Screen name="generate" options={{ title: "Generate" }} />
         <Drawer.Screen name="stock-detail" options={{ title: "In Detail" }} />
         <Drawer.Screen name="out-detail" options={{ title: "Out Detail" }} />
+        <Drawer.Screen
+          name="hasil-generate"
+          options={{ title: "Hasil Generate" }}
+        />
       </Drawer>
       <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
     </ThemeProvider>

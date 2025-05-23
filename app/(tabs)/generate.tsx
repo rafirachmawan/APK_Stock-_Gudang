@@ -113,6 +113,35 @@ export default function GenerateScreen() {
     await Sharing.shareAsync(uri);
   };
 
+  const saveGeneratedResult = async () => {
+    if (!currentBrand || brandProducts.length === 0) return;
+
+    const result = brandProducts.map((item) => ({
+      principle: item.principle,
+      kode: item.kode,
+      nama: item.nama,
+      L: stockInputs[item.kode]?.L || "0",
+      M: stockInputs[item.kode]?.M || "0",
+      S: stockInputs[item.kode]?.S || "0",
+      waktu: new Date().toISOString(),
+    }));
+
+    try {
+      const existing = await AsyncStorage.getItem("hasilGenerate");
+      const parsed = existing ? JSON.parse(existing) : [];
+      parsed.push({
+        brand: currentBrand,
+        data: result,
+        waktu: new Date().toISOString(),
+      });
+      await AsyncStorage.setItem("hasilGenerate", JSON.stringify(parsed));
+      Alert.alert("Sukses", "Data generate berhasil disimpan");
+    } catch (e) {
+      Alert.alert("Gagal", "Tidak bisa menyimpan data");
+      console.error(e);
+    }
+  };
+
   const resetBrands = () => {
     setGeneratedBrands([]);
     setCurrentBrand(null);
@@ -155,8 +184,16 @@ export default function GenerateScreen() {
             keyExtractor={(item, index) => `${item.kode}-${index}`}
             contentContainerStyle={{ paddingBottom: 40 }}
           />
+
           <TouchableOpacity style={styles.exportBtn} onPress={exportToExcel}>
             <Text style={styles.buttonText}>Export to Excel</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.exportBtn, { backgroundColor: "#10b981" }]}
+            onPress={saveGeneratedResult}
+          >
+            <Text style={styles.buttonText}>Simpan Generate</Text>
           </TouchableOpacity>
         </>
       )}
