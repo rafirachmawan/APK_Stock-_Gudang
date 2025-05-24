@@ -1,4 +1,5 @@
 import { useColorScheme } from "@/hooks/useColorScheme";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import {
   DarkTheme,
   DefaultTheme,
@@ -19,17 +20,119 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
       <Drawer>
-        <Drawer.Screen name="dashboard" options={{ title: "Dashboard" }} />
-        <Drawer.Screen name="in" options={{ title: "Barang Masuk" }} />
-        <Drawer.Screen name="out" options={{ title: "Barang Keluar" }} />
-        <Drawer.Screen name="generate" options={{ title: "Generate" }} />
-        <Drawer.Screen name="stock-detail" options={{ title: "In Detail" }} />
-        <Drawer.Screen name="out-detail" options={{ title: "Out Detail" }} />
+        {/* 🏠 Dashboard */}
         <Drawer.Screen
-          name="hasil-generate"
-          options={{ title: "Hasil Generate" }}
+          name="(tabs)/index"
+          options={{
+            drawerLabel: "🏠 Dashboard",
+            title: "Dashboard",
+            drawerIcon: ({ color, size }) => (
+              <MaterialCommunityIcons
+                name="view-dashboard"
+                size={size}
+                color={color}
+              />
+            ),
+          }}
+        />
+
+        {/* 📥 Barang Masuk */}
+        <Drawer.Screen
+          name="(tabs)/in"
+          options={{
+            drawerLabel: "📥 Barang Masuk",
+            title: "Barang Masuk",
+            drawerIcon: ({ color, size }) => (
+              <MaterialCommunityIcons
+                name="tray-arrow-down"
+                size={size}
+                color={color}
+              />
+            ),
+          }}
+        />
+
+        {/* 📤 Barang Keluar */}
+        <Drawer.Screen
+          name="(tabs)/out"
+          options={{
+            drawerLabel: "📤 Barang Keluar",
+            title: "Barang Keluar",
+            drawerIcon: ({ color, size }) => (
+              <MaterialCommunityIcons
+                name="tray-arrow-up"
+                size={size}
+                color={color}
+              />
+            ),
+          }}
+        />
+
+        {/* 🎲 Generate */}
+        <Drawer.Screen
+          name="(tabs)/generate"
+          options={{
+            drawerLabel: "🎲 Generate",
+            title: "Generate",
+            drawerIcon: ({ color, size }) => (
+              <MaterialCommunityIcons
+                name="shuffle-variant"
+                size={size}
+                color={color}
+              />
+            ),
+          }}
+        />
+
+        {/* 🧾 Hasil Generate */}
+        <Drawer.Screen
+          name="(tabs)/hasil-generate"
+          options={{
+            drawerLabel: "🧾 Hasil Generate",
+            title: "Hasil Generate",
+            drawerIcon: ({ color, size }) => (
+              <MaterialCommunityIcons
+                name="file-document-multiple-outline"
+                size={size}
+                color={color}
+              />
+            ),
+          }}
+        />
+
+        {/* 📋 In Detail */}
+        <Drawer.Screen
+          name="stock-detail"
+          options={{
+            drawerLabel: "📋 In Detail",
+            title: "In Detail",
+            drawerIcon: ({ color, size }) => (
+              <MaterialCommunityIcons
+                name="clipboard-list-outline"
+                size={size}
+                color={color}
+              />
+            ),
+          }}
+        />
+
+        {/* 📋 Out Detail */}
+        <Drawer.Screen
+          name="out-detail"
+          options={{
+            drawerLabel: "📋 Out Detail",
+            title: "Out Detail",
+            drawerIcon: ({ color, size }) => (
+              <MaterialCommunityIcons
+                name="clipboard-text-clock-outline"
+                size={size}
+                color={color}
+              />
+            ),
+          }}
         />
       </Drawer>
+
       <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
     </ThemeProvider>
   );
