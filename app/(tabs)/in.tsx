@@ -101,18 +101,19 @@ export default function InScreen() {
     importExcelFromUrl();
   }, []);
 
+  // Update kode dan brand berdasarkan nama
   useEffect(() => {
-    if (form.kode) {
-      const item = masterBarangList.find((item) => item.kode === form.kode);
+    if (form.nama) {
+      const item = masterBarangList.find((item) => item.nama === form.nama);
       if (item) {
+        setForm((prev) => ({ ...prev, kode: item.kode }));
         setBrand(item.brand);
-        setForm((prev) => ({ ...prev, nama: item.nama }));
       }
     } else {
+      setForm((prev) => ({ ...prev, kode: "" }));
       setBrand("");
-      setForm((prev) => ({ ...prev, nama: "" }));
     }
-  }, [form.kode]);
+  }, [form.nama]);
 
   const handleChange = (name: keyof BarangForm, value: string) => {
     setForm({ ...form, [name]: value });
@@ -167,18 +168,18 @@ export default function InScreen() {
           <Text style={styles.title}>Form Barang Masuk</Text>
 
           <View style={{ zIndex: 3000 }}>
-            <Text style={styles.label}>Kode</Text>
+            <Text style={styles.label}>Nama</Text>
             <DropDownPicker
-              open={kodeOpen}
-              setOpen={setKodeOpen}
-              value={form.kode}
+              open={namaOpen}
+              setOpen={setNamaOpen}
+              value={form.nama}
               setValue={(cb) => {
-                const v = cb(form.kode);
-                setForm((prev) => ({ ...prev, kode: v }));
+                const v = cb(form.nama);
+                setForm((prev) => ({ ...prev, nama: v }));
               }}
-              items={kodeItems}
+              items={namaItems}
               searchable
-              placeholder="Pilih Kode"
+              placeholder="Pilih Nama"
               style={styles.dropdown}
               dropDownContainerStyle={styles.dropdownContainer}
               textStyle={styles.dropdownText}
@@ -189,14 +190,14 @@ export default function InScreen() {
           </View>
 
           <View style={{ zIndex: 2000 }}>
-            <Text style={styles.label}>Brand</Text>
+            <Text style={styles.label}>Kode</Text>
             <DropDownPicker
-              open={brandOpen}
-              setOpen={setBrandOpen}
-              value={brand}
-              setValue={setBrand}
-              items={brandItems}
-              placeholder="Brand (otomatis)"
+              open={kodeOpen}
+              setOpen={setKodeOpen}
+              value={form.kode}
+              setValue={() => {}}
+              items={kodeItems}
+              placeholder="Kode (otomatis)"
               disabled
               style={styles.dropdown}
               dropDownContainerStyle={styles.dropdownContainer}
@@ -208,17 +209,14 @@ export default function InScreen() {
           </View>
 
           <View style={{ zIndex: 1000 }}>
-            <Text style={styles.label}>Nama</Text>
+            <Text style={styles.label}>Brand</Text>
             <DropDownPicker
-              open={namaOpen}
-              setOpen={setNamaOpen}
-              value={form.nama}
-              setValue={(cb) => {
-                const v = cb(form.nama);
-                setForm((prev) => ({ ...prev, nama: v }));
-              }}
-              items={namaItems}
-              placeholder="Nama (otomatis)"
+              open={brandOpen}
+              setOpen={setBrandOpen}
+              value={brand}
+              setValue={() => {}}
+              items={brandItems}
+              placeholder="Brand (otomatis)"
               disabled
               style={styles.dropdown}
               dropDownContainerStyle={styles.dropdownContainer}

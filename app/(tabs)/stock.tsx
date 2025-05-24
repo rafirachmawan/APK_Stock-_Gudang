@@ -1,4 +1,3 @@
-// ... import tetap
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useIsFocused } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system";
@@ -54,6 +53,7 @@ export default function StockScreen() {
 
       const worksheet = XLSX.utils.json_to_sheet(
         stockData.map((item) => ({
+          Principle: item.principle,
           Kode: item.kode,
           Nama: item.nama,
           Large: item.stokLarge,
@@ -62,8 +62,20 @@ export default function StockScreen() {
           ED: item.ed,
           Catatan: item.catatan,
           WaktuInput: item.waktuInput,
-          Principle: item.principle,
-        }))
+        })),
+        {
+          header: [
+            "Principle",
+            "Kode",
+            "Nama",
+            "Large",
+            "Medium",
+            "Small",
+            "ED",
+            "Catatan",
+            "WaktuInput",
+          ],
+        }
       );
 
       const workbook = XLSX.utils.book_new();
@@ -300,65 +312,5 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: 20,
-  },
-  modalContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.7)",
-  },
-  modalContent: {
-    backgroundColor: "#2a2a2a",
-    padding: 20,
-    borderRadius: 15,
-    width: "85%",
-    borderWidth: 1,
-    borderColor: "#444",
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#ffffff",
-    marginBottom: 20,
-    textAlign: "center",
-    borderBottomWidth: 1,
-    borderBottomColor: "#444",
-    paddingBottom: 10,
-  },
-  modalRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 15,
-    paddingHorizontal: 10,
-  },
-  modalLabel: {
-    color: "#bbbbbb",
-    fontSize: 16,
-  },
-  modalValue: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "500",
-  },
-  modalButtonContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 20,
-  },
-  modalButton: {
-    padding: 12,
-    borderRadius: 8,
-    width: "48%",
-    alignItems: "center",
-  },
-  deleteButton: {
-    backgroundColor: "#d9534f",
-  },
-  closeButton: {
-    backgroundColor: "#5bc0de",
-  },
-  buttonText: {
-    color: "#ffffff",
-    fontWeight: "bold",
   },
 });
