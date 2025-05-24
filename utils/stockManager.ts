@@ -36,8 +36,8 @@ export const getCurrentStock = async (): Promise<Barang[]> => {
           stokMedium: item.stokMedium,
           stokSmall: item.stokSmall,
           ed: item.ed,
-          catatan: "",
-          waktuInput: "",
+          catatan: item.catatan,
+          waktuInput: item.waktuInput, // ✅ Penting agar deleteBarang bisa kerja
           principle: item.principle,
         });
       } else {

@@ -1,3 +1,4 @@
+// ... import tetap
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useIsFocused } from "@react-navigation/native";
 import React, { useEffect, useState } from "react";
@@ -53,7 +54,8 @@ export default function StockScreen() {
           onPress: async () => {
             const success = await deleteBarang(item.kode, item.waktuInput);
             if (success) {
-              await loadStockData(); // Refresh list
+              await loadStockData();
+              setSelectedItem(null); // ✅ Tambahan ini
               setModalVisible(false);
               Alert.alert("Sukses", "Barang berhasil dihapus");
             } else {

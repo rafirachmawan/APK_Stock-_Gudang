@@ -1,4 +1,3 @@
-// ...import tetap sama
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystem from "expo-file-system";
 import React, { useEffect, useState } from "react";
@@ -78,26 +77,18 @@ export default function InScreen() {
 
       setMasterBarangList(jsonData);
 
+      const uniqueBrands = [
+        ...new Set(jsonData.map((item: any) => item.brand)),
+      ];
       setBrandItems(
-        [...new Set(jsonData.map((item: any) => item.brand))].map((brand) => ({
-          label: brand,
-          value: brand,
-        }))
+        uniqueBrands.map((brand) => ({ label: brand, value: brand }))
       );
 
-      setKodeItems(
-        [...new Set(jsonData.map((item: any) => item.kode))].map((kode) => ({
-          label: kode,
-          value: kode,
-        }))
-      );
+      const uniqueKodes = [...new Set(jsonData.map((item: any) => item.kode))];
+      setKodeItems(uniqueKodes.map((kode) => ({ label: kode, value: kode })));
 
-      setNamaItems(
-        [...new Set(jsonData.map((item: any) => item.nama))].map((nama) => ({
-          label: nama,
-          value: nama,
-        }))
-      );
+      const uniqueNamas = [...new Set(jsonData.map((item: any) => item.nama))];
+      setNamaItems(uniqueNamas.map((nama) => ({ label: nama, value: nama })));
 
       Alert.alert("Sukses", `Ditemukan ${jsonData.length} item.`);
     } catch (error) {
@@ -111,33 +102,17 @@ export default function InScreen() {
   }, []);
 
   useEffect(() => {
-    if (brand) {
-      const item = masterBarangList.find((item) => item.brand === brand);
-      if (item) {
-        setForm((prev) => ({ ...prev, kode: item.kode, nama: item.nama }));
-      }
-    }
-  }, [brand]);
-
-  useEffect(() => {
     if (form.kode) {
       const item = masterBarangList.find((item) => item.kode === form.kode);
       if (item) {
         setBrand(item.brand);
         setForm((prev) => ({ ...prev, nama: item.nama }));
       }
+    } else {
+      setBrand("");
+      setForm((prev) => ({ ...prev, nama: "" }));
     }
   }, [form.kode]);
-
-  useEffect(() => {
-    if (form.nama) {
-      const item = masterBarangList.find((item) => item.nama === form.nama);
-      if (item) {
-        setBrand(item.brand);
-        setForm((prev) => ({ ...prev, kode: item.kode }));
-      }
-    }
-  }, [form.nama]);
 
   const handleChange = (name: keyof BarangForm, value: string) => {
     setForm({ ...form, [name]: value });
@@ -192,25 +167,6 @@ export default function InScreen() {
           <Text style={styles.title}>Form Barang Masuk</Text>
 
           <View style={{ zIndex: 3000 }}>
-            <Text style={styles.label}>Brand</Text>
-            <DropDownPicker
-              open={brandOpen}
-              setOpen={setBrandOpen}
-              value={brand}
-              setValue={setBrand}
-              items={brandItems}
-              placeholder="Pilih Brand"
-              searchable
-              style={styles.dropdown}
-              dropDownContainerStyle={styles.dropdownContainer}
-              textStyle={styles.dropdownText}
-              labelStyle={styles.dropdownText}
-              placeholderStyle={styles.dropdownPlaceholder}
-              listMode="SCROLLVIEW"
-            />
-          </View>
-
-          <View style={{ zIndex: 2000 }}>
             <Text style={styles.label}>Kode</Text>
             <DropDownPicker
               open={kodeOpen}
@@ -232,6 +188,25 @@ export default function InScreen() {
             />
           </View>
 
+          <View style={{ zIndex: 2000 }}>
+            <Text style={styles.label}>Brand</Text>
+            <DropDownPicker
+              open={brandOpen}
+              setOpen={setBrandOpen}
+              value={brand}
+              setValue={setBrand}
+              items={brandItems}
+              placeholder="Brand (otomatis)"
+              disabled
+              style={styles.dropdown}
+              dropDownContainerStyle={styles.dropdownContainer}
+              textStyle={styles.dropdownText}
+              labelStyle={styles.dropdownText}
+              placeholderStyle={styles.dropdownPlaceholder}
+              listMode="SCROLLVIEW"
+            />
+          </View>
+
           <View style={{ zIndex: 1000 }}>
             <Text style={styles.label}>Nama</Text>
             <DropDownPicker
@@ -243,8 +218,8 @@ export default function InScreen() {
                 setForm((prev) => ({ ...prev, nama: v }));
               }}
               items={namaItems}
-              searchable
-              placeholder="Pilih Nama"
+              placeholder="Nama (otomatis)"
+              disabled
               style={styles.dropdown}
               dropDownContainerStyle={styles.dropdownContainer}
               textStyle={styles.dropdownText}
