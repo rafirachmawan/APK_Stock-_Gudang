@@ -27,18 +27,25 @@ export default function OutScreen() {
   const [medium, setMedium] = useState("");
   const [small, setSmall] = useState("");
   const [catatan, setCatatan] = useState("");
+  const [kategori, setKategori] = useState("");
   const [dataMasuk, setDataMasuk] = useState<Barang[]>([]);
 
   const [kodeOpen, setKodeOpen] = useState(false);
   const [kodeItems, setKodeItems] = useState<DropDownItem[]>([]);
 
-  const isFocused = useIsFocused(); // detect when screen is focused
+  const [kategoriOpen, setKategoriOpen] = useState(false);
+  const kategoriItems: DropDownItem[] = [
+    { label: "Gudang A", value: "Gudang A" },
+    { label: "Gudang B", value: "Gudang B" },
+    { label: "Gudang C", value: "Gudang C" },
+  ];
+
+  const isFocused = useIsFocused();
 
   const loadData = async () => {
     try {
       const currentStock = await getCurrentStock();
       setDataMasuk(currentStock);
-
       const kodeList = currentStock.map((item) => ({
         label: `${item.kode} (${item.nama})`,
         value: item.kode,
@@ -49,14 +56,12 @@ export default function OutScreen() {
     }
   };
 
-  // 🔁 Load ulang data setiap kali layar ini difokuskan
   useEffect(() => {
     if (isFocused) {
       loadData();
     }
   }, [isFocused]);
 
-  // Update nama barang otomatis saat kode berubah
   useEffect(() => {
     const selected = dataMasuk.find((item) => item.kode === kode);
     if (selected) {
@@ -67,8 +72,8 @@ export default function OutScreen() {
   }, [kode, dataMasuk]);
 
   const handleSubmit = async () => {
-    if (!kode || !nama) {
-      Alert.alert("Peringatan", "Kode dan Nama Barang wajib diisi!");
+    if (!kode || !nama || !kategori) {
+      Alert.alert("Peringatan", "Kode, Nama, dan Kategori wajib diisi!");
       return;
     }
 
@@ -106,6 +111,7 @@ export default function OutScreen() {
       ed: barang.ed,
       waktuInput: new Date().toISOString(),
       principle: barang.principle,
+      kategori,
     };
 
     try {
@@ -124,6 +130,7 @@ export default function OutScreen() {
       setMedium("");
       setSmall("");
       setCatatan("");
+      setKategori("");
     } catch (error) {
       console.error("Gagal menyimpan:", error);
       Alert.alert("Error", "Gagal menyimpan data!");
@@ -139,7 +146,6 @@ export default function OutScreen() {
         <ScrollView keyboardShouldPersistTaps="handled">
           <Text style={styles.title}>Form Barang Keluar</Text>
 
-          {/* Dropdown Kode Barang */}
           <View style={{ zIndex: 3000 }}>
             <Text style={styles.label}>Kode Barang</Text>
             <DropDownPicker
@@ -158,7 +164,6 @@ export default function OutScreen() {
             />
           </View>
 
-          {/* Nama Barang */}
           <Text style={styles.label}>Nama Barang</Text>
           <TextInput
             style={styles.input}
@@ -168,7 +173,22 @@ export default function OutScreen() {
             placeholderTextColor="#888"
           />
 
-          {/* Jumlah */}
+          <View style={{ zIndex: 2000 }}>
+            <Text style={styles.label}>Kategori Gudang</Text>
+            <DropDownPicker
+              open={kategoriOpen}
+              setOpen={setKategoriOpen}
+              value={kategori}
+              setValue={setKategori}
+              items={kategoriItems}
+              placeholder="Pilih Kategori Gudang"
+              dropDownDirection="AUTO"
+              style={styles.dropdown}
+              textStyle={styles.dropdownText}
+              dropDownContainerStyle={styles.dropdownContainer}
+            />
+          </View>
+
           <Text style={styles.label}>Jumlah Large</Text>
           <TextInput
             style={styles.input}
@@ -199,7 +219,6 @@ export default function OutScreen() {
             placeholderTextColor="#888"
           />
 
-          {/* Catatan */}
           <Text style={styles.label}>Catatan</Text>
           <TextInput
             style={styles.input}
@@ -252,6 +271,7 @@ const styles = StyleSheet.create({
   dropdown: {
     borderColor: "#444",
     backgroundColor: "#222",
+    marginBottom: 12,
   },
   dropdownText: {
     color: "#fff",

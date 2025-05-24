@@ -11,6 +11,7 @@ export interface Barang {
   catatan: string;
   waktuInput: string;
   principle: string; // ✅ Brand/principle
+  kategori: string; // ✅ Tambahkan kategori gudang
 }
 
 // 🔢 Hitung stok akhir berdasarkan barangMasuk dan barangKeluar
@@ -37,8 +38,9 @@ export const getCurrentStock = async (): Promise<Barang[]> => {
           stokSmall: item.stokSmall,
           ed: item.ed,
           catatan: item.catatan,
-          waktuInput: item.waktuInput, // ✅ Penting agar deleteBarang bisa kerja
+          waktuInput: item.waktuInput,
           principle: item.principle,
+          kategori: item.kategori,
         });
       } else {
         const existing = stockMap.get(item.kode)!;

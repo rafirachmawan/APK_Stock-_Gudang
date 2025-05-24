@@ -27,6 +27,7 @@ interface BarangForm {
   stokSmall: string;
   ed: string;
   catatan: string;
+  kategori: string;
 }
 
 type DropDownItem = {
@@ -43,6 +44,7 @@ export default function InScreen() {
     stokSmall: "",
     ed: "",
     catatan: "",
+    kategori: "",
   });
 
   const [masterBarangList, setMasterBarangList] = useState<any[]>([]);
@@ -50,10 +52,16 @@ export default function InScreen() {
   const [brandItems, setBrandItems] = useState<DropDownItem[]>([]);
   const [kodeItems, setKodeItems] = useState<DropDownItem[]>([]);
   const [namaItems, setNamaItems] = useState<DropDownItem[]>([]);
+  const [kategoriItems] = useState<DropDownItem[]>([
+    { label: "Gudang A", value: "Gudang A" },
+    { label: "Gudang B", value: "Gudang B" },
+    { label: "Gudang C", value: "Gudang C" },
+  ]);
 
   const [brandOpen, setBrandOpen] = useState(false);
   const [kodeOpen, setKodeOpen] = useState(false);
   const [namaOpen, setNamaOpen] = useState(false);
+  const [kategoriOpen, setKategoriOpen] = useState(false);
 
   const importExcelFromUrl = async () => {
     try {
@@ -101,7 +109,6 @@ export default function InScreen() {
     importExcelFromUrl();
   }, []);
 
-  // Update kode dan brand berdasarkan nama
   useEffect(() => {
     if (form.nama) {
       const item = masterBarangList.find((item) => item.nama === form.nama);
@@ -130,6 +137,7 @@ export default function InScreen() {
       catatan: form.catatan.trim(),
       waktuInput: new Date().toISOString(),
       principle: brand || "-",
+      kategori: form.kategori || "-", // ✅ simpan kategori
     };
 
     try {
@@ -146,6 +154,7 @@ export default function InScreen() {
         stokSmall: "",
         ed: "",
         catatan: "",
+        kategori: "",
       });
       setBrand("");
     } catch (error) {
@@ -167,7 +176,7 @@ export default function InScreen() {
         >
           <Text style={styles.title}>Form Barang Masuk</Text>
 
-          <View style={{ zIndex: 3000 }}>
+          <View style={{ zIndex: 4000 }}>
             <Text style={styles.label}>Nama</Text>
             <DropDownPicker
               open={namaOpen}
@@ -189,7 +198,7 @@ export default function InScreen() {
             />
           </View>
 
-          <View style={{ zIndex: 2000 }}>
+          <View style={{ zIndex: 3000 }}>
             <Text style={styles.label}>Kode</Text>
             <DropDownPicker
               open={kodeOpen}
@@ -208,7 +217,7 @@ export default function InScreen() {
             />
           </View>
 
-          <View style={{ zIndex: 1000 }}>
+          <View style={{ zIndex: 2000 }}>
             <Text style={styles.label}>Brand</Text>
             <DropDownPicker
               open={brandOpen}
@@ -218,6 +227,27 @@ export default function InScreen() {
               items={brandItems}
               placeholder="Brand (otomatis)"
               disabled
+              style={styles.dropdown}
+              dropDownContainerStyle={styles.dropdownContainer}
+              textStyle={styles.dropdownText}
+              labelStyle={styles.dropdownText}
+              placeholderStyle={styles.dropdownPlaceholder}
+              listMode="SCROLLVIEW"
+            />
+          </View>
+
+          <View style={{ zIndex: 1000 }}>
+            <Text style={styles.label}>Kategori</Text>
+            <DropDownPicker
+              open={kategoriOpen}
+              setOpen={setKategoriOpen}
+              value={form.kategori}
+              setValue={(cb) => {
+                const v = cb(form.kategori);
+                setForm((prev) => ({ ...prev, kategori: v }));
+              }}
+              items={kategoriItems}
+              placeholder="Pilih Gudang"
               style={styles.dropdown}
               dropDownContainerStyle={styles.dropdownContainer}
               textStyle={styles.dropdownText}

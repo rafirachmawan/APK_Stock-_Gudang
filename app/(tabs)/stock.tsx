@@ -53,6 +53,7 @@ export default function StockScreen() {
 
       const worksheet = XLSX.utils.json_to_sheet(
         stockData.map((item) => ({
+          Kategori: item.kategori,
           Principle: item.principle,
           Kode: item.kode,
           Nama: item.nama,
@@ -65,6 +66,7 @@ export default function StockScreen() {
         })),
         {
           header: [
+            "Kategori",
             "Principle",
             "Kode",
             "Nama",
@@ -151,6 +153,10 @@ export default function StockScreen() {
       <Text style={styles.cardTitle}>
         {item.nama} ({item.kode})
       </Text>
+      <View style={styles.row}>
+        <Text style={styles.label}>Kategori:</Text>
+        <Text style={styles.value}>{item.kategori}</Text>
+      </View>
       <View style={styles.row}>
         <Text style={styles.label}>Large:</Text>
         <Text style={styles.value}>{item.stokLarge}</Text>

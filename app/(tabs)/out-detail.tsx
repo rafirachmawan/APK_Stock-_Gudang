@@ -23,6 +23,8 @@ interface Barang {
   ed: string;
   catatan: string;
   waktuInput: string;
+  kategori: string;
+  principle: string;
 }
 
 const deleteBarang = async (kode: string, waktuInput: string) => {
@@ -86,6 +88,8 @@ export default function OutDetailScreen() {
 
     const exportData = items.map((item, index) => ({
       No: index + 1,
+      Kategori: item.kategori,
+      Principle: item.principle,
       Kode: item.kode,
       Nama: item.nama,
       Large: item.stokLarge,
@@ -118,6 +122,8 @@ export default function OutDetailScreen() {
       <Text style={styles.itemTitle}>
         [{index + 1}] {item.nama} ({item.kode})
       </Text>
+      <Text style={styles.label}>Kategori: {item.kategori}</Text>
+      <Text style={styles.label}>Principle: {item.principle}</Text>
       <Text style={styles.label}>
         Waktu Input: {new Date(item.waktuInput).toLocaleString()}
       </Text>

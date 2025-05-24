@@ -23,6 +23,8 @@ export interface Barang {
   ed: string;
   catatan: string;
   waktuInput: string;
+  principle: string;
+  kategori: string;
 }
 
 const deleteBarang = async (kode: string, waktuInput: string) => {
@@ -55,7 +57,6 @@ export default function StockDetailScreen() {
     }
   };
 
-  // ✅ Refresh data setiap kali halaman difokuskan
   useFocusEffect(
     useCallback(() => {
       loadData();
@@ -87,6 +88,8 @@ export default function StockDetailScreen() {
 
     const exportData = items.map((item, index) => ({
       No: index + 1,
+      Kategori: item.kategori,
+      Principle: item.principle,
       Kode: item.kode,
       Nama: item.nama,
       Large: item.stokLarge,
@@ -119,6 +122,8 @@ export default function StockDetailScreen() {
       <Text style={styles.itemTitle}>
         [{index + 1}] {item.nama} ({item.kode})
       </Text>
+      <Text style={styles.label}>Kategori: {item.kategori}</Text>
+      <Text style={styles.label}>Principle: {item.principle}</Text>
       <Text style={styles.label}>
         Waktu Input: {new Date(item.waktuInput).toLocaleString()}
       </Text>
