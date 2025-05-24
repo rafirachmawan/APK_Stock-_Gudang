@@ -1,17 +1,19 @@
 // ... import tetap
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useIsFocused } from "@react-navigation/native";
+import * as FileSystem from "expo-file-system";
+import * as Sharing from "expo-sharing";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
   FlatList,
-  Modal,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+import * as XLSX from "xlsx";
 import {
   Barang,
   deleteBarang,
@@ -43,6 +45,49 @@ export default function StockScreen() {
     }
   };
 
+  const exportToExcel = async () => {
+    try {
+      if (stockData.length === 0) {
+        Alert.alert("Info", "Tidak ada data stok untuk diekspor.");
+        return;
+      }
+
+      const worksheet = XLSX.utils.json_to_sheet(
+        stockData.map((item) => ({
+          Kode: item.kode,
+          Nama: item.nama,
+          Large: item.stokLarge,
+          Medium: item.stokMedium,
+          Small: item.stokSmall,
+          ED: item.ed,
+          Catatan: item.catatan,
+          WaktuInput: item.waktuInput,
+          Principle: item.principle,
+        }))
+      );
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "StockBarang");
+
+      const buffer = XLSX.write(workbook, { type: "base64", bookType: "xlsx" });
+
+      const filePath = FileSystem.cacheDirectory + `stock-barang.xlsx`;
+      await FileSystem.writeAsStringAsync(filePath, buffer, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      await Sharing.shareAsync(filePath, {
+        mimeType:
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        dialogTitle: "Bagikan file Excel",
+        UTI: "com.microsoft.excel.xlsx",
+      });
+    } catch (error) {
+      console.error("Gagal export Excel:", error);
+      Alert.alert("Error", "Gagal export ke Excel");
+    }
+  };
+
   const handleDelete = async (item: Barang) => {
     Alert.alert(
       "Konfirmasi Hapus",
@@ -55,7 +100,7 @@ export default function StockScreen() {
             const success = await deleteBarang(item.kode, item.waktuInput);
             if (success) {
               await loadStockData();
-              setSelectedItem(null); // ✅ Tambahan ini
+              setSelectedItem(null);
               setModalVisible(false);
               Alert.alert("Sukses", "Barang berhasil dihapus");
             } else {
@@ -110,6 +155,18 @@ export default function StockScreen() {
         <Text style={styles.label}>ED:</Text>
         <Text style={styles.value}>{item.ed}</Text>
       </View>
+      <TouchableOpacity
+        onPress={() => handleDelete(item)}
+        style={{
+          marginTop: 10,
+          backgroundColor: "#ef4444",
+          padding: 10,
+          borderRadius: 6,
+          alignItems: "center",
+        }}
+      >
+        <Text style={{ color: "#fff", fontWeight: "bold" }}>Hapus</Text>
+      </TouchableOpacity>
     </TouchableOpacity>
   );
 
@@ -134,6 +191,21 @@ export default function StockScreen() {
         }
         contentContainerStyle={styles.listContent}
       />
+
+      <TouchableOpacity
+        onPress={exportToExcel}
+        style={{
+          backgroundColor: "#10b981",
+          padding: 14,
+          borderRadius: 8,
+          marginTop: 12,
+          alignItems: "center",
+        }}
+      >
+        <Text style={{ color: "#fff", fontWeight: "bold" }}>
+          📄 Export ke Excel
+        </Text>
+      </TouchableOpacity>
 
       <TouchableOpacity
         onPress={() => {
@@ -162,114 +234,6 @@ export default function StockScreen() {
           🗑 Hapus Semua Stok
         </Text>
       </TouchableOpacity>
-
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            {selectedItem && (
-              <>
-                <Text style={styles.modalTitle}>
-                  {selectedItem.nama} ({selectedItem.kode})
-                </Text>
-
-                <View style={styles.modalRow}>
-                  <Text style={styles.modalLabel}>Stok Large:</Text>
-                  <Text style={styles.modalValue}>
-                    {selectedItem.stokLarge}
-                  </Text>
-                </View>
-                <View style={styles.modalRow}>
-                  <Text style={styles.modalLabel}>Stok Medium:</Text>
-                  <Text style={styles.modalValue}>
-                    {selectedItem.stokMedium}
-                  </Text>
-                </View>
-                <View style={styles.modalRow}>
-                  <Text style={styles.modalLabel}>Stok Small:</Text>
-                  <Text style={styles.modalValue}>
-                    {selectedItem.stokSmall}
-                  </Text>
-                </View>
-                <View style={styles.modalRow}>
-                  <Text style={styles.modalLabel}>Expiry Date:</Text>
-                  <Text style={styles.modalValue}>{selectedItem.ed}</Text>
-                </View>
-                <View style={styles.modalRow}>
-                  <Text style={styles.modalLabel}>Catatan:</Text>
-                  <Text style={styles.modalValue}>
-                    {selectedItem.catatan || "-"}
-                  </Text>
-                </View>
-                <View style={styles.modalRow}>
-                  <Text style={styles.modalLabel}>Waktu Input:</Text>
-                  <Text style={styles.modalValue}>
-                    {selectedItem.waktuInput}
-                  </Text>
-                </View>
-
-                <View style={{ marginTop: 20 }}>
-                  <Text style={[styles.modalTitle, { fontSize: 18 }]}>
-                    Riwayat Barang Keluar
-                  </Text>
-                  {barangKeluar.length === 0 ? (
-                    <Text style={{ color: "#aaa", textAlign: "center" }}>
-                      Belum ada pengeluaran
-                    </Text>
-                  ) : (
-                    barangKeluar.map((keluar, index) => (
-                      <View
-                        key={index}
-                        style={{
-                          marginVertical: 8,
-                          borderBottomWidth: 1,
-                          borderBottomColor: "#444",
-                          paddingBottom: 8,
-                        }}
-                      >
-                        <Text style={styles.modalLabel}>
-                          Tanggal: {keluar.waktuInput}
-                        </Text>
-                        <Text style={styles.modalLabel}>
-                          Large: {keluar.stokLarge}
-                        </Text>
-                        <Text style={styles.modalLabel}>
-                          Medium: {keluar.stokMedium}
-                        </Text>
-                        <Text style={styles.modalLabel}>
-                          Small: {keluar.stokSmall}
-                        </Text>
-                        <Text style={styles.modalLabel}>
-                          Catatan: {keluar.catatan || "-"}
-                        </Text>
-                      </View>
-                    ))
-                  )}
-                </View>
-
-                <View style={styles.modalButtonContainer}>
-                  <TouchableOpacity
-                    style={[styles.modalButton, styles.deleteButton]}
-                    onPress={() => handleDelete(selectedItem)}
-                  >
-                    <Text style={styles.buttonText}>Hapus Barang</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.modalButton, styles.closeButton]}
-                    onPress={() => setModalVisible(false)}
-                  >
-                    <Text style={styles.buttonText}>Tutup</Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
