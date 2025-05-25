@@ -9,6 +9,7 @@ import {
   FlatList,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -43,6 +44,7 @@ const deleteBarang = async (kode: string, waktuInput: string) => {
 export default function OutDetailScreen() {
   const [items, setItems] = useState<Barang[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const loadData = async () => {
     try {
@@ -117,6 +119,12 @@ export default function OutDetailScreen() {
     await Sharing.shareAsync(filePath);
   };
 
+  const filteredItems = items.filter(
+    (item) =>
+      item.nama.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.kode.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   const renderItem = ({ item, index }: { item: Barang; index: number }) => (
     <View style={styles.itemContainer}>
       <Text style={styles.itemTitle}>
@@ -164,14 +172,22 @@ export default function OutDetailScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>📤 Semua Data Barang Keluar</Text>
-      <Text style={styles.subtitle}>Total Input: {items.length}</Text>
+      <Text style={styles.subtitle}>Total Input: {filteredItems.length}</Text>
+
+      <TextInput
+        style={styles.searchInput}
+        placeholder="Cari nama atau kode barang..."
+        placeholderTextColor="#999"
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+      />
 
       <TouchableOpacity style={styles.exportBtn} onPress={exportToExcel}>
         <Text style={styles.exportText}>📤 Export Semua ke Excel</Text>
       </TouchableOpacity>
 
       <FlatList
-        data={items}
+        data={filteredItems}
         renderItem={renderItem}
         keyExtractor={(item, index) =>
           `${item.kode}-${item.waktuInput}-${index}`
@@ -198,6 +214,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#4b5563",
     marginBottom: 16,
+  },
+  searchInput: {
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    marginBottom: 12,
+    backgroundColor: "#f3f4f6",
+    color: "#111827",
   },
   itemContainer: {
     backgroundColor: "#f9fafb",
