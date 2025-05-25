@@ -60,6 +60,7 @@ export default function HomeScreen() {
             try {
               setLoading(true);
               await syncUpload();
+              await loadData(); // ⬅️ update tabel
               setLastSync(`Upload: ${formatWaktu()}`);
               Alert.alert("✅ Berhasil", "Data berhasil diunggah ke Firebase");
             } catch (error) {
@@ -77,7 +78,7 @@ export default function HomeScreen() {
     try {
       setLoading(true);
       await syncDownload();
-      await loadData(); // refresh data
+      await loadData(); // ⬅️ update tabel
       setLastSync(`Download: ${formatWaktu()}`);
       Alert.alert("✅ Berhasil", "Data berhasil diunduh dari Firebase");
     } catch (error) {
@@ -95,7 +96,7 @@ export default function HomeScreen() {
         style: "destructive",
         onPress: async () => {
           await resetSemuaHistory();
-          await loadData();
+          await loadData(); // ⬅️ update tabel
           Alert.alert("✅ Reset", "Data berhasil dihapus");
         },
       },

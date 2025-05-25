@@ -174,7 +174,7 @@ export default function InScreen() {
       >
         <Text style={styles.title}>📥 Form Barang Masuk</Text>
 
-        <View style={{ zIndex: 4000 }}>
+        <View style={[styles.dropdownWrapper, { zIndex: 4000 }]}>
           <Text style={styles.label}>Nama</Text>
           <DropDownPicker
             open={namaOpen}
@@ -192,11 +192,11 @@ export default function InScreen() {
             textStyle={styles.dropdownText}
             labelStyle={styles.dropdownText}
             placeholderStyle={styles.dropdownPlaceholder}
-            listMode="SCROLLVIEW"
+            listMode={Platform.OS === "android" ? "MODAL" : "SCROLLVIEW"}
           />
         </View>
 
-        <View style={{ zIndex: 3000 }}>
+        <View style={[styles.dropdownWrapper, { zIndex: 3000 }]}>
           <Text style={styles.label}>Kode</Text>
           <DropDownPicker
             open={kodeOpen}
@@ -215,7 +215,7 @@ export default function InScreen() {
           />
         </View>
 
-        <View style={{ zIndex: 2000 }}>
+        <View style={[styles.dropdownWrapper, { zIndex: 2000 }]}>
           <Text style={styles.label}>Brand</Text>
           <DropDownPicker
             open={brandOpen}
@@ -234,7 +234,7 @@ export default function InScreen() {
           />
         </View>
 
-        <View style={{ zIndex: 1000 }}>
+        <View style={[styles.dropdownWrapper, { zIndex: 1000 }]}>
           <Text style={styles.label}>Kategori</Text>
           <DropDownPicker
             open={kategoriOpen}
@@ -251,7 +251,7 @@ export default function InScreen() {
             textStyle={styles.dropdownText}
             labelStyle={styles.dropdownText}
             placeholderStyle={styles.dropdownPlaceholder}
-            listMode="SCROLLVIEW"
+            listMode={Platform.OS === "android" ? "MODAL" : "SCROLLVIEW"}
           />
         </View>
 
@@ -314,10 +314,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#f9fafb",
     color: "#111827",
   },
+  dropdownWrapper: {
+    marginBottom: 12,
+    position: "relative",
+  },
   dropdown: {
     borderColor: "#d1d5db",
     backgroundColor: "#f9fafb",
-    marginBottom: 12,
   },
   dropdownContainer: {
     borderColor: "#d1d5db",

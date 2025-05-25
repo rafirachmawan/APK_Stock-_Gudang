@@ -64,11 +64,7 @@ export default function OutScreen() {
 
   useEffect(() => {
     const selected = dataMasuk.find((item) => item.kode === kode);
-    if (selected) {
-      setNama(selected.nama);
-    } else {
-      setNama("");
-    }
+    setNama(selected?.nama || "");
   }, [kode, dataMasuk]);
 
   const handleSubmit = async () => {
@@ -120,8 +116,7 @@ export default function OutScreen() {
       parsed.push(dataOut);
       await AsyncStorage.setItem("barangKeluar", JSON.stringify(parsed));
 
-      const updatedStock = await getCurrentStock();
-      setDataMasuk(updatedStock);
+      await loadData();
 
       Alert.alert("Berhasil", "Data berhasil dikeluarkan!");
       setKode("");
@@ -163,6 +158,7 @@ export default function OutScreen() {
             style={styles.dropdown}
             textStyle={styles.dropdownText}
             dropDownContainerStyle={styles.dropdownContainer}
+            listMode={Platform.OS === "android" ? "MODAL" : "SCROLLVIEW"}
           />
         </View>
 
@@ -188,6 +184,7 @@ export default function OutScreen() {
             style={styles.dropdown}
             textStyle={styles.dropdownText}
             dropDownContainerStyle={styles.dropdownContainer}
+            listMode={Platform.OS === "android" ? "MODAL" : "SCROLLVIEW"}
           />
         </View>
 
