@@ -19,10 +19,10 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-      <Drawer>
+      <Drawer initialRouteName="index">
         {/* 🏠 Dashboard */}
         <Drawer.Screen
-          name="(tabs)/index"
+          name="index"
           options={{
             drawerLabel: "🏠 Dashboard",
             title: "Dashboard",
@@ -38,7 +38,7 @@ export default function RootLayout() {
 
         {/* 📥 Barang Masuk */}
         <Drawer.Screen
-          name="(tabs)/in"
+          name="in"
           options={{
             drawerLabel: "📥 Barang Masuk",
             title: "Barang Masuk",
@@ -54,7 +54,7 @@ export default function RootLayout() {
 
         {/* 📤 Barang Keluar */}
         <Drawer.Screen
-          name="(tabs)/out"
+          name="out"
           options={{
             drawerLabel: "📤 Barang Keluar",
             title: "Barang Keluar",
@@ -70,7 +70,7 @@ export default function RootLayout() {
 
         {/* 🎲 Generate */}
         <Drawer.Screen
-          name="(tabs)/generate"
+          name="generate"
           options={{
             drawerLabel: "🎲 Generate",
             title: "Generate",
@@ -86,7 +86,7 @@ export default function RootLayout() {
 
         {/* 🧾 Hasil Generate */}
         <Drawer.Screen
-          name="(tabs)/hasil-generate"
+          name="hasil-generate"
           options={{
             drawerLabel: "🧾 Hasil Generate",
             title: "Hasil Generate",
@@ -125,6 +125,38 @@ export default function RootLayout() {
             drawerIcon: ({ color, size }) => (
               <MaterialCommunityIcons
                 name="clipboard-text-clock-outline"
+                size={size}
+                color={color}
+              />
+            ),
+          }}
+        />
+
+        {/* 📦 Stock Saat Ini */}
+        <Drawer.Screen
+          name="stock"
+          options={{
+            drawerLabel: "📦 Stock Saat Ini",
+            title: "Stock",
+            drawerIcon: ({ color, size }) => (
+              <MaterialCommunityIcons
+                name="warehouse"
+                size={size}
+                color={color}
+              />
+            ),
+          }}
+        />
+
+        {/* 📤 Export All */}
+        <Drawer.Screen
+          name="export-all"
+          options={{
+            drawerLabel: "📤 Export Semua",
+            title: "Export Semua",
+            drawerIcon: ({ color, size }) => (
+              <MaterialCommunityIcons
+                name="export-variant"
                 size={size}
                 color={color}
               />
