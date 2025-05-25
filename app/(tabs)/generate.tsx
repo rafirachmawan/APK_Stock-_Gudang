@@ -1,3 +1,4 @@
+// GenerateScreen.tsx
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -5,7 +6,6 @@ import React, { useEffect, useState } from "react";
 import {
   Alert,
   FlatList,
-  Modal,
   StyleSheet,
   Text,
   TextInput,
@@ -46,7 +46,6 @@ export default function GenerateScreen() {
         const key = `${item.kode}-${item.nama}`;
         if (seen.has(key)) continue;
         seen.add(key);
-
         const brand = item.principle || "UNKNOWN";
         if (!grouped[brand]) grouped[brand] = [];
         grouped[brand].push(item);
@@ -213,55 +212,39 @@ export default function GenerateScreen() {
         {remaining}
       </Text>
 
-      <Modal visible={showDateModal} transparent animationType="slide">
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <DateTimePicker
-              value={tempDate}
-              mode="date"
-              display="default"
-              onChange={(e, date) => date && setTempDate(date)}
-            />
-            <TouchableOpacity
-              style={styles.modalButton}
-              onPress={() => {
-                setTanggal(tempDate.toISOString().split("T")[0]);
-                setShowDateModal(false);
-              }}
-            >
-              <Text style={styles.modalButtonText}>Simpan Tanggal</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      {/* Modal untuk pilih tanggal */}
+      {showDateModal && (
+        <DateTimePicker
+          value={tempDate}
+          mode="date"
+          display="default"
+          onChange={(event, date) => {
+            if (event.type === "set" && date) {
+              setTanggal(date.toISOString().split("T")[0]);
+            }
+            setShowDateModal(false);
+          }}
+        />
+      )}
 
-      <Modal visible={!!showEdModal} transparent animationType="slide">
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <DateTimePicker
-              value={tempDate}
-              mode="date"
-              display="default"
-              onChange={(e, date) => date && setTempDate(date)}
-            />
-            <TouchableOpacity
-              style={styles.modalButton}
-              onPress={() => {
-                if (showEdModal) {
-                  handleStockChange(
-                    showEdModal,
-                    "ed",
-                    tempDate.toISOString().split("T")[0]
-                  );
-                }
-                setShowEdModal(null);
-              }}
-            >
-              <Text style={styles.modalButtonText}>Simpan ED</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      {/* Modal untuk pilih ED */}
+      {showEdModal && (
+        <DateTimePicker
+          value={tempDate}
+          mode="date"
+          display="default"
+          onChange={(event, date) => {
+            if (event.type === "set" && date && showEdModal) {
+              handleStockChange(
+                showEdModal,
+                "ed",
+                date.toISOString().split("T")[0]
+              );
+            }
+            setShowEdModal(null);
+          }}
+        />
+      )}
     </View>
   );
 }
@@ -338,28 +321,5 @@ const styles = StyleSheet.create({
     color: "#6b7280",
     fontSize: 12,
     marginTop: 10,
-  },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  modalContent: {
-    backgroundColor: "#f9fafb",
-    padding: 20,
-    borderRadius: 8,
-    width: "80%",
-    alignItems: "center",
-  },
-  modalButton: {
-    marginTop: 20,
-    backgroundColor: "#10b981",
-    padding: 10,
-    borderRadius: 6,
-  },
-  modalButtonText: {
-    color: "#fff",
-    fontWeight: "bold",
   },
 });
