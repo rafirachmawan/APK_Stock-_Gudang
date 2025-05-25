@@ -24,7 +24,6 @@ export default function StockScreen() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [stockData, setStockData] = useState<Barang[]>([]);
   const [selectedItem, setSelectedItem] = useState<Barang | null>(null);
-  const [modalVisible, setModalVisible] = useState(false);
   const [barangKeluar, setBarangKeluar] = useState<Barang[]>([]);
   const isFocused = useIsFocused();
 
@@ -63,21 +62,7 @@ export default function StockScreen() {
           ED: item.ed,
           Catatan: item.catatan,
           WaktuInput: item.waktuInput,
-        })),
-        {
-          header: [
-            "Kategori",
-            "Principle",
-            "Kode",
-            "Nama",
-            "Large",
-            "Medium",
-            "Small",
-            "ED",
-            "Catatan",
-            "WaktuInput",
-          ],
-        }
+        }))
       );
 
       const workbook = XLSX.utils.book_new();
@@ -115,7 +100,6 @@ export default function StockScreen() {
             if (success) {
               await loadStockData();
               setSelectedItem(null);
-              setModalVisible(false);
               Alert.alert("Sukses", "Barang berhasil dihapus");
             } else {
               Alert.alert("Error", "Gagal menghapus barang");
@@ -139,7 +123,6 @@ export default function StockScreen() {
       console.error("Gagal memuat data barang keluar:", error);
       setBarangKeluar([]);
     }
-    setModalVisible(true);
   };
 
   const filteredData = stockData.filter(
@@ -175,22 +158,16 @@ export default function StockScreen() {
       </View>
       <TouchableOpacity
         onPress={() => handleDelete(item)}
-        style={{
-          marginTop: 10,
-          backgroundColor: "#ef4444",
-          padding: 10,
-          borderRadius: 6,
-          alignItems: "center",
-        }}
+        style={styles.deleteButton}
       >
-        <Text style={{ color: "#fff", fontWeight: "bold" }}>Hapus</Text>
+        <Text style={styles.deleteButtonText}>Hapus</Text>
       </TouchableOpacity>
     </TouchableOpacity>
   );
 
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>Daftar Stock Barang</Text>
+      <Text style={styles.header}>📦 Daftar Stok Barang</Text>
 
       <TextInput
         style={styles.searchInput}
@@ -205,28 +182,18 @@ export default function StockScreen() {
         renderItem={renderItem}
         keyExtractor={(item) => `${item.kode}-${item.waktuInput}`}
         ListEmptyComponent={
-          <Text style={styles.emptyText}>Tidak ada data stock</Text>
+          <Text style={styles.emptyText}>Tidak ada data stok</Text>
         }
         contentContainerStyle={styles.listContent}
       />
 
-      <TouchableOpacity
-        onPress={exportToExcel}
-        style={{
-          backgroundColor: "#10b981",
-          padding: 14,
-          borderRadius: 8,
-          marginTop: 12,
-          alignItems: "center",
-        }}
-      >
-        <Text style={{ color: "#fff", fontWeight: "bold" }}>
-          📄 Export ke Excel
-        </Text>
+      <TouchableOpacity style={styles.exportButton} onPress={exportToExcel}>
+        <Text style={styles.exportText}>📄 Export ke Excel</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
-        onPress={() => {
+        style={styles.resetButton}
+        onPress={() =>
           Alert.alert("Konfirmasi", "Yakin ingin menghapus semua stok?", [
             { text: "Batal", style: "cancel" },
             {
@@ -238,19 +205,10 @@ export default function StockScreen() {
                 Alert.alert("Berhasil", "Semua stok berhasil dihapus");
               },
             },
-          ]);
-        }}
-        style={{
-          backgroundColor: "#ef4444",
-          padding: 14,
-          borderRadius: 8,
-          marginTop: 12,
-          alignItems: "center",
-        }}
+          ])
+        }
       >
-        <Text style={{ color: "#fff", fontWeight: "bold" }}>
-          🗑 Hapus Semua Stok
-        </Text>
+        <Text style={styles.resetText}>🗑 Hapus Semua Stok</Text>
       </TouchableOpacity>
     </View>
   );
@@ -260,40 +218,40 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
-    backgroundColor: "#1a1a1a",
+    backgroundColor: "#ffffff",
   },
   header: {
     fontSize: 22,
     fontWeight: "bold",
-    color: "#ffffff",
+    color: "#1f2937",
     marginBottom: 20,
     textAlign: "center",
   },
   searchInput: {
     borderWidth: 1,
-    borderColor: "#444",
+    borderColor: "#d1d5db",
     padding: 14,
     marginBottom: 16,
-    backgroundColor: "#2a2a2a",
-    color: "#ffffff",
+    backgroundColor: "#f9fafb",
+    color: "#111827",
     borderRadius: 10,
     fontSize: 16,
   },
   card: {
-    backgroundColor: "#2a2a2a",
+    backgroundColor: "#f1f5f9",
     padding: 18,
     marginBottom: 14,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#333",
+    borderColor: "#e2e8f0",
   },
   cardTitle: {
     fontSize: 18,
     fontWeight: "bold",
-    color: "#ffffff",
+    color: "#1e293b",
     marginBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#444",
+    borderBottomColor: "#cbd5e1",
     paddingBottom: 8,
   },
   row: {
@@ -302,17 +260,50 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   label: {
-    color: "#bbbbbb",
+    color: "#475569",
     fontSize: 15,
   },
   value: {
-    color: "#ffffff",
+    color: "#1e293b",
     fontSize: 15,
     fontWeight: "500",
   },
+  deleteButton: {
+    marginTop: 10,
+    backgroundColor: "#ef4444",
+    padding: 10,
+    borderRadius: 6,
+    alignItems: "center",
+  },
+  deleteButtonText: {
+    color: "#fff",
+    fontWeight: "bold",
+  },
+  exportButton: {
+    backgroundColor: "#10b981",
+    padding: 14,
+    borderRadius: 8,
+    marginTop: 12,
+    alignItems: "center",
+  },
+  exportText: {
+    color: "#ffffff",
+    fontWeight: "bold",
+  },
+  resetButton: {
+    backgroundColor: "#ef4444",
+    padding: 14,
+    borderRadius: 8,
+    marginTop: 12,
+    alignItems: "center",
+  },
+  resetText: {
+    color: "#ffffff",
+    fontWeight: "bold",
+  },
   emptyText: {
     textAlign: "center",
-    color: "#888888",
+    color: "#6b7280",
     marginTop: 40,
     fontSize: 16,
   },

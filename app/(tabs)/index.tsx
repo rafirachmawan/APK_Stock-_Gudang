@@ -1,21 +1,27 @@
-import { ThemedText } from "@/components/ThemedText";
-import { ThemedView } from "@/components/ThemedView";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Dimensions,
+  ScrollView,
   StyleSheet,
+  Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import {
   resetSemuaHistory,
   syncDownload,
   syncUpload,
 } from "../../utils/firebase";
 import { Barang } from "../../utils/stockManager";
+
+// Ambil lebar layar device
+const screenWidth = Dimensions.get("window").width;
+const cardWidth = screenWidth < 400 ? screenWidth - 60 : 160;
 
 export default function HomeScreen() {
   const [loading, setLoading] = useState(false);
@@ -97,91 +103,96 @@ export default function HomeScreen() {
   };
 
   return (
-    <ThemedView style={styles.container}>
-      <ThemedText type="title" style={styles.title}>
-        📊 Dashboard Stock Gudang
-      </ThemedText>
+    <SafeAreaView style={{ flex: 1, backgroundColor: "#fff" }}>
+      <ScrollView contentContainerStyle={styles.container}>
+        <Text style={styles.title}>📊 Dashboard Stock Gudang</Text>
 
-      <ThemedView style={styles.contentBox}>
-        <ThemedText type="subtitle">Selamat datang!</ThemedText>
-        <ThemedText>
-          Gunakan menu di kiri atas untuk mengelola barang, upload, dan download
-          database.
-        </ThemedText>
-      </ThemedView>
+        <View style={styles.contentBox}>
+          <Text style={styles.subtitle}>Selamat datang!</Text>
+          <Text style={styles.normalText}>
+            Gunakan menu di kiri atas untuk mengelola barang, upload, dan
+            download database.
+          </Text>
+        </View>
 
-      <View style={styles.cardsContainer}>
-        <ThemedView style={styles.card}>
-          <MaterialCommunityIcons
-            name="account-group"
-            size={32}
-            color="#22c55e"
-          />
-          <ThemedText>Total Principle</ThemedText>
-          <ThemedText type="title">{totalPrinciple}</ThemedText>
-          <ThemedText style={styles.cardHint}>Merek utama</ThemedText>
-        </ThemedView>
+        <View style={styles.cardsContainer}>
+          <View style={[styles.card, { width: cardWidth }]}>
+            <MaterialCommunityIcons
+              name="account-group"
+              size={32}
+              color="#16a34a"
+            />
+            <Text style={styles.cardTitle}>Total Principle</Text>
+            <Text style={styles.cardCount}>{totalPrinciple}</Text>
+            <Text style={styles.cardHint}>Merek utama</Text>
+          </View>
 
-        <ThemedView style={styles.card}>
-          <MaterialCommunityIcons name="tag" size={32} color="#f59e0b" />
-          <ThemedText>Total Brand</ThemedText>
-          <ThemedText type="title">{totalBrand}</ThemedText>
-          <ThemedText style={styles.cardHint}>Jenis barang unik</ThemedText>
-        </ThemedView>
-      </View>
+          <View style={[styles.card, { width: cardWidth }]}>
+            <MaterialCommunityIcons name="tag" size={32} color="#d97706" />
+            <Text style={styles.cardTitle}>Total Brand</Text>
+            <Text style={styles.cardCount}>{totalBrand}</Text>
+            <Text style={styles.cardHint}>Jenis barang unik</Text>
+          </View>
+        </View>
 
-      <View style={styles.syncContainer}>
-        {loading ? (
-          <ActivityIndicator size="large" color="#38bdf8" />
-        ) : (
-          <>
-            <TouchableOpacity style={styles.syncButton} onPress={handleUpload}>
-              <ThemedText style={styles.syncText}>
-                ⬆️ Upload ke Cloud
-              </ThemedText>
-            </TouchableOpacity>
+        <View style={styles.syncContainer}>
+          {loading ? (
+            <ActivityIndicator size="large" color="#3b82f6" />
+          ) : (
+            <>
+              <TouchableOpacity
+                style={styles.syncButton}
+                onPress={handleUpload}
+              >
+                <Text style={styles.syncText}>⬆️ Upload ke Cloud</Text>
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.syncButton}
-              onPress={handleDownload}
-            >
-              <ThemedText style={styles.syncText}>
-                ⬇️ Download dari Cloud
-              </ThemedText>
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.syncButton}
+                onPress={handleDownload}
+              >
+                <Text style={styles.syncText}>⬇️ Download dari Cloud</Text>
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.syncButton, { backgroundColor: "#dc2626" }]}
-              onPress={handleReset}
-            >
-              <ThemedText style={styles.syncText}>
-                🗑️ Reset Semua Data
-              </ThemedText>
-            </TouchableOpacity>
-          </>
-        )}
-        {lastSync && (
-          <ThemedText style={styles.syncStatus}>
-            📅 Terakhir: {lastSync}
-          </ThemedText>
-        )}
-      </View>
-    </ThemedView>
+              <TouchableOpacity
+                style={[styles.syncButton, { backgroundColor: "#dc2626" }]}
+                onPress={handleReset}
+              >
+                <Text style={styles.syncText}>🗑️ Reset Semua Data</Text>
+              </TouchableOpacity>
+            </>
+          )}
+          {lastSync && (
+            <Text style={styles.syncStatus}>📅 Terakhir: {lastSync}</Text>
+          )}
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
     padding: 20,
     gap: 16,
   },
   title: {
     textAlign: "center",
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#1f2937",
+  },
+  subtitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1f2937",
+  },
+  normalText: {
+    fontSize: 14,
+    color: "#374151",
   },
   contentBox: {
-    marginTop: 20,
-    backgroundColor: "#222",
+    backgroundColor: "#f3f4f6",
     padding: 16,
     borderRadius: 12,
     gap: 8,
@@ -193,16 +204,29 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   card: {
-    width: 160,
     padding: 16,
     borderRadius: 12,
-    backgroundColor: "#1e293b",
+    backgroundColor: "#e0f2fe",
     alignItems: "center",
     gap: 8,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  cardTitle: {
+    fontWeight: "bold",
+    color: "#1e3a8a",
+  },
+  cardCount: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#0f172a",
   },
   cardHint: {
     fontSize: 12,
-    color: "#cbd5e1",
+    color: "#64748b",
     textAlign: "center",
   },
   syncContainer: {
@@ -211,7 +235,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   syncButton: {
-    backgroundColor: "#2563eb",
+    backgroundColor: "#3b82f6",
     padding: 14,
     borderRadius: 10,
     width: "100%",
@@ -223,7 +247,7 @@ const styles = StyleSheet.create({
   },
   syncStatus: {
     marginTop: 10,
-    color: "#38bdf8",
+    color: "#0ea5e9",
     fontSize: 13,
     fontStyle: "italic",
   },

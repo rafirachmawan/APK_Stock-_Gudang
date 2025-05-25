@@ -137,7 +137,7 @@ export default function InScreen() {
       catatan: form.catatan.trim(),
       waktuInput: new Date().toISOString(),
       principle: brand || "-",
-      kategori: form.kategori || "-", // ✅ simpan kategori
+      kategori: form.kategori || "-",
     };
 
     try {
@@ -166,150 +166,139 @@ export default function InScreen() {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      style={{ flex: 1 }}
+      style={{ flex: 1, backgroundColor: "#fff" }}
     >
-      <View style={styles.container}>
-        <ScrollView
-          keyboardShouldPersistTaps="handled"
-          nestedScrollEnabled
-          contentContainerStyle={{ paddingBottom: 100 }}
-        >
-          <Text style={styles.title}>Form Barang Masuk</Text>
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={styles.container}
+      >
+        <Text style={styles.title}>📥 Form Barang Masuk</Text>
 
-          <View style={{ zIndex: 4000 }}>
-            <Text style={styles.label}>Nama</Text>
-            <DropDownPicker
-              open={namaOpen}
-              setOpen={setNamaOpen}
-              value={form.nama}
-              setValue={(cb) => {
-                const v = cb(form.nama);
-                setForm((prev) => ({ ...prev, nama: v }));
-              }}
-              items={namaItems}
-              searchable
-              placeholder="Pilih Nama"
-              style={styles.dropdown}
-              dropDownContainerStyle={styles.dropdownContainer}
-              textStyle={styles.dropdownText}
-              labelStyle={styles.dropdownText}
-              placeholderStyle={styles.dropdownPlaceholder}
-              listMode="SCROLLVIEW"
-            />
-          </View>
+        <View style={{ zIndex: 4000 }}>
+          <Text style={styles.label}>Nama</Text>
+          <DropDownPicker
+            open={namaOpen}
+            setOpen={setNamaOpen}
+            value={form.nama}
+            setValue={(cb) => {
+              const v = cb(form.nama);
+              setForm((prev) => ({ ...prev, nama: v }));
+            }}
+            items={namaItems}
+            searchable
+            placeholder="Pilih Nama"
+            style={styles.dropdown}
+            dropDownContainerStyle={styles.dropdownContainer}
+            textStyle={styles.dropdownText}
+            labelStyle={styles.dropdownText}
+            placeholderStyle={styles.dropdownPlaceholder}
+            listMode="SCROLLVIEW"
+          />
+        </View>
 
-          <View style={{ zIndex: 3000 }}>
-            <Text style={styles.label}>Kode</Text>
-            <DropDownPicker
-              open={kodeOpen}
-              setOpen={setKodeOpen}
-              value={form.kode}
-              setValue={() => {}}
-              items={kodeItems}
-              placeholder="Kode (otomatis)"
-              disabled
-              style={styles.dropdown}
-              dropDownContainerStyle={styles.dropdownContainer}
-              textStyle={styles.dropdownText}
-              labelStyle={styles.dropdownText}
-              placeholderStyle={styles.dropdownPlaceholder}
-              listMode="SCROLLVIEW"
-            />
-          </View>
+        <View style={{ zIndex: 3000 }}>
+          <Text style={styles.label}>Kode</Text>
+          <DropDownPicker
+            open={kodeOpen}
+            setOpen={setKodeOpen}
+            value={form.kode}
+            setValue={() => {}}
+            items={kodeItems}
+            placeholder="Kode (otomatis)"
+            disabled
+            style={styles.dropdown}
+            dropDownContainerStyle={styles.dropdownContainer}
+            textStyle={styles.dropdownText}
+            labelStyle={styles.dropdownText}
+            placeholderStyle={styles.dropdownPlaceholder}
+            listMode="SCROLLVIEW"
+          />
+        </View>
 
-          <View style={{ zIndex: 2000 }}>
-            <Text style={styles.label}>Brand</Text>
-            <DropDownPicker
-              open={brandOpen}
-              setOpen={setBrandOpen}
-              value={brand}
-              setValue={() => {}}
-              items={brandItems}
-              placeholder="Brand (otomatis)"
-              disabled
-              style={styles.dropdown}
-              dropDownContainerStyle={styles.dropdownContainer}
-              textStyle={styles.dropdownText}
-              labelStyle={styles.dropdownText}
-              placeholderStyle={styles.dropdownPlaceholder}
-              listMode="SCROLLVIEW"
-            />
-          </View>
+        <View style={{ zIndex: 2000 }}>
+          <Text style={styles.label}>Brand</Text>
+          <DropDownPicker
+            open={brandOpen}
+            setOpen={setBrandOpen}
+            value={brand}
+            setValue={() => {}}
+            items={brandItems}
+            placeholder="Brand (otomatis)"
+            disabled
+            style={styles.dropdown}
+            dropDownContainerStyle={styles.dropdownContainer}
+            textStyle={styles.dropdownText}
+            labelStyle={styles.dropdownText}
+            placeholderStyle={styles.dropdownPlaceholder}
+            listMode="SCROLLVIEW"
+          />
+        </View>
 
-          <View style={{ zIndex: 1000 }}>
-            <Text style={styles.label}>Kategori</Text>
-            <DropDownPicker
-              open={kategoriOpen}
-              setOpen={setKategoriOpen}
-              value={form.kategori}
-              setValue={(cb) => {
-                const v = cb(form.kategori);
-                setForm((prev) => ({ ...prev, kategori: v }));
-              }}
-              items={kategoriItems}
-              placeholder="Pilih Gudang"
-              style={styles.dropdown}
-              dropDownContainerStyle={styles.dropdownContainer}
-              textStyle={styles.dropdownText}
-              labelStyle={styles.dropdownText}
-              placeholderStyle={styles.dropdownPlaceholder}
-              listMode="SCROLLVIEW"
-            />
-          </View>
+        <View style={{ zIndex: 1000 }}>
+          <Text style={styles.label}>Kategori</Text>
+          <DropDownPicker
+            open={kategoriOpen}
+            setOpen={setKategoriOpen}
+            value={form.kategori}
+            setValue={(cb) => {
+              const v = cb(form.kategori);
+              setForm((prev) => ({ ...prev, kategori: v }));
+            }}
+            items={kategoriItems}
+            placeholder="Pilih Gudang"
+            style={styles.dropdown}
+            dropDownContainerStyle={styles.dropdownContainer}
+            textStyle={styles.dropdownText}
+            labelStyle={styles.dropdownText}
+            placeholderStyle={styles.dropdownPlaceholder}
+            listMode="SCROLLVIEW"
+          />
+        </View>
 
-          {["stokLarge", "stokMedium", "stokSmall", "ed", "catatan"].map(
-            (key, i) => (
-              <View key={key} style={styles.inputWrapper}>
-                <Text style={styles.label}>
-                  {
-                    [
-                      "Stok Large",
-                      "Stok Medium",
-                      "Stok Small",
-                      "ED",
-                      "Catatan",
-                    ][i]
-                  }
-                </Text>
-                <TextInput
-                  style={styles.input}
-                  value={form[key as keyof BarangForm]}
-                  onChangeText={(t) => handleChange(key as keyof BarangForm, t)}
-                  keyboardType={key.includes("stok") ? "numeric" : "default"}
-                  placeholderTextColor="#999"
-                  placeholder={key}
-                />
-              </View>
-            )
-          )}
+        {["stokLarge", "stokMedium", "stokSmall", "ed", "catatan"].map(
+          (key, i) => (
+            <View key={key} style={styles.inputWrapper}>
+              <Text style={styles.label}>
+                {
+                  ["Stok Large", "Stok Medium", "Stok Small", "ED", "Catatan"][
+                    i
+                  ]
+                }
+              </Text>
+              <TextInput
+                style={styles.input}
+                value={form[key as keyof BarangForm]}
+                onChangeText={(t) => handleChange(key as keyof BarangForm, t)}
+                keyboardType={key.includes("stok") ? "numeric" : "default"}
+                placeholderTextColor="#999"
+                placeholder={key}
+              />
+            </View>
+          )
+        )}
 
-          <TouchableOpacity
-            style={styles.buttonContainer}
-            onPress={handleSubmit}
-          >
-            <Text style={styles.buttonText}>Simpan Barang</Text>
-          </TouchableOpacity>
-        </ScrollView>
-      </View>
+        <TouchableOpacity style={styles.buttonContainer} onPress={handleSubmit}>
+          <Text style={styles.buttonText}>Simpan Barang</Text>
+        </TouchableOpacity>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    padding: 16,
-    backgroundColor: "#121212",
+    padding: 20,
+    backgroundColor: "#fff",
   },
   title: {
     fontSize: 20,
     fontWeight: "bold",
     marginBottom: 20,
     alignSelf: "center",
-    color: "#fff",
+    color: "#1f2937",
   },
   label: {
-    color: "#fff",
+    color: "#111827",
     marginBottom: 4,
     marginTop: 12,
   },
@@ -319,30 +308,30 @@ const styles = StyleSheet.create({
   },
   input: {
     borderWidth: 1,
-    borderColor: "#444",
+    borderColor: "#d1d5db",
     borderRadius: 6,
     padding: 12,
-    backgroundColor: "#222",
-    color: "#fff",
+    backgroundColor: "#f9fafb",
+    color: "#111827",
   },
   dropdown: {
-    borderColor: "#444",
-    backgroundColor: "#222",
+    borderColor: "#d1d5db",
+    backgroundColor: "#f9fafb",
     marginBottom: 12,
   },
   dropdownContainer: {
-    borderColor: "#444",
-    backgroundColor: "#222",
+    borderColor: "#d1d5db",
+    backgroundColor: "#ffffff",
   },
   dropdownText: {
-    color: "#fff",
+    color: "#111827",
   },
   dropdownPlaceholder: {
-    color: "#aaa",
+    color: "#6b7280",
   },
   buttonContainer: {
     marginTop: 20,
-    backgroundColor: "#6200ee",
+    backgroundColor: "#3b82f6",
     borderRadius: 6,
   },
   buttonText: {

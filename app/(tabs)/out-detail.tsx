@@ -147,7 +147,7 @@ export default function OutDetailScreen() {
   if (isLoading) {
     return (
       <View style={styles.container}>
-        <ActivityIndicator size="large" color="#fff" />
+        <ActivityIndicator size="large" color="#3b82f6" />
         <Text style={styles.label}>Memuat semua data barang keluar...</Text>
       </View>
     );
@@ -163,7 +163,7 @@ export default function OutDetailScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Semua Data Barang Keluar</Text>
+      <Text style={styles.title}>📤 Semua Data Barang Keluar</Text>
       <Text style={styles.subtitle}>Total Input: {items.length}</Text>
 
       <TouchableOpacity style={styles.exportBtn} onPress={exportToExcel}>
@@ -185,37 +185,37 @@ export default function OutDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#1a1a1a",
+    backgroundColor: "#ffffff",
     padding: 20,
   },
   title: {
     fontSize: 20,
     fontWeight: "bold",
-    color: "#fff",
+    color: "#1f2937",
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: "#bbb",
+    color: "#4b5563",
     marginBottom: 16,
   },
   itemContainer: {
-    backgroundColor: "#2a2a2a",
+    backgroundColor: "#f9fafb",
     padding: 16,
     borderRadius: 8,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: "#333",
+    borderColor: "#e5e7eb",
   },
   itemTitle: {
     fontSize: 16,
     fontWeight: "bold",
-    color: "#fff",
+    color: "#1e293b",
     marginBottom: 6,
   },
   label: {
     fontSize: 14,
-    color: "#ccc",
+    color: "#374151",
     marginBottom: 4,
   },
   stockRow: {
@@ -225,7 +225,7 @@ const styles = StyleSheet.create({
   },
   deleteBtn: {
     marginTop: 10,
-    backgroundColor: "#d11a2a",
+    backgroundColor: "#ef4444",
     padding: 10,
     borderRadius: 6,
     alignItems: "center",
@@ -235,14 +235,14 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   exportBtn: {
-    backgroundColor: "#4caf50",
+    backgroundColor: "#10b981",
     padding: 12,
     borderRadius: 6,
     alignItems: "center",
     marginBottom: 16,
   },
   exportText: {
-    color: "#fff",
+    color: "#ffffff",
     fontWeight: "bold",
   },
   listContent: {

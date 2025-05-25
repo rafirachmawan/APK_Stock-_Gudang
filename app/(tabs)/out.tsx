@@ -3,13 +3,13 @@ import { useIsFocused } from "@react-navigation/native";
 import { useEffect, useState } from "react";
 import {
   Alert,
-  Button,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  TouchableOpacity,
   View,
 } from "react-native";
 import DropDownPicker from "react-native-dropdown-picker";
@@ -140,151 +140,152 @@ export default function OutScreen() {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      style={{ flex: 1 }}
+      style={{ flex: 1, backgroundColor: "#fff" }}
     >
-      <View style={styles.container}>
-        <ScrollView keyboardShouldPersistTaps="handled">
-          <Text style={styles.title}>Form Barang Keluar</Text>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Text style={styles.title}>📤 Form Barang Keluar</Text>
 
-          <View style={{ zIndex: 3000 }}>
-            <Text style={styles.label}>Kode Barang</Text>
-            <DropDownPicker
-              open={kodeOpen}
-              setOpen={setKodeOpen}
-              value={kode}
-              setValue={setKode}
-              items={kodeItems}
-              placeholder="Pilih Kode Barang"
-              searchable={true}
-              searchPlaceholder="Cari kode atau nama"
-              dropDownDirection="AUTO"
-              style={styles.dropdown}
-              textStyle={styles.dropdownText}
-              dropDownContainerStyle={styles.dropdownContainer}
-            />
-          </View>
-
-          <Text style={styles.label}>Nama Barang</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Nama Barang"
-            value={nama}
-            editable={false}
-            placeholderTextColor="#888"
+        <View style={{ zIndex: 3000 }}>
+          <Text style={styles.label}>Kode Barang</Text>
+          <DropDownPicker
+            open={kodeOpen}
+            setOpen={setKodeOpen}
+            value={kode}
+            setValue={setKode}
+            items={kodeItems}
+            placeholder="Pilih Kode Barang"
+            searchable
+            searchPlaceholder="Cari kode atau nama"
+            dropDownDirection="AUTO"
+            style={styles.dropdown}
+            textStyle={styles.dropdownText}
+            dropDownContainerStyle={styles.dropdownContainer}
           />
+        </View>
 
-          <View style={{ zIndex: 2000 }}>
-            <Text style={styles.label}>Kategori Gudang</Text>
-            <DropDownPicker
-              open={kategoriOpen}
-              setOpen={setKategoriOpen}
-              value={kategori}
-              setValue={setKategori}
-              items={kategoriItems}
-              placeholder="Pilih Kategori Gudang"
-              dropDownDirection="AUTO"
-              style={styles.dropdown}
-              textStyle={styles.dropdownText}
-              dropDownContainerStyle={styles.dropdownContainer}
-            />
-          </View>
+        <Text style={styles.label}>Nama Barang</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Nama Barang"
+          value={nama}
+          editable={false}
+          placeholderTextColor="#888"
+        />
 
-          <Text style={styles.label}>Jumlah Large</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Jumlah Large"
-            keyboardType="numeric"
-            value={large}
-            onChangeText={setLarge}
-            placeholderTextColor="#888"
+        <View style={{ zIndex: 2000 }}>
+          <Text style={styles.label}>Kategori Gudang</Text>
+          <DropDownPicker
+            open={kategoriOpen}
+            setOpen={setKategoriOpen}
+            value={kategori}
+            setValue={setKategori}
+            items={kategoriItems}
+            placeholder="Pilih Kategori Gudang"
+            dropDownDirection="AUTO"
+            style={styles.dropdown}
+            textStyle={styles.dropdownText}
+            dropDownContainerStyle={styles.dropdownContainer}
           />
+        </View>
 
-          <Text style={styles.label}>Jumlah Medium</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Jumlah Medium"
-            keyboardType="numeric"
-            value={medium}
-            onChangeText={setMedium}
-            placeholderTextColor="#888"
-          />
+        <Text style={styles.label}>Jumlah Large</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Jumlah Large"
+          keyboardType="numeric"
+          value={large}
+          onChangeText={setLarge}
+          placeholderTextColor="#888"
+        />
 
-          <Text style={styles.label}>Jumlah Small</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Jumlah Small"
-            keyboardType="numeric"
-            value={small}
-            onChangeText={setSmall}
-            placeholderTextColor="#888"
-          />
+        <Text style={styles.label}>Jumlah Medium</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Jumlah Medium"
+          keyboardType="numeric"
+          value={medium}
+          onChangeText={setMedium}
+          placeholderTextColor="#888"
+        />
 
-          <Text style={styles.label}>Catatan</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Catatan"
-            value={catatan}
-            onChangeText={setCatatan}
-            placeholderTextColor="#888"
-          />
+        <Text style={styles.label}>Jumlah Small</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Jumlah Small"
+          keyboardType="numeric"
+          value={small}
+          onChangeText={setSmall}
+          placeholderTextColor="#888"
+        />
 
-          <View style={styles.buttonContainer}>
-            <Button
-              title="Keluarkan Barang"
-              onPress={handleSubmit}
-              color="#fff"
-            />
-          </View>
-        </ScrollView>
-      </View>
+        <Text style={styles.label}>Catatan</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Catatan"
+          value={catatan}
+          onChangeText={setCatatan}
+          placeholderTextColor="#888"
+        />
+
+        <TouchableOpacity style={styles.button} onPress={handleSubmit}>
+          <Text style={styles.buttonText}>Keluarkan Barang</Text>
+        </TouchableOpacity>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
     padding: 20,
-    backgroundColor: "#121212",
+    backgroundColor: "#fff",
   },
   title: {
     fontSize: 20,
     fontWeight: "bold",
     marginBottom: 16,
     textAlign: "center",
-    color: "#fff",
+    color: "#1f2937",
   },
   label: {
-    color: "#fff",
+    color: "#111827",
     marginBottom: 4,
     marginTop: 12,
   },
   input: {
     borderWidth: 1,
-    borderColor: "#444",
+    borderColor: "#d1d5db",
     padding: 12,
     borderRadius: 8,
     marginBottom: 12,
-    backgroundColor: "#222",
-    color: "#fff",
+    backgroundColor: "#f9fafb",
+    color: "#111827",
   },
   dropdown: {
-    borderColor: "#444",
-    backgroundColor: "#222",
+    borderColor: "#d1d5db",
+    backgroundColor: "#f9fafb",
     marginBottom: 12,
   },
   dropdownText: {
-    color: "#fff",
+    color: "#111827",
   },
   dropdownContainer: {
-    borderColor: "#444",
-    backgroundColor: "#222",
+    borderColor: "#d1d5db",
+    backgroundColor: "#ffffff",
   },
-  buttonContainer: {
-    backgroundColor: "#6200ee",
+  button: {
+    marginTop: 20,
+    backgroundColor: "#3b82f6",
     borderRadius: 6,
-    overflow: "hidden",
-    marginTop: 16,
-    marginBottom: 16,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  buttonText: {
+    color: "#ffffff",
+    fontWeight: "bold",
+    fontSize: 16,
   },
 });

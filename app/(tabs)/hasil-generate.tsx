@@ -109,7 +109,7 @@ export default function HasilGenerateScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>Hasil Generate</Text>
+      <Text style={styles.header}>📋 Hasil Generate</Text>
 
       <FlatList
         data={hasil}
@@ -125,11 +125,15 @@ export default function HasilGenerateScreen() {
             <Text style={styles.date}>Tanggal Generate: {item.waktu}</Text>
             {item.data.map((d, idx) => (
               <Text key={`${d.kode}-${idx}`} style={styles.item}>
-                {d.nama} - L:{d.L}, M:{d.M}, S:{d.S}, ED:{d.ed}
+                {d.nama} - L:{d.L}, M:{d.M}, S:{d.S}, ED: {d.ed}
               </Text>
             ))}
           </View>
         )}
+        ListEmptyComponent={
+          <Text style={styles.emptyText}>Belum ada data generate</Text>
+        }
+        contentContainerStyle={{ paddingBottom: 20 }}
       />
 
       <TouchableOpacity style={styles.exportButton} onPress={exportExcel}>
@@ -147,19 +151,21 @@ export default function HasilGenerateScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#121212", padding: 16 },
+  container: { flex: 1, backgroundColor: "#ffffff", padding: 16 },
   header: {
     fontSize: 20,
     fontWeight: "bold",
-    color: "#fff",
+    color: "#1f2937",
     marginBottom: 12,
     textAlign: "center",
   },
   card: {
-    backgroundColor: "#1f1f1f",
+    backgroundColor: "#f3f4f6",
     padding: 12,
     borderRadius: 8,
     marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
   },
   cardHeader: {
     flexDirection: "row",
@@ -167,10 +173,27 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 4,
   },
-  brand: { fontWeight: "bold", color: "#4ade80" },
-  date: { color: "#aaa", marginBottom: 6, fontStyle: "italic" },
-  item: { color: "#ccc", fontSize: 14 },
-  hapus: { color: "#f87171", fontSize: 16 },
+  brand: {
+    fontWeight: "bold",
+    color: "#22c55e",
+    fontSize: 16,
+  },
+  date: {
+    color: "#6b7280",
+    marginBottom: 6,
+    fontStyle: "italic",
+    fontSize: 13,
+  },
+  item: {
+    color: "#1f2937",
+    fontSize: 14,
+    marginVertical: 2,
+  },
+  hapus: {
+    color: "#ef4444",
+    fontSize: 18,
+    paddingHorizontal: 4,
+  },
   exportButton: {
     backgroundColor: "#3b82f6",
     padding: 14,
@@ -178,5 +201,14 @@ const styles = StyleSheet.create({
     marginTop: 12,
     alignItems: "center",
   },
-  exportText: { color: "#fff", fontWeight: "bold" },
+  exportText: {
+    color: "#ffffff",
+    fontWeight: "bold",
+  },
+  emptyText: {
+    color: "#6b7280",
+    textAlign: "center",
+    marginTop: 40,
+    fontSize: 16,
+  },
 });

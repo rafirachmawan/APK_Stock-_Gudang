@@ -1,4 +1,3 @@
-// GenerateScreen.tsx
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -131,6 +130,7 @@ export default function GenerateScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Generate Brand</Text>
+
       <TouchableOpacity style={styles.button} onPress={generateNextBrand}>
         <Text style={styles.buttonText}>Generate Brand</Text>
       </TouchableOpacity>
@@ -146,7 +146,7 @@ export default function GenerateScreen() {
               setShowDateModal(true);
             }}
           >
-            <Ionicons name="calendar" size={16} color="#fff" />
+            <Ionicons name="calendar" size={16} color="#000" />
             <Text style={styles.dateText}>
               {tanggal ? ` ${tanggal}` : " Pilih Tanggal Generate"}
             </Text>
@@ -163,7 +163,6 @@ export default function GenerateScreen() {
                       key={size}
                       style={styles.input}
                       placeholder={size}
-                      placeholderTextColor="#aaa"
                       keyboardType="numeric"
                       value={
                         stockInputs[item.kode]?.[size as "L" | "M" | "S"] || ""
@@ -179,7 +178,7 @@ export default function GenerateScreen() {
                   ))}
                 </View>
                 <TouchableOpacity
-                  style={styles.dateButton}
+                  style={styles.edButton}
                   onPress={() => {
                     setTempDate(
                       stockInputs[item.kode]?.ed
@@ -189,7 +188,7 @@ export default function GenerateScreen() {
                     setShowEdModal(item.kode);
                   }}
                 >
-                  <Ionicons name="calendar" size={16} color="#fff" />
+                  <Ionicons name="calendar" size={16} color="#000" />
                   <Text style={styles.dateText}>
                     {stockInputs[item.kode]?.ed || "Pilih ED"}
                   </Text>
@@ -206,7 +205,7 @@ export default function GenerateScreen() {
       )}
 
       <TouchableOpacity style={styles.secondaryButton} onPress={ulangGenerate}>
-        <Text style={styles.buttonText}>Reset Generate</Text>
+        <Text style={styles.secondaryButtonText}>Reset Generate</Text>
       </TouchableOpacity>
 
       <Text style={styles.infoText}>
@@ -230,7 +229,7 @@ export default function GenerateScreen() {
                 setShowDateModal(false);
               }}
             >
-              <Text style={styles.buttonText}>Simpan Tanggal</Text>
+              <Text style={styles.modalButtonText}>Simpan Tanggal</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -258,7 +257,7 @@ export default function GenerateScreen() {
                 setShowEdModal(null);
               }}
             >
-              <Text style={styles.buttonText}>Simpan ED</Text>
+              <Text style={styles.modalButtonText}>Simpan ED</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -268,54 +267,67 @@ export default function GenerateScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#121212", padding: 16 },
+  container: { flex: 1, backgroundColor: "#ffffff", padding: 16 },
   title: {
     fontSize: 20,
     fontWeight: "bold",
-    color: "#fff",
+    color: "#1f2937",
     textAlign: "center",
+    marginBottom: 10,
   },
   subTitle: {
-    color: "#fff",
+    color: "#1f2937",
     fontSize: 16,
     textAlign: "center",
     marginVertical: 10,
   },
   button: {
-    backgroundColor: "#4caf50",
+    backgroundColor: "#3b82f6",
     padding: 12,
     borderRadius: 6,
     alignItems: "center",
     marginVertical: 10,
   },
+  buttonText: { color: "#fff", fontWeight: "bold" },
   secondaryButton: {
-    backgroundColor: "#f44336",
+    backgroundColor: "#f87171",
     padding: 10,
     borderRadius: 6,
     alignItems: "center",
-    marginVertical: 10,
+    marginTop: 10,
   },
-  buttonText: { color: "#fff", fontWeight: "bold" },
+  secondaryButtonText: {
+    color: "#fff",
+    fontWeight: "bold",
+  },
   dateButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#333",
+    backgroundColor: "#f3f4f6",
     padding: 10,
     borderRadius: 6,
     marginVertical: 6,
   },
-  dateText: { color: "#fff", marginLeft: 8 },
+  edButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#e2e8f0",
+    padding: 8,
+    borderRadius: 6,
+    marginTop: 8,
+  },
+  dateText: { color: "#111827", marginLeft: 8 },
   itemBox: {
-    backgroundColor: "#1f1f1f",
+    backgroundColor: "#f9fafb",
     padding: 10,
     borderRadius: 6,
     marginBottom: 10,
   },
-  itemText: { color: "#fff", fontSize: 14, marginBottom: 6 },
+  itemText: { color: "#1f2937", fontSize: 14, marginBottom: 6 },
   row: { flexDirection: "row", justifyContent: "space-between" },
   input: {
-    backgroundColor: "#333",
-    color: "#fff",
+    backgroundColor: "#e5e7eb",
+    color: "#111827",
     borderRadius: 4,
     padding: 8,
     width: "30%",
@@ -323,18 +335,18 @@ const styles = StyleSheet.create({
   },
   infoText: {
     textAlign: "center",
-    color: "#aaa",
+    color: "#6b7280",
     fontSize: 12,
     marginTop: 10,
   },
   modalContainer: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: "rgba(0,0,0,0.4)",
     justifyContent: "center",
     alignItems: "center",
   },
   modalContent: {
-    backgroundColor: "#1f1f1f",
+    backgroundColor: "#f9fafb",
     padding: 20,
     borderRadius: 8,
     width: "80%",
@@ -345,5 +357,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#10b981",
     padding: 10,
     borderRadius: 6,
+  },
+  modalButtonText: {
+    color: "#fff",
+    fontWeight: "bold",
   },
 });
