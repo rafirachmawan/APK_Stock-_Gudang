@@ -11,6 +11,8 @@ export interface Barang {
   waktuInput: string;
   principle: string;
   kategori: string;
+  nomorKendaraan?: string;
+  namaSopir?: string;
 }
 
 export const getCurrentStock = async (): Promise<Barang[]> => {
@@ -45,6 +47,8 @@ export const getCurrentStock = async (): Promise<Barang[]> => {
             waktuInput: form.waktuInput,
             principle: form.principle,
             kategori: form.gudang,
+            nomorKendaraan: form.nomorKendaraan || "",
+            namaSopir: form.namaSopir || "",
           });
         } else {
           const existing = stockMap.get(kode)!;

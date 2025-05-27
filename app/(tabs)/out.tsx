@@ -1,5 +1,3 @@
-// OutScreen.tsx - Barang keluar kurangi stok tersedia
-
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useIsFocused } from "@react-navigation/native";
 import React, { useEffect, useState } from "react";
@@ -31,6 +29,9 @@ export default function OutScreen() {
   const [kodeApos, setKodeApos] = useState("");
   const [principle, setPrinciple] = useState("");
   const [catatan, setCatatan] = useState("");
+  const [nomorKendaraan, setNomorKendaraan] = useState("");
+  const [namaSopir, setNamaSopir] = useState("");
+
   const [items, setItems] = useState<ItemOut[]>([
     { namaBarang: "", kode: "", large: "", medium: "", small: "" },
   ]);
@@ -158,6 +159,9 @@ export default function OutScreen() {
           waktuInput: new Date().toISOString(),
           principle,
           kategori,
+          // ⬇️ Tambahan info kendaraan dan sopir
+          nomorKendaraan,
+          namaSopir,
         };
 
         const existing = await AsyncStorage.getItem("barangKeluar");
@@ -176,6 +180,8 @@ export default function OutScreen() {
       setKodeApos("");
       setPrinciple("");
       setCatatan("");
+      setNomorKendaraan("");
+      setNamaSopir("");
       setItems([
         { namaBarang: "", kode: "", large: "", medium: "", small: "" },
       ]);
@@ -208,6 +214,22 @@ export default function OutScreen() {
           editable={false}
         />
 
+        <Text style={styles.label}>Nomor Kendaraan</Text>
+        <TextInput
+          style={styles.input}
+          value={nomorKendaraan}
+          onChangeText={setNomorKendaraan}
+          placeholder="Masukkan nomor kendaraan"
+        />
+
+        <Text style={styles.label}>Nama Sopir</Text>
+        <TextInput
+          style={styles.input}
+          value={namaSopir}
+          onChangeText={setNamaSopir}
+          placeholder="Masukkan nama sopir"
+        />
+
         <Text style={styles.label}>Kode Apos</Text>
         <TextInput
           style={styles.input}
@@ -222,6 +244,7 @@ export default function OutScreen() {
           onChangeText={setPrinciple}
         />
 
+        {/* Items list */}
         <Text style={styles.label}>🧾 Item</Text>
         {items.map((item, index) => (
           <View
