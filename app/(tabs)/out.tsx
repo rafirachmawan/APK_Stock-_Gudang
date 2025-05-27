@@ -1,3 +1,5 @@
+// OutScreen.tsx - Versi Final (Dropdown nama barang, auto-fill kode dan principle)
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useIsFocused } from "@react-navigation/native";
 import React, { useEffect, useState } from "react";
@@ -21,29 +23,44 @@ interface ItemOut {
   large: string;
   medium: string;
   small: string;
+  principle: string;
 }
 
 export default function OutScreen() {
-  const [gudang] = useState("Gudang A");
   const [kodeGdng, setKodeGdng] = useState("");
   const [kodeApos, setKodeApos] = useState("");
-  const [principle, setPrinciple] = useState("");
   const [catatan, setCatatan] = useState("");
   const [nomorKendaraan, setNomorKendaraan] = useState("");
   const [namaSopir, setNamaSopir] = useState("");
 
+  const [kategori, setKategori] = useState("Gudang A");
+  const [kategoriOpen, setKategoriOpen] = useState(false);
+  const kategoriList = [
+    { label: "Gudang A", value: "Gudang A" },
+    { label: "Gudang B", value: "Gudang B" },
+    { label: "Gudang C", value: "Gudang C" },
+    { label: "Gudang D", value: "Gudang D" },
+    { label: "Gudang E", value: "Gudang E" },
+  ];
+
   const [items, setItems] = useState<ItemOut[]>([
-    { namaBarang: "", kode: "", large: "", medium: "", small: "" },
+    {
+      namaBarang: "",
+      kode: "",
+      large: "",
+      medium: "",
+      small: "",
+      principle: "",
+    },
   ]);
 
   const [dataMasuk, setDataMasuk] = useState<Barang[]>([]);
   const [namaItems, setNamaItems] = useState<
-    { label: string; value: string }[][]
+    { label: string; value: string }[]
   >([]);
   const [openDropdownIndex, setOpenDropdownIndex] = useState<number | null>(
     null
   );
-  const [kategori] = useState("Gudang A");
 
   const isFocused = useIsFocused();
 
@@ -60,37 +77,27 @@ export default function OutScreen() {
   const loadData = async () => {
     const currentStock = await getCurrentStock();
     setDataMasuk(currentStock);
+    const uniqueNames = Array.from(new Set(currentStock.map((b) => b.nama)));
+    setNamaItems(uniqueNames.map((name) => ({ label: name, value: name })));
   };
 
   useEffect(() => {
-    if (isFocused) {
-      loadData();
-    }
+    if (isFocused) loadData();
   }, [isFocused]);
-
-  useEffect(() => {
-    const updated = items.map(() => {
-      const filtered = dataMasuk
-        .filter(
-          (item) => item.principle?.toLowerCase() === principle.toLowerCase()
-        )
-        .map((item) => ({ label: item.nama, value: item.nama }));
-      return filtered;
-    });
-    setNamaItems(updated);
-  }, [principle, dataMasuk, items.length]);
 
   const updateItem = (index: number, field: keyof ItemOut, value: string) => {
     const updated = [...items];
     updated[index][field] = value;
 
     if (field === "namaBarang") {
-      const match = dataMasuk.find(
-        (item) =>
-          item.nama === value &&
-          item.principle?.toLowerCase() === principle.toLowerCase()
-      );
-      updated[index].kode = match ? match.kode : "";
+      const match = dataMasuk.find((item) => item.nama === value);
+      if (match) {
+        updated[index].kode = match.kode;
+        updated[index].principle = match.principle;
+      } else {
+        updated[index].kode = "";
+        updated[index].principle = "";
+      }
     }
 
     setItems(updated);
@@ -106,7 +113,14 @@ export default function OutScreen() {
   const tambahItem = () => {
     setItems([
       ...items,
-      { namaBarang: "", kode: "", large: "", medium: "", small: "" },
+      {
+        namaBarang: "",
+        kode: "",
+        large: "",
+        medium: "",
+        small: "",
+        principle: "",
+      },
     ]);
   };
 
@@ -116,50 +130,32 @@ export default function OutScreen() {
       let counter = parseInt((await AsyncStorage.getItem(kodeKey)) || "0") + 1;
       const finalKode = counter.toString().padStart(5, "0");
 
-      const updatedStock = [...dataMasuk];
-
       for (const item of items) {
-        if (!item.namaBarang || !item.kode) {
-          Alert.alert("Peringatan", "Nama dan Kode barang harus diisi.");
-          return;
-        }
-
-        const largeOut = parseInt(item.large) || 0;
-        const mediumOut = parseInt(item.medium) || 0;
-        const smallOut = parseInt(item.small) || 0;
-
-        const stokIndex = updatedStock.findIndex((b) => b.kode === item.kode);
-        if (stokIndex === -1) {
+        const stok = dataMasuk.find((b) => b.kode === item.kode);
+        if (!stok) {
           Alert.alert("Error", `Barang ${item.namaBarang} tidak ditemukan.`);
           return;
         }
-
-        const stok = updatedStock[stokIndex];
         if (
-          stok.stokLarge < largeOut ||
-          stok.stokMedium < mediumOut ||
-          stok.stokSmall < smallOut
+          stok.stokLarge < parseInt(item.large || "0") ||
+          stok.stokMedium < parseInt(item.medium || "0") ||
+          stok.stokSmall < parseInt(item.small || "0")
         ) {
           Alert.alert("Error", `Stok tidak cukup untuk ${item.namaBarang}`);
           return;
         }
 
-        stok.stokLarge -= largeOut;
-        stok.stokMedium -= mediumOut;
-        stok.stokSmall -= smallOut;
-
         const barangKeluar: Barang = {
           kode: item.kode,
           nama: item.namaBarang,
-          stokLarge: largeOut,
-          stokMedium: mediumOut,
-          stokSmall: smallOut,
+          stokLarge: parseInt(item.large || "0"),
+          stokMedium: parseInt(item.medium || "0"),
+          stokSmall: parseInt(item.small || "0"),
           catatan,
           ed: stok.ed,
           waktuInput: new Date().toISOString(),
-          principle,
+          principle: item.principle,
           kategori,
-          // ⬇️ Tambahan info kendaraan dan sopir
           nomorKendaraan,
           namaSopir,
         };
@@ -171,19 +167,25 @@ export default function OutScreen() {
       }
 
       await AsyncStorage.setItem(kodeKey, counter.toString());
-
       Alert.alert(
         "Sukses",
         `Barang berhasil dikeluarkan dengan kode ${finalKode}`
       );
+
       setKodeGdng((counter + 1).toString().padStart(5, "0"));
       setKodeApos("");
-      setPrinciple("");
       setCatatan("");
       setNomorKendaraan("");
       setNamaSopir("");
       setItems([
-        { namaBarang: "", kode: "", large: "", medium: "", small: "" },
+        {
+          namaBarang: "",
+          kode: "",
+          large: "",
+          medium: "",
+          small: "",
+          principle: "",
+        },
       ]);
       await loadData();
     } catch (error) {
@@ -201,10 +203,15 @@ export default function OutScreen() {
         <Text style={styles.title}>📤 Form Barang Keluar</Text>
 
         <Text style={styles.label}>Gudang</Text>
-        <TextInput
-          style={styles.inputDisabled}
-          value={gudang}
-          editable={false}
+        <DropDownPicker
+          open={kategoriOpen}
+          setOpen={setKategoriOpen}
+          value={kategori}
+          setValue={setKategori}
+          items={kategoriList}
+          placeholder="Pilih Gudang"
+          style={styles.dropdown}
+          dropDownContainerStyle={styles.dropdownContainer}
         />
 
         <Text style={styles.label}>Kode Gudang</Text>
@@ -237,14 +244,6 @@ export default function OutScreen() {
           onChangeText={setKodeApos}
         />
 
-        <Text style={styles.label}>Principle</Text>
-        <TextInput
-          style={styles.input}
-          value={principle}
-          onChangeText={setPrinciple}
-        />
-
-        {/* Items list */}
         <Text style={styles.label}>🧾 Item</Text>
         {items.map((item, index) => (
           <View
@@ -259,7 +258,7 @@ export default function OutScreen() {
               </Text>
             </TouchableOpacity>
             <DropDownPicker
-              items={namaItems[index] || []}
+              items={namaItems}
               open={openDropdownIndex === index}
               setOpen={() =>
                 setOpenDropdownIndex(openDropdownIndex === index ? null : index)
@@ -270,6 +269,7 @@ export default function OutScreen() {
                 updateItem(index, "namaBarang", v);
               }}
               placeholder="Pilih Nama Barang"
+              searchable={true}
               style={styles.dropdown}
               dropDownContainerStyle={styles.dropdownContainer}
               listMode="MODAL"
@@ -278,6 +278,12 @@ export default function OutScreen() {
               value={item.kode}
               editable={false}
               placeholder="Kode Barang"
+              style={styles.inputDisabled}
+            />
+            <TextInput
+              value={item.principle}
+              editable={false}
+              placeholder="Principle"
               style={styles.inputDisabled}
             />
             <Text style={styles.label}>Large</Text>
@@ -357,7 +363,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#f9fafb",
     marginBottom: 8,
   },
-  dropdownContainer: { borderColor: "#d1d5db", backgroundColor: "#ffffff" },
+  dropdownContainer: {
+    borderColor: "#d1d5db",
+    backgroundColor: "#ffffff",
+  },
   buttonContainer: {
     marginTop: 24,
     backgroundColor: "#ef4444",

@@ -1,6 +1,7 @@
-// InScreen.tsx
+// InScreen.tsx - Dengan input ED per item (manual input tanggal)
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import * as FileSystem from "expo-file-system";
 import React, { useEffect, useState } from "react";
 import {
@@ -20,6 +21,7 @@ import * as XLSX from "xlsx";
 interface ItemInput {
   namaBarang: string;
   kode: string;
+  ed: string;
   large: string;
   medium: string;
   small: string;
@@ -36,17 +38,31 @@ interface PurchaseForm {
 }
 
 export default function InScreen() {
-  const [gudang] = useState("Gudang A");
+  const [gudang, setGudang] = useState("Gudang A");
   const [kodeGdng, setKodeGdng] = useState("");
   const [kodeApos, setKodeApos] = useState("");
   const [principle, setPrinciple] = useState("");
   const [catatan, setCatatan] = useState("");
   const [items, setItems] = useState<ItemInput[]>([
-    { namaBarang: "", kode: "", large: "", medium: "", small: "" },
+    { namaBarang: "", kode: "", ed: "", large: "", medium: "", small: "" },
   ]);
   const [openDropdownIndex, setOpenDropdownIndex] = useState<number | null>(
     null
   );
+  const [gudangOpen, setGudangOpen] = useState(false);
+  const [principleOpen, setPrincipleOpen] = useState(false);
+  const [datePickerIndex, setDatePickerIndex] = useState<number | null>(null);
+  const [principleList, setPrincipleList] = useState<
+    { label: string; value: string }[]
+  >([]);
+
+  const gudangOptions = [
+    { label: "Gudang A", value: "Gudang A" },
+    { label: "Gudang B", value: "Gudang B" },
+    { label: "Gudang C", value: "Gudang C" },
+    { label: "Gudang D", value: "Gudang D" },
+    { label: "Gudang E", value: "Gudang E" },
+  ];
 
   const [masterBarangList, setMasterBarangList] = useState<any[]>([]);
   const [filteredNamaItems, setFilteredNamaItems] = useState<
@@ -55,7 +71,6 @@ export default function InScreen() {
 
   useEffect(() => {
     importExcel();
-    // Generate preview kode saat pertama render, hanya preview
     previewKodeGdng();
   }, []);
 
@@ -86,6 +101,11 @@ export default function InScreen() {
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
       const jsonData = XLSX.utils.sheet_to_json(worksheet);
       setMasterBarangList(jsonData);
+
+      const principles = Array.from(
+        new Set(jsonData.map((item: any) => item.brand))
+      ).map((p) => ({ label: p, value: p }));
+      setPrincipleList(principles);
     } catch (err) {
       Alert.alert("Error", "Gagal membaca data Excel");
     }
@@ -122,7 +142,7 @@ export default function InScreen() {
   const tambahItem = () => {
     setItems([
       ...items,
-      { namaBarang: "", kode: "", large: "", medium: "", small: "" },
+      { namaBarang: "", kode: "", ed: "", large: "", medium: "", small: "" },
     ]);
   };
 
@@ -154,7 +174,7 @@ export default function InScreen() {
       parsed.push(form);
       await AsyncStorage.setItem("barangMasuk", JSON.stringify(parsed));
 
-      await AsyncStorage.setItem(kodeKey, counter.toString()); // ✅ Simpan hanya jika berhasil
+      await AsyncStorage.setItem(kodeKey, counter.toString());
 
       Alert.alert("Sukses", `Data disimpan sebagai kode ${finalKode}`);
       setKodeGdng((counter + 1).toString().padStart(5, "0"));
@@ -162,7 +182,7 @@ export default function InScreen() {
       setPrinciple("");
       setCatatan("");
       setItems([
-        { namaBarang: "", kode: "", large: "", medium: "", small: "" },
+        { namaBarang: "", kode: "", ed: "", large: "", medium: "", small: "" },
       ]);
     } catch (error) {
       console.error(error);
@@ -179,10 +199,16 @@ export default function InScreen() {
         <Text style={styles.title}>🛒 Form Pembelian</Text>
 
         <Text style={styles.label}>Gudang</Text>
-        <TextInput
+        <DropDownPicker
+          open={gudangOpen}
+          setOpen={setGudangOpen}
           value={gudang}
-          editable={false}
-          style={styles.inputDisabled}
+          setValue={setGudang}
+          items={gudangOptions}
+          placeholder="Pilih Gudang"
+          style={styles.dropdown}
+          dropDownContainerStyle={styles.dropdownContainer}
+          listMode="MODAL"
         />
 
         <Text style={styles.label}>Kode Gudang</Text>
@@ -200,10 +226,17 @@ export default function InScreen() {
         />
 
         <Text style={styles.label}>Principle</Text>
-        <TextInput
+        <DropDownPicker
+          open={principleOpen}
+          setOpen={setPrincipleOpen}
           value={principle}
-          onChangeText={setPrinciple}
-          style={styles.input}
+          setValue={setPrinciple}
+          items={principleList}
+          placeholder="Pilih Principle"
+          style={styles.dropdown}
+          dropDownContainerStyle={styles.dropdownContainer}
+          listMode="MODAL"
+          searchable={true}
         />
 
         <Text style={[styles.label, { marginTop: 16 }]}>🧾 Item</Text>
@@ -234,6 +267,8 @@ export default function InScreen() {
               style={styles.dropdown}
               dropDownContainerStyle={styles.dropdownContainer}
               listMode="MODAL"
+              searchable={true}
+              disabled={!principle}
             />
             <TextInput
               value={item.kode}
@@ -241,6 +276,30 @@ export default function InScreen() {
               placeholder="Kode Barang"
               style={styles.inputDisabled}
             />
+            <Text style={styles.label}>ED (Tanggal Kedaluwarsa)</Text>
+            <TouchableOpacity
+              onPress={() => setDatePickerIndex(index)}
+              style={styles.input}
+            >
+              <Text>{item.ed ? item.ed : "Pilih Tanggal ED"}</Text>
+            </TouchableOpacity>
+            {datePickerIndex === index && (
+              <DateTimePicker
+                mode="date"
+                display="default"
+                value={item.ed ? new Date(item.ed) : new Date()}
+                onChange={(event, selectedDate) => {
+                  setDatePickerIndex(null);
+                  if (selectedDate) {
+                    const updated = [...items];
+                    updated[index].ed = selectedDate
+                      .toISOString()
+                      .split("T")[0];
+                    setItems(updated);
+                  }
+                }}
+              />
+            )}
             <Text style={styles.label}>Large</Text>
             <TextInput
               value={item.large}
