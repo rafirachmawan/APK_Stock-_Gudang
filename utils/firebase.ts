@@ -1,3 +1,4 @@
+// firebase.ts - Final revisi untuk mencegah ID undefined
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { initializeApp } from "firebase/app";
 import {
@@ -10,7 +11,7 @@ import {
 } from "firebase/firestore";
 import { Barang } from "./stockManager";
 
-// ✅ Konfigurasi Firebase
+// 🔧 Konfigurasi Firebase
 const firebaseConfig = {
   apiKey: "AIzaSyDH-0zRYEORIkIfiUlh2Vbd4ZebruFlWtA",
   authDomain: "stockgudang-2c399.firebaseapp.com",
@@ -24,7 +25,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 
-// Nama koleksi di Firebase
+// 📁 Nama koleksi di Firebase
 const COLLECTION_IN = "barangMasuk";
 const COLLECTION_OUT = "barangKeluar";
 
@@ -47,7 +48,7 @@ export const syncDownload = async () => {
     });
     await AsyncStorage.setItem("barangKeluar", JSON.stringify(dataOut));
   } catch (error) {
-    console.error("Gagal syncDownload:", error);
+    console.error("❌ Gagal syncDownload:", error);
     throw error;
   }
 };
@@ -64,7 +65,7 @@ export const syncUpload = async () => {
     const dataIn: Barang[] = inValue ? JSON.parse(inValue) : [];
     const dataOut: Barang[] = outValue ? JSON.parse(outValue) : [];
 
-    // ---- Sinkron barangMasuk ----
+    // --- Sinkronisasi barangMasuk ---
     const snapshotIn = await getDocs(collection(db, COLLECTION_IN));
     const firebaseInIds = snapshotIn.docs.map((doc) => doc.id);
     const localInIds = dataIn.map((item) => `${item.kode}-${item.waktuInput}`);
@@ -75,10 +76,12 @@ export const syncUpload = async () => {
     }
     for (const item of dataIn) {
       const id = `${item.kode}-${item.waktuInput}`;
-      await setDoc(doc(db, COLLECTION_IN, id), item);
+      if (item.kode && item.waktuInput) {
+        await setDoc(doc(db, COLLECTION_IN, id), item);
+      }
     }
 
-    // ---- Sinkron barangKeluar ----
+    // --- Sinkronisasi barangKeluar ---
     const snapshotOut = await getDocs(collection(db, COLLECTION_OUT));
     const firebaseOutIds = snapshotOut.docs.map((doc) => doc.id);
     const localOutIds = dataOut.map(
@@ -93,15 +96,17 @@ export const syncUpload = async () => {
     }
     for (const item of dataOut) {
       const id = `${item.kode}-${item.waktuInput}`;
-      await setDoc(doc(db, COLLECTION_OUT, id), item);
+      if (item.kode && item.waktuInput) {
+        await setDoc(doc(db, COLLECTION_OUT, id), item);
+      }
     }
   } catch (error) {
-    console.error("Gagal syncUpload:", error);
+    console.error("❌ Gagal syncUpload:", error);
     throw error;
   }
 };
 
-// 🗑️ Reset semua histori dari penyimpanan lokal (AsyncStorage)
+// 🗑 Reset semua histori dari penyimpanan lokal (AsyncStorage)
 export const resetSemuaHistory = async (): Promise<void> => {
   try {
     await AsyncStorage.removeItem("barangMasuk");
