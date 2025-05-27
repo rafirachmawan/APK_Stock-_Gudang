@@ -1,4 +1,4 @@
-// InScreen.tsx - Dengan input ED per item (manual input tanggal)
+// InScreen.tsx - Dengan input ED per item (manual input tanggal) + Surat Jalan
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -31,6 +31,7 @@ interface PurchaseForm {
   gudang: string;
   kodeGdng: string;
   kodeApos: string;
+  suratJalan: string;
   principle: string;
   catatan: string;
   items: ItemInput[];
@@ -41,6 +42,7 @@ export default function InScreen() {
   const [gudang, setGudang] = useState("Gudang A");
   const [kodeGdng, setKodeGdng] = useState("");
   const [kodeApos, setKodeApos] = useState("");
+  const [suratJalan, setSuratJalan] = useState("");
   const [principle, setPrinciple] = useState("");
   const [catatan, setCatatan] = useState("");
   const [items, setItems] = useState<ItemInput[]>([
@@ -55,6 +57,10 @@ export default function InScreen() {
   const [principleList, setPrincipleList] = useState<
     { label: string; value: string }[]
   >([]);
+  const [masterBarangList, setMasterBarangList] = useState<any[]>([]);
+  const [filteredNamaItems, setFilteredNamaItems] = useState<
+    { label: string; value: string }[][]
+  >([[]]);
 
   const gudangOptions = [
     { label: "Gudang A", value: "Gudang A" },
@@ -63,11 +69,6 @@ export default function InScreen() {
     { label: "Gudang D", value: "Gudang D" },
     { label: "Gudang E", value: "Gudang E" },
   ];
-
-  const [masterBarangList, setMasterBarangList] = useState<any[]>([]);
-  const [filteredNamaItems, setFilteredNamaItems] = useState<
-    { label: string; value: string }[][]
-  >([[]]);
 
   useEffect(() => {
     importExcel();
@@ -163,6 +164,7 @@ export default function InScreen() {
         gudang,
         kodeGdng: finalKode,
         kodeApos,
+        suratJalan,
         principle,
         catatan,
         waktuInput: new Date().toISOString(),
@@ -173,12 +175,12 @@ export default function InScreen() {
       const parsed = existing ? JSON.parse(existing) : [];
       parsed.push(form);
       await AsyncStorage.setItem("barangMasuk", JSON.stringify(parsed));
-
       await AsyncStorage.setItem(kodeKey, counter.toString());
 
       Alert.alert("Sukses", `Data disimpan sebagai kode ${finalKode}`);
       setKodeGdng((counter + 1).toString().padStart(5, "0"));
       setKodeApos("");
+      setSuratJalan("");
       setPrinciple("");
       setCatatan("");
       setItems([
@@ -222,6 +224,13 @@ export default function InScreen() {
         <TextInput
           value={kodeApos}
           onChangeText={setKodeApos}
+          style={styles.input}
+        />
+
+        <Text style={styles.label}>Surat Jalan</Text>
+        <TextInput
+          value={suratJalan}
+          onChangeText={setSuratJalan}
           style={styles.input}
         />
 

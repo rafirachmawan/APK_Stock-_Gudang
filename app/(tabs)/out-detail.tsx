@@ -1,3 +1,5 @@
+// OutDetailScreen.tsx - Tambahan fitur Export Excel
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system";
@@ -188,7 +190,7 @@ export default function OutDetailScreen() {
       />
 
       <TouchableOpacity style={styles.exportBtn} onPress={exportToExcel}>
-        <Text style={styles.exportText}>📄 Export Semua ke Excel</Text>
+        <Text style={styles.exportText}>📤 Export ke Excel</Text>
       </TouchableOpacity>
 
       <FlatList

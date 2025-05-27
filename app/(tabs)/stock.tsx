@@ -1,5 +1,6 @@
-// StockScreen.tsx - Memperhitungkan In dan Out via stockManager
+// StockScreen.tsx - Klik principle untuk detail stok + riwayat masuk & keluar
 
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useIsFocused } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
@@ -7,6 +8,8 @@ import React, { useEffect, useState } from "react";
 import {
   Alert,
   FlatList,
+  Modal,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -16,15 +19,29 @@ import {
 import * as XLSX from "xlsx";
 import {
   Barang,
-  deleteBarang,
   getCurrentStock,
   resetAllStock,
 } from "../../utils/stockManager";
 
+interface RiwayatBarang {
+  nama: string;
+  kode: string;
+  large: number;
+  medium: number;
+  small: number;
+  waktu: string;
+}
+
 export default function StockScreen() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [stockData, setStockData] = useState<Barang[]>([]);
-  const [selectedItem, setSelectedItem] = useState<Barang | null>(null);
+  const [selectedPrinciple, setSelectedPrinciple] = useState<string | null>(
+    null
+  );
+  const [modalVisible, setModalVisible] = useState(false);
+  const [riwayatMasuk, setRiwayatMasuk] = useState<RiwayatBarang[]>([]);
+  const [riwayatKeluar, setRiwayatKeluar] = useState<RiwayatBarang[]>([]);
+
   const isFocused = useIsFocused();
 
   useEffect(() => {
@@ -41,6 +58,47 @@ export default function StockScreen() {
       console.error("Gagal memuat data:", error);
       Alert.alert("Error", "Gagal memuat data stok");
     }
+  };
+
+  const loadRiwayat = async (principle: string) => {
+    const masukRaw = await AsyncStorage.getItem("barangMasuk");
+    const keluarRaw = await AsyncStorage.getItem("barangKeluar");
+
+    const masuk = masukRaw ? JSON.parse(masukRaw) : [];
+    const keluar = keluarRaw ? JSON.parse(keluarRaw) : [];
+
+    const masukFiltered = masuk
+      .filter((f: any) => f.principle === principle)
+      .flatMap((f: any) =>
+        f.items.map((i: any) => ({
+          nama: i.namaBarang,
+          kode: i.kode,
+          large: parseInt(i.large),
+          medium: parseInt(i.medium),
+          small: parseInt(i.small),
+          waktu: f.waktuInput,
+        }))
+      );
+
+    const keluarFiltered = keluar
+      .filter((f: any) => f.principle === principle)
+      .map((i: any) => ({
+        nama: i.nama,
+        kode: i.kode,
+        large: i.stokLarge,
+        medium: i.stokMedium,
+        small: i.stokSmall,
+        waktu: i.waktuInput,
+      }));
+
+    setRiwayatMasuk(masukFiltered);
+    setRiwayatKeluar(keluarFiltered);
+  };
+
+  const handleShowDetail = async (principle: string) => {
+    setSelectedPrinciple(principle);
+    await loadRiwayat(principle);
+    setModalVisible(true);
   };
 
   const exportToExcel = async () => {
@@ -75,39 +133,11 @@ export default function StockScreen() {
         encoding: FileSystem.EncodingType.Base64,
       });
 
-      await Sharing.shareAsync(filePath, {
-        mimeType:
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        dialogTitle: "Bagikan file Excel",
-        UTI: "com.microsoft.excel.xlsx",
-      });
+      await Sharing.shareAsync(filePath);
     } catch (error) {
       console.error("Gagal export Excel:", error);
       Alert.alert("Error", "Gagal export ke Excel");
     }
-  };
-
-  const handleDelete = async (item: Barang) => {
-    Alert.alert(
-      "Konfirmasi Hapus",
-      `Apakah Anda yakin ingin menghapus ${item.nama} (${item.kode})?`,
-      [
-        { text: "Batal", style: "cancel" },
-        {
-          text: "Hapus",
-          onPress: async () => {
-            const success = await deleteBarang(item.kode, item.waktuInput);
-            if (success) {
-              await loadStockData();
-              setSelectedItem(null);
-              Alert.alert("Sukses", "Barang berhasil dihapus");
-            } else {
-              Alert.alert("Error", "Gagal menghapus barang");
-            }
-          },
-        },
-      ]
-    );
   };
 
   const filteredData = stockData.filter(
@@ -116,8 +146,58 @@ export default function StockScreen() {
       item.kode.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const DetailModal = () => (
+    <Modal visible={modalVisible} animationType="slide">
+      <ScrollView style={styles.container}>
+        <Text style={styles.header}>
+          📌 Detail Principle: {selectedPrinciple}
+        </Text>
+
+        <Text style={styles.subheader}>📥 Riwayat Barang Masuk</Text>
+        {riwayatMasuk.map((item, index) => (
+          <View key={index} style={styles.detailRow}>
+            <Text style={styles.label}>
+              {item.nama} ({item.kode})
+            </Text>
+            <Text style={styles.label}>
+              Large: {item.large} | Medium: {item.medium} | Small: {item.small}
+            </Text>
+            <Text style={styles.label}>
+              Tanggal: {new Date(item.waktu).toLocaleDateString()}
+            </Text>
+          </View>
+        ))}
+
+        <Text style={styles.subheader}>📤 Riwayat Barang Keluar</Text>
+        {riwayatKeluar.map((item, index) => (
+          <View key={index} style={styles.detailRow}>
+            <Text style={styles.label}>
+              {item.nama} ({item.kode})
+            </Text>
+            <Text style={styles.label}>
+              Large: {item.large} | Medium: {item.medium} | Small: {item.small}
+            </Text>
+            <Text style={styles.label}>
+              Tanggal: {new Date(item.waktu).toLocaleDateString()}
+            </Text>
+          </View>
+        ))}
+
+        <TouchableOpacity
+          style={styles.resetButton}
+          onPress={() => setModalVisible(false)}
+        >
+          <Text style={styles.resetText}>⬅️ Kembali</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </Modal>
+  );
+
   const renderItem = ({ item }: { item: Barang }) => (
-    <TouchableOpacity style={styles.card}>
+    <TouchableOpacity
+      style={styles.card}
+      onPress={() => handleShowDetail(item.principle)}
+    >
       <Text style={styles.cardTitle}>
         {item.nama} ({item.kode})
       </Text>
@@ -141,19 +221,14 @@ export default function StockScreen() {
         <Text style={styles.label}>ED:</Text>
         <Text style={styles.value}>{item.ed}</Text>
       </View>
-      <TouchableOpacity
-        onPress={() => handleDelete(item)}
-        style={styles.deleteButton}
-      >
-        <Text style={styles.deleteButtonText}>Hapus</Text>
-      </TouchableOpacity>
     </TouchableOpacity>
   );
 
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>📦 Daftar Stok Barang</Text>
+      {modalVisible && <DetailModal />}
 
+      <Text style={styles.header}>📦 Daftar Stok Barang</Text>
       <TextInput
         style={styles.searchInput}
         placeholder="Cari barang..."
@@ -212,6 +287,13 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     textAlign: "center",
   },
+  subheader: {
+    fontSize: 18,
+    fontWeight: "600",
+    marginTop: 16,
+    marginBottom: 8,
+    color: "#1e3a8a",
+  },
   searchInput: {
     borderWidth: 1,
     borderColor: "#d1d5db",
@@ -253,17 +335,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "500",
   },
-  deleteButton: {
-    marginTop: 10,
-    backgroundColor: "#ef4444",
-    padding: 10,
-    borderRadius: 6,
-    alignItems: "center",
-  },
-  deleteButtonText: {
-    color: "#fff",
-    fontWeight: "bold",
-  },
   exportButton: {
     backgroundColor: "#10b981",
     padding: 14,
@@ -294,5 +365,10 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: 20,
+  },
+  detailRow: {
+    borderBottomWidth: 1,
+    borderBottomColor: "#e5e7eb",
+    paddingVertical: 10,
   },
 });
