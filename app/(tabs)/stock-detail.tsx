@@ -15,26 +15,29 @@ import {
 } from "react-native";
 import * as XLSX from "xlsx";
 
-export interface Barang {
+interface ItemInput {
+  namaBarang: string;
   kode: string;
-  nama: string;
-  stokLarge: number;
-  stokMedium: number;
-  stokSmall: number;
-  ed: string;
-  catatan: string;
-  waktuInput: string;
+  large: string;
+  medium: string;
+  small: string;
+}
+
+interface PurchaseForm {
+  gudang: string;
+  kodeGdng: string;
+  kodeApos: string;
   principle: string;
-  kategori: string;
+  catatan: string;
+  items: ItemInput[];
+  waktuInput: string;
 }
 
 const deleteBarang = async (kode: string, waktuInput: string) => {
   try {
     const jsonValue = await AsyncStorage.getItem("barangMasuk");
-    const data: Barang[] = jsonValue ? JSON.parse(jsonValue) : [];
-    const newData = data.filter(
-      (item) => !(item.kode === kode && item.waktuInput === waktuInput)
-    );
+    const data: PurchaseForm[] = jsonValue ? JSON.parse(jsonValue) : [];
+    const newData = data.filter((form) => form.waktuInput !== waktuInput);
     await AsyncStorage.setItem("barangMasuk", JSON.stringify(newData));
   } catch (e) {
     console.error("Gagal menghapus data:", e);
@@ -42,7 +45,7 @@ const deleteBarang = async (kode: string, waktuInput: string) => {
 };
 
 export default function StockDetailScreen() {
-  const [items, setItems] = useState<Barang[]>([]);
+  const [forms, setForms] = useState<PurchaseForm[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -50,8 +53,8 @@ export default function StockDetailScreen() {
     try {
       setIsLoading(true);
       const jsonValue = await AsyncStorage.getItem("barangMasuk");
-      const allData: Barang[] = jsonValue ? JSON.parse(jsonValue) : [];
-      setItems(allData);
+      const allData: PurchaseForm[] = jsonValue ? JSON.parse(jsonValue) : [];
+      setForms(allData);
     } catch (err) {
       console.error("Error saat memuat data:", err);
     } finally {
@@ -65,44 +68,25 @@ export default function StockDetailScreen() {
     }, [])
   );
 
-  const handleDelete = async (item: Barang) => {
-    Alert.alert(
-      "Konfirmasi",
-      `Hapus input "${item.nama}" dari ${new Date(
-        item.waktuInput
-      ).toLocaleString()}?`,
-      [
-        { text: "Batal", style: "cancel" },
-        {
-          text: "Hapus",
-          style: "destructive",
-          onPress: async () => {
-            await deleteBarang(item.kode, item.waktuInput);
-            loadData();
-          },
-        },
-      ]
-    );
-  };
-
   const exportToExcel = async () => {
-    if (items.length === 0) return;
+    const allItems = forms.flatMap((form) =>
+      form.items.map((item, index) => ({
+        No: index + 1,
+        Gudang: form.gudang,
+        KodeGudang: form.kodeGdng,
+        KodeApos: form.kodeApos,
+        Principle: form.principle,
+        Kode: item.kode,
+        Nama: item.namaBarang,
+        Large: item.large,
+        Medium: item.medium,
+        Small: item.small,
+        Catatan: form.catatan,
+        "Waktu Input": new Date(form.waktuInput).toLocaleString(),
+      }))
+    );
 
-    const exportData = items.map((item, index) => ({
-      No: index + 1,
-      Kategori: item.kategori,
-      Principle: item.principle,
-      Kode: item.kode,
-      Nama: item.nama,
-      Large: item.stokLarge,
-      Medium: item.stokMedium,
-      Small: item.stokSmall,
-      ED: item.ed,
-      Catatan: item.catatan,
-      "Waktu Input": new Date(item.waktuInput).toLocaleString(),
-    }));
-
-    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const worksheet = XLSX.utils.json_to_sheet(allItems);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "SemuaBarang");
 
@@ -119,38 +103,64 @@ export default function StockDetailScreen() {
     await Sharing.shareAsync(filePath);
   };
 
-  const filteredItems = items.filter(
-    (item) =>
-      item.nama.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.kode.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredForms = forms.filter((form) =>
+    form.items.some(
+      (item) =>
+        item.namaBarang.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.kode.toLowerCase().includes(searchQuery.toLowerCase())
+    )
   );
 
-  const renderItem = ({ item, index }: { item: Barang; index: number }) => (
+  const renderItem = ({
+    item,
+    index,
+  }: {
+    item: PurchaseForm;
+    index: number;
+  }) => (
     <View style={styles.itemContainer}>
       <Text style={styles.itemTitle}>
-        [{index + 1}] {item.nama} ({item.kode})
+        [{index + 1}] Gudang {item.gudang} | Principle: {item.principle}
       </Text>
-      <Text style={styles.label}>Kategori: {item.kategori}</Text>
-      <Text style={styles.label}>Principle: {item.principle}</Text>
+      <Text style={styles.label}>Kode Gudang: {item.kodeGdng}</Text>
+      <Text style={styles.label}>Kode Apos: {item.kodeApos}</Text>
       <Text style={styles.label}>
         Waktu Input: {new Date(item.waktuInput).toLocaleString()}
       </Text>
-      <Text style={styles.label}>ED: {item.ed}</Text>
-      <View style={styles.stockRow}>
-        <Text style={styles.label}>Large: {item.stokLarge}</Text>
-        <Text style={styles.label}>Medium: {item.stokMedium}</Text>
-        <Text style={styles.label}>Small: {item.stokSmall}</Text>
-      </View>
+      {item.items.map((barang, i) => (
+        <View key={i} style={styles.subItem}>
+          <Text style={styles.label}>
+            • {barang.namaBarang} ({barang.kode})
+          </Text>
+          <Text style={styles.label}>
+            Large: {barang.large} | Medium: {barang.medium} | Small:{" "}
+            {barang.small}
+          </Text>
+        </View>
+      ))}
       <Text style={styles.label}>Catatan: {item.catatan || "-"}</Text>
-
       <TouchableOpacity
         style={styles.deleteBtn}
-        onPress={() => handleDelete(item)}
+        onPress={() => handleDeleteItem(item.kodeGdng, item.waktuInput)}
       >
         <Text style={styles.deleteText}>🗑 Hapus Input Ini</Text>
       </TouchableOpacity>
     </View>
   );
+
+  const handleDeleteItem = async (kode: string, waktuInput: string) => {
+    Alert.alert("Konfirmasi", `Hapus input dengan kode gudang ${kode}?`, [
+      { text: "Batal", style: "cancel" },
+      {
+        text: "Hapus",
+        style: "destructive",
+        onPress: async () => {
+          await deleteBarang(kode, waktuInput);
+          loadData();
+        },
+      },
+    ]);
+  };
 
   if (isLoading) {
     return (
@@ -161,18 +171,10 @@ export default function StockDetailScreen() {
     );
   }
 
-  if (items.length === 0) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.label}>Belum ada data barang masuk.</Text>
-      </View>
-    );
-  }
-
   return (
     <View style={styles.container}>
       <Text style={styles.title}>📦 Semua Data Barang Masuk</Text>
-      <Text style={styles.subtitle}>Total Input: {filteredItems.length}</Text>
+      <Text style={styles.subtitle}>Total Input: {filteredForms.length}</Text>
 
       <TextInput
         style={styles.searchInput}
@@ -187,10 +189,10 @@ export default function StockDetailScreen() {
       </TouchableOpacity>
 
       <FlatList
-        data={filteredItems}
+        data={filteredForms}
         renderItem={renderItem}
         keyExtractor={(item, index) =>
-          `${item.kode}-${item.waktuInput}-${index}`
+          `${item.kodeGdng}-${item.waktuInput}-${index}`
         }
         contentContainerStyle={styles.listContent}
       />
@@ -244,10 +246,9 @@ const styles = StyleSheet.create({
     color: "#374151",
     marginBottom: 4,
   },
-  stockRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginVertical: 6,
+  subItem: {
+    paddingLeft: 10,
+    marginBottom: 6,
   },
   deleteBtn: {
     marginTop: 10,

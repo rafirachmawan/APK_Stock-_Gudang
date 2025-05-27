@@ -50,10 +50,13 @@ export default function OutDetailScreen() {
     try {
       setIsLoading(true);
       const jsonValue = await AsyncStorage.getItem("barangKeluar");
-      const allData: Barang[] = jsonValue ? JSON.parse(jsonValue) : [];
+      const allData: Barang[] = Array.isArray(JSON.parse(jsonValue || "[]"))
+        ? JSON.parse(jsonValue || "[]")
+        : [];
       setItems(allData);
     } catch (err) {
       console.error("Error saat memuat data:", err);
+      setItems([]);
     } finally {
       setIsLoading(false);
     }
@@ -119,11 +122,13 @@ export default function OutDetailScreen() {
     await Sharing.shareAsync(filePath);
   };
 
-  const filteredItems = items.filter(
-    (item) =>
-      item.nama.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.kode.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredItems = Array.isArray(items)
+    ? items.filter(
+        (item) =>
+          item.nama.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          item.kode.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : [];
 
   const renderItem = ({ item, index }: { item: Barang; index: number }) => (
     <View style={styles.itemContainer}>
@@ -171,7 +176,7 @@ export default function OutDetailScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>📤 Semua Data Barang Keluar</Text>
+      <Text style={styles.title}>📄 Semua Data Barang Keluar</Text>
       <Text style={styles.subtitle}>Total Input: {filteredItems.length}</Text>
 
       <TextInput
@@ -183,7 +188,7 @@ export default function OutDetailScreen() {
       />
 
       <TouchableOpacity style={styles.exportBtn} onPress={exportToExcel}>
-        <Text style={styles.exportText}>📤 Export Semua ke Excel</Text>
+        <Text style={styles.exportText}>📄 Export Semua ke Excel</Text>
       </TouchableOpacity>
 
       <FlatList

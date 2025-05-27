@@ -1,3 +1,5 @@
+// InScreen.tsx
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystem from "expo-file-system";
 import React, { useEffect, useState } from "react";
@@ -14,66 +16,67 @@ import {
 } from "react-native";
 import DropDownPicker from "react-native-dropdown-picker";
 import * as XLSX from "xlsx";
-import { Barang } from "../../utils/stockManager";
 
-const EXCEL_URL =
-  "https://docs.google.com/spreadsheets/d/1c9E19bcynRxJg_47GFu0GWE6LbldI5L8_YFSxxCsFwI/export?format=xlsx";
-
-interface BarangForm {
+interface ItemInput {
+  namaBarang: string;
   kode: string;
-  nama: string;
-  stokLarge: string;
-  stokMedium: string;
-  stokSmall: string;
-  ed: string;
-  catatan: string;
-  kategori: string;
+  large: string;
+  medium: string;
+  small: string;
 }
 
-type DropDownItem = {
-  label: string;
-  value: string;
-};
+interface PurchaseForm {
+  gudang: string;
+  kodeGdng: string;
+  kodeApos: string;
+  principle: string;
+  catatan: string;
+  items: ItemInput[];
+  waktuInput: string;
+}
 
 export default function InScreen() {
-  const [form, setForm] = useState<BarangForm>({
-    kode: "",
-    nama: "",
-    stokLarge: "",
-    stokMedium: "",
-    stokSmall: "",
-    ed: "",
-    catatan: "",
-    kategori: "",
-  });
+  const [gudang] = useState("Gudang A");
+  const [kodeGdng, setKodeGdng] = useState("");
+  const [kodeApos, setKodeApos] = useState("");
+  const [principle, setPrinciple] = useState("");
+  const [catatan, setCatatan] = useState("");
+  const [items, setItems] = useState<ItemInput[]>([
+    { namaBarang: "", kode: "", large: "", medium: "", small: "" },
+  ]);
+  const [openDropdownIndex, setOpenDropdownIndex] = useState<number | null>(
+    null
+  );
 
   const [masterBarangList, setMasterBarangList] = useState<any[]>([]);
-  const [brand, setBrand] = useState("");
-  const [brandItems, setBrandItems] = useState<DropDownItem[]>([]);
-  const [kodeItems, setKodeItems] = useState<DropDownItem[]>([]);
-  const [namaItems, setNamaItems] = useState<DropDownItem[]>([]);
-  const [kategoriItems] = useState<DropDownItem[]>([
-    { label: "Gudang A", value: "Gudang A" },
-    { label: "Gudang B", value: "Gudang B" },
-    { label: "Gudang C", value: "Gudang C" },
-  ]);
+  const [filteredNamaItems, setFilteredNamaItems] = useState<
+    { label: string; value: string }[][]
+  >([[]]);
 
-  const [brandOpen, setBrandOpen] = useState(false);
-  const [kodeOpen, setKodeOpen] = useState(false);
-  const [namaOpen, setNamaOpen] = useState(false);
-  const [kategoriOpen, setKategoriOpen] = useState(false);
+  useEffect(() => {
+    importExcel();
+    // Generate preview kode saat pertama render, hanya preview
+    previewKodeGdng();
+  }, []);
 
-  const importExcelFromUrl = async () => {
+  const previewKodeGdng = async () => {
+    const kodeKey = "kodeGdngCounter";
+    let counter = parseInt((await AsyncStorage.getItem(kodeKey)) || "0") + 1;
+    setKodeGdng(counter.toString().padStart(5, "0"));
+  };
+
+  const importExcel = async () => {
     try {
+      const EXCEL_URL =
+        "https://docs.google.com/spreadsheets/d/1c9E19bcynRxJg_47GFu0GWE6LbldI5L8_YFSxxCsFwI/export?format=xlsx";
+
       const downloadResumable = FileSystem.createDownloadResumable(
         EXCEL_URL,
         FileSystem.cacheDirectory + "temp-list.xlsx"
       );
 
       const result = await downloadResumable.downloadAsync();
-
-      if (!result || !result.uri)
-        throw new Error("Gagal mengunduh file Excel.");
+      if (!result || !result.uri) throw new Error("Gagal unduh Excel");
 
       const fileContent = await FileSystem.readAsStringAsync(result.uri, {
         encoding: FileSystem.EncodingType.Base64,
@@ -82,84 +85,88 @@ export default function InScreen() {
       const workbook = XLSX.read(fileContent, { type: "base64" });
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
       const jsonData = XLSX.utils.sheet_to_json(worksheet);
-
       setMasterBarangList(jsonData);
-
-      const uniqueBrands = [
-        ...new Set(jsonData.map((item: any) => item.brand)),
-      ];
-      setBrandItems(
-        uniqueBrands.map((brand) => ({ label: brand, value: brand }))
-      );
-
-      const uniqueKodes = [...new Set(jsonData.map((item: any) => item.kode))];
-      setKodeItems(uniqueKodes.map((kode) => ({ label: kode, value: kode })));
-
-      const uniqueNamas = [...new Set(jsonData.map((item: any) => item.nama))];
-      setNamaItems(uniqueNamas.map((nama) => ({ label: nama, value: nama })));
-
-      Alert.alert("Sukses", `Ditemukan ${jsonData.length} item.`);
-    } catch (error) {
-      console.error("Gagal fetch dari URL:", error);
-      Alert.alert("Error", "Gagal memuat data dari spreadsheet.");
+    } catch (err) {
+      Alert.alert("Error", "Gagal membaca data Excel");
     }
   };
 
   useEffect(() => {
-    importExcelFromUrl();
-  }, []);
+    const updated = items.map(() => {
+      const filtered = masterBarangList
+        .filter(
+          (item: any) => item.brand?.toLowerCase() === principle.toLowerCase()
+        )
+        .map((item: any) => ({ label: item.nama, value: item.nama }));
+      return filtered;
+    });
+    setFilteredNamaItems(updated);
+  }, [principle, masterBarangList, items.length]);
 
-  useEffect(() => {
-    if (form.nama) {
-      const item = masterBarangList.find((item) => item.nama === form.nama);
-      if (item) {
-        setForm((prev) => ({ ...prev, kode: item.kode }));
-        setBrand(item.brand);
-      }
-    } else {
-      setForm((prev) => ({ ...prev, kode: "" }));
-      setBrand("");
+  const updateItem = (index: number, field: keyof ItemInput, value: string) => {
+    const updated = [...items];
+    updated[index][field] = value;
+
+    if (field === "namaBarang") {
+      const match = masterBarangList.find(
+        (item: any) =>
+          item.nama === value &&
+          item.brand?.toLowerCase() === principle.toLowerCase()
+      );
+      updated[index].kode = match ? match.kode : "";
     }
-  }, [form.nama]);
 
-  const handleChange = (name: keyof BarangForm, value: string) => {
-    setForm({ ...form, [name]: value });
+    setItems(updated);
+  };
+
+  const tambahItem = () => {
+    setItems([
+      ...items,
+      { namaBarang: "", kode: "", large: "", medium: "", small: "" },
+    ]);
+  };
+
+  const hapusItem = (index: number) => {
+    if (items.length === 1) return;
+    const updated = [...items];
+    updated.splice(index, 1);
+    setItems(updated);
   };
 
   const handleSubmit = async () => {
-    const barangBaru: Barang = {
-      kode: form.kode.trim(),
-      nama: form.nama.trim(),
-      stokLarge: parseInt(form.stokLarge) || 0,
-      stokMedium: parseInt(form.stokMedium) || 0,
-      stokSmall: parseInt(form.stokSmall) || 0,
-      ed: form.ed.trim(),
-      catatan: form.catatan.trim(),
-      waktuInput: new Date().toISOString(),
-      principle: brand || "-",
-      kategori: form.kategori || "-",
-    };
-
     try {
+      const kodeKey = "kodeGdngCounter";
+      let counter = parseInt((await AsyncStorage.getItem(kodeKey)) || "0") + 1;
+      const finalKode = counter.toString().padStart(5, "0");
+
+      const form: PurchaseForm = {
+        gudang,
+        kodeGdng: finalKode,
+        kodeApos,
+        principle,
+        catatan,
+        waktuInput: new Date().toISOString(),
+        items,
+      };
+
       const existing = await AsyncStorage.getItem("barangMasuk");
-      const parsed: Barang[] = existing ? JSON.parse(existing) : [];
-      parsed.push(barangBaru);
+      const parsed = existing ? JSON.parse(existing) : [];
+      parsed.push(form);
       await AsyncStorage.setItem("barangMasuk", JSON.stringify(parsed));
-      Alert.alert("Sukses", "Barang berhasil disimpan!");
-      setForm({
-        kode: "",
-        nama: "",
-        stokLarge: "",
-        stokMedium: "",
-        stokSmall: "",
-        ed: "",
-        catatan: "",
-        kategori: "",
-      });
-      setBrand("");
+
+      await AsyncStorage.setItem(kodeKey, counter.toString()); // ✅ Simpan hanya jika berhasil
+
+      Alert.alert("Sukses", `Data disimpan sebagai kode ${finalKode}`);
+      setKodeGdng((counter + 1).toString().padStart(5, "0"));
+      setKodeApos("");
+      setPrinciple("");
+      setCatatan("");
+      setItems([
+        { namaBarang: "", kode: "", large: "", medium: "", small: "" },
+      ]);
     } catch (error) {
       console.error(error);
-      Alert.alert("Error", "Gagal menyimpan data!");
+      Alert.alert("Error", "Gagal menyimpan data");
     }
   };
 
@@ -168,117 +175,111 @@ export default function InScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       style={{ flex: 1, backgroundColor: "#fff" }}
     >
-      <ScrollView
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={styles.container}
-      >
-        <Text style={styles.title}>📥 Form Barang Masuk</Text>
+      <ScrollView contentContainerStyle={styles.container}>
+        <Text style={styles.title}>🛒 Form Pembelian</Text>
 
-        <View style={[styles.dropdownWrapper, { zIndex: 4000 }]}>
-          <Text style={styles.label}>Nama</Text>
-          <DropDownPicker
-            open={namaOpen}
-            setOpen={setNamaOpen}
-            value={form.nama}
-            setValue={(cb) => {
-              const v = cb(form.nama);
-              setForm((prev) => ({ ...prev, nama: v }));
-            }}
-            items={namaItems}
-            searchable
-            placeholder="Pilih Nama"
-            style={styles.dropdown}
-            dropDownContainerStyle={styles.dropdownContainer}
-            textStyle={styles.dropdownText}
-            labelStyle={styles.dropdownText}
-            placeholderStyle={styles.dropdownPlaceholder}
-            listMode={Platform.OS === "android" ? "MODAL" : "SCROLLVIEW"}
-          />
-        </View>
+        <Text style={styles.label}>Gudang</Text>
+        <TextInput
+          value={gudang}
+          editable={false}
+          style={styles.inputDisabled}
+        />
 
-        <View style={[styles.dropdownWrapper, { zIndex: 3000 }]}>
-          <Text style={styles.label}>Kode</Text>
-          <DropDownPicker
-            open={kodeOpen}
-            setOpen={setKodeOpen}
-            value={form.kode}
-            setValue={() => {}}
-            items={kodeItems}
-            placeholder="Kode (otomatis)"
-            disabled
-            style={styles.dropdown}
-            dropDownContainerStyle={styles.dropdownContainer}
-            textStyle={styles.dropdownText}
-            labelStyle={styles.dropdownText}
-            placeholderStyle={styles.dropdownPlaceholder}
-            listMode="SCROLLVIEW"
-          />
-        </View>
+        <Text style={styles.label}>Kode Gudang</Text>
+        <TextInput
+          value={kodeGdng}
+          editable={false}
+          style={styles.inputDisabled}
+        />
 
-        <View style={[styles.dropdownWrapper, { zIndex: 2000 }]}>
-          <Text style={styles.label}>Brand</Text>
-          <DropDownPicker
-            open={brandOpen}
-            setOpen={setBrandOpen}
-            value={brand}
-            setValue={() => {}}
-            items={brandItems}
-            placeholder="Brand (otomatis)"
-            disabled
-            style={styles.dropdown}
-            dropDownContainerStyle={styles.dropdownContainer}
-            textStyle={styles.dropdownText}
-            labelStyle={styles.dropdownText}
-            placeholderStyle={styles.dropdownPlaceholder}
-            listMode="SCROLLVIEW"
-          />
-        </View>
+        <Text style={styles.label}>Kode Apos</Text>
+        <TextInput
+          value={kodeApos}
+          onChangeText={setKodeApos}
+          style={styles.input}
+        />
 
-        <View style={[styles.dropdownWrapper, { zIndex: 1000 }]}>
-          <Text style={styles.label}>Kategori</Text>
-          <DropDownPicker
-            open={kategoriOpen}
-            setOpen={setKategoriOpen}
-            value={form.kategori}
-            setValue={(cb) => {
-              const v = cb(form.kategori);
-              setForm((prev) => ({ ...prev, kategori: v }));
-            }}
-            items={kategoriItems}
-            placeholder="Pilih Gudang"
-            style={styles.dropdown}
-            dropDownContainerStyle={styles.dropdownContainer}
-            textStyle={styles.dropdownText}
-            labelStyle={styles.dropdownText}
-            placeholderStyle={styles.dropdownPlaceholder}
-            listMode={Platform.OS === "android" ? "MODAL" : "SCROLLVIEW"}
-          />
-        </View>
+        <Text style={styles.label}>Principle</Text>
+        <TextInput
+          value={principle}
+          onChangeText={setPrinciple}
+          style={styles.input}
+        />
 
-        {["stokLarge", "stokMedium", "stokSmall", "ed", "catatan"].map(
-          (key, i) => (
-            <View key={key} style={styles.inputWrapper}>
-              <Text style={styles.label}>
-                {
-                  ["Stok Large", "Stok Medium", "Stok Small", "ED", "Catatan"][
-                    i
-                  ]
-                }
+        <Text style={[styles.label, { marginTop: 16 }]}>🧾 Item</Text>
+        {items.map((item, index) => (
+          <View
+            key={index}
+            style={{ marginBottom: 16, zIndex: items.length - index }}
+          >
+            <TouchableOpacity onPress={() => hapusItem(index)}>
+              <Text
+                style={{ color: "red", textAlign: "right", marginBottom: 4 }}
+              >
+                ❌ Hapus
               </Text>
-              <TextInput
-                style={styles.input}
-                value={form[key as keyof BarangForm]}
-                onChangeText={(t) => handleChange(key as keyof BarangForm, t)}
-                keyboardType={key.includes("stok") ? "numeric" : "default"}
-                placeholderTextColor="#999"
-                placeholder={key}
-              />
-            </View>
-          )
-        )}
+            </TouchableOpacity>
+            <DropDownPicker
+              items={filteredNamaItems[index] || []}
+              open={openDropdownIndex === index}
+              setOpen={() =>
+                setOpenDropdownIndex(openDropdownIndex === index ? null : index)
+              }
+              value={item.namaBarang}
+              setValue={(cb) => {
+                const v = cb(item.namaBarang);
+                updateItem(index, "namaBarang", v);
+              }}
+              placeholder="Pilih Nama Barang"
+              style={styles.dropdown}
+              dropDownContainerStyle={styles.dropdownContainer}
+              listMode="MODAL"
+            />
+            <TextInput
+              value={item.kode}
+              editable={false}
+              placeholder="Kode Barang"
+              style={styles.inputDisabled}
+            />
+            <Text style={styles.label}>Large</Text>
+            <TextInput
+              value={item.large}
+              onChangeText={(t) => updateItem(index, "large", t)}
+              style={styles.input}
+              keyboardType="numeric"
+            />
+            <Text style={styles.label}>Medium</Text>
+            <TextInput
+              value={item.medium}
+              onChangeText={(t) => updateItem(index, "medium", t)}
+              style={styles.input}
+              keyboardType="numeric"
+            />
+            <Text style={styles.label}>Small</Text>
+            <TextInput
+              value={item.small}
+              onChangeText={(t) => updateItem(index, "small", t)}
+              style={styles.input}
+              keyboardType="numeric"
+            />
+          </View>
+        ))}
+
+        <TouchableOpacity onPress={tambahItem}>
+          <Text style={{ color: "#3b82f6", marginBottom: 16 }}>
+            ➕ Tambah Item
+          </Text>
+        </TouchableOpacity>
+
+        <Text style={styles.label}>Catatan</Text>
+        <TextInput
+          value={catatan}
+          onChangeText={setCatatan}
+          style={styles.input}
+        />
 
         <TouchableOpacity style={styles.buttonContainer} onPress={handleSubmit}>
-          <Text style={styles.buttonText}>Simpan Barang</Text>
+          <Text style={styles.buttonText}>Simpan Pembelian</Text>
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -286,54 +287,46 @@ export default function InScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    padding: 20,
-    backgroundColor: "#fff",
-  },
+  container: { padding: 20 },
   title: {
     fontSize: 20,
     fontWeight: "bold",
+    textAlign: "center",
     marginBottom: 20,
-    alignSelf: "center",
     color: "#1f2937",
   },
   label: {
-    color: "#111827",
-    marginBottom: 4,
     marginTop: 12,
-  },
-  inputWrapper: {
-    marginBottom: 16,
-    zIndex: 0,
+    color: "#111827",
   },
   input: {
     borderWidth: 1,
     borderColor: "#d1d5db",
     borderRadius: 6,
-    padding: 12,
+    padding: 10,
     backgroundColor: "#f9fafb",
-    color: "#111827",
+    marginBottom: 8,
   },
-  dropdownWrapper: {
-    marginBottom: 12,
-    position: "relative",
+  inputDisabled: {
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderRadius: 6,
+    padding: 10,
+    backgroundColor: "#eee",
+    marginBottom: 8,
+    color: "#6b7280",
   },
   dropdown: {
     borderColor: "#d1d5db",
     backgroundColor: "#f9fafb",
+    marginBottom: 8,
   },
   dropdownContainer: {
     borderColor: "#d1d5db",
     backgroundColor: "#ffffff",
   },
-  dropdownText: {
-    color: "#111827",
-  },
-  dropdownPlaceholder: {
-    color: "#6b7280",
-  },
   buttonContainer: {
-    marginTop: 20,
+    marginTop: 24,
     backgroundColor: "#3b82f6",
     borderRadius: 6,
   },

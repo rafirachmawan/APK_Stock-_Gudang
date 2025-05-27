@@ -1,4 +1,5 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
+// StockScreen.tsx - Memperhitungkan In dan Out via stockManager
+
 import { useIsFocused } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
@@ -24,7 +25,6 @@ export default function StockScreen() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [stockData, setStockData] = useState<Barang[]>([]);
   const [selectedItem, setSelectedItem] = useState<Barang | null>(null);
-  const [barangKeluar, setBarangKeluar] = useState<Barang[]>([]);
   const isFocused = useIsFocused();
 
   useEffect(() => {
@@ -69,8 +69,8 @@ export default function StockScreen() {
       XLSX.utils.book_append_sheet(workbook, worksheet, "StockBarang");
 
       const buffer = XLSX.write(workbook, { type: "base64", bookType: "xlsx" });
-
       const filePath = FileSystem.cacheDirectory + `stock-barang.xlsx`;
+
       await FileSystem.writeAsStringAsync(filePath, buffer, {
         encoding: FileSystem.EncodingType.Base64,
       });
@@ -110,21 +110,6 @@ export default function StockScreen() {
     );
   };
 
-  const handleItemPress = async (item: Barang) => {
-    setSelectedItem(item);
-    try {
-      const keluarData = await AsyncStorage.getItem("barangKeluar");
-      const parsedKeluar = keluarData ? JSON.parse(keluarData) : [];
-      const filteredKeluar = parsedKeluar.filter(
-        (bk: Barang) => bk.kode === item.kode
-      );
-      setBarangKeluar(filteredKeluar);
-    } catch (error) {
-      console.error("Gagal memuat data barang keluar:", error);
-      setBarangKeluar([]);
-    }
-  };
-
   const filteredData = stockData.filter(
     (item) =>
       item.nama.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -132,7 +117,7 @@ export default function StockScreen() {
   );
 
   const renderItem = ({ item }: { item: Barang }) => (
-    <TouchableOpacity style={styles.card} onPress={() => handleItemPress(item)}>
+    <TouchableOpacity style={styles.card}>
       <Text style={styles.cardTitle}>
         {item.nama} ({item.kode})
       </Text>

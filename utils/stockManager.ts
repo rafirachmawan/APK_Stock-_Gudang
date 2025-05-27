@@ -1,6 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-// Struktur data barang
 export interface Barang {
   kode: string;
   nama: string;
@@ -10,11 +9,10 @@ export interface Barang {
   ed: string;
   catatan: string;
   waktuInput: string;
-  principle: string; // ✅ Brand/principle
-  kategori: string; // ✅ Tambahkan kategori gudang
+  principle: string;
+  kategori: string;
 }
 
-// 🔢 Hitung stok akhir berdasarkan barangMasuk dan barangKeluar
 export const getCurrentStock = async (): Promise<Barang[]> => {
   try {
     const [masuk, keluar] = await Promise.all([
@@ -22,36 +20,42 @@ export const getCurrentStock = async (): Promise<Barang[]> => {
       AsyncStorage.getItem("barangKeluar"),
     ]);
 
-    const dataMasuk: Barang[] = masuk ? JSON.parse(masuk) : [];
-    const dataKeluar: Barang[] = keluar ? JSON.parse(keluar) : [];
+    const dataMasuk = JSON.parse(masuk || "[]");
+    const dataKeluar = JSON.parse(keluar || "[]");
+
+    if (!Array.isArray(dataMasuk) || !Array.isArray(dataKeluar)) {
+      throw new Error("Format data stok tidak valid");
+    }
 
     const stockMap = new Map<string, Barang>();
 
-    // Tambahkan barang masuk
-    dataMasuk.forEach((item) => {
-      if (!stockMap.has(item.kode)) {
-        stockMap.set(item.kode, {
-          kode: item.kode,
-          nama: item.nama,
-          stokLarge: item.stokLarge,
-          stokMedium: item.stokMedium,
-          stokSmall: item.stokSmall,
-          ed: item.ed,
-          catatan: item.catatan,
-          waktuInput: item.waktuInput,
-          principle: item.principle,
-          kategori: item.kategori,
-        });
-      } else {
-        const existing = stockMap.get(item.kode)!;
-        existing.stokLarge += item.stokLarge;
-        existing.stokMedium += item.stokMedium;
-        existing.stokSmall += item.stokSmall;
-      }
+    dataMasuk.forEach((form: any) => {
+      if (!form.items || !Array.isArray(form.items)) return;
+      form.items.forEach((item: any) => {
+        const kode = item.kode;
+        if (!stockMap.has(kode)) {
+          stockMap.set(kode, {
+            kode,
+            nama: item.namaBarang,
+            stokLarge: parseInt(item.large) || 0,
+            stokMedium: parseInt(item.medium) || 0,
+            stokSmall: parseInt(item.small) || 0,
+            ed: "",
+            catatan: form.catatan,
+            waktuInput: form.waktuInput,
+            principle: form.principle,
+            kategori: form.gudang,
+          });
+        } else {
+          const existing = stockMap.get(kode)!;
+          existing.stokLarge += parseInt(item.large) || 0;
+          existing.stokMedium += parseInt(item.medium) || 0;
+          existing.stokSmall += parseInt(item.small) || 0;
+        }
+      });
     });
 
-    // Kurangi dengan barang keluar
-    dataKeluar.forEach((item) => {
+    dataKeluar.forEach((item: any) => {
       const existing = stockMap.get(item.kode);
       if (existing) {
         existing.stokLarge -= item.stokLarge;
@@ -71,17 +75,19 @@ export const getCurrentStock = async (): Promise<Barang[]> => {
   }
 };
 
-// 🧹 Hapus satu barang dari barangMasuk
 export const deleteBarang = async (
   kode: string,
   waktuInput: string
 ): Promise<boolean> => {
   try {
     const jsonValue = await AsyncStorage.getItem("barangMasuk");
-    const data: Barang[] = jsonValue ? JSON.parse(jsonValue) : [];
+    const data: any[] = jsonValue ? JSON.parse(jsonValue) : [];
 
     const newData = data.filter(
-      (item) => !(item.kode === kode && item.waktuInput === waktuInput)
+      (form) =>
+        !form.items.some(
+          (item: any) => item.kode === kode && form.waktuInput === waktuInput
+        )
     );
 
     await AsyncStorage.setItem("barangMasuk", JSON.stringify(newData));
@@ -92,64 +98,6 @@ export const deleteBarang = async (
   }
 };
 
-// 🎯 Tambah barang masuk
-export const addBarangMasuk = async (barang: Barang): Promise<boolean> => {
-  try {
-    const jsonValue = await AsyncStorage.getItem("barangMasuk");
-    const data: Barang[] = jsonValue ? JSON.parse(jsonValue) : [];
-    data.push(barang);
-    await AsyncStorage.setItem("barangMasuk", JSON.stringify(data));
-    return true;
-  } catch (error) {
-    console.error("Gagal menambah barang masuk:", error);
-    return false;
-  }
-};
-
-// ✏️ Update barang masuk berdasarkan kode + waktuInput
-export const updateBarangMasuk = async (
-  kodeLama: string,
-  waktuInputLama: string,
-  barangBaru: Barang
-): Promise<boolean> => {
-  try {
-    const jsonValue = await AsyncStorage.getItem("barangMasuk");
-    const data: Barang[] = jsonValue ? JSON.parse(jsonValue) : [];
-
-    const newData = data.map((item) =>
-      item.kode === kodeLama && item.waktuInput === waktuInputLama
-        ? barangBaru
-        : item
-    );
-
-    await AsyncStorage.setItem("barangMasuk", JSON.stringify(newData));
-    return true;
-  } catch (error) {
-    console.error("Gagal mengupdate barang masuk:", error);
-    return false;
-  }
-};
-
-// 📦 Struktur master barang (opsional)
-export interface MasterBarang {
-  kode: string;
-  nama: string;
-  satuan: string;
-  kategori: string;
-}
-
-// 📥 Ambil master barang
-export const getMasterBarang = async (): Promise<MasterBarang[]> => {
-  try {
-    const jsonValue = await AsyncStorage.getItem("masterBarang");
-    return jsonValue ? JSON.parse(jsonValue) : [];
-  } catch (error) {
-    console.error("Gagal mengambil master barang:", error);
-    return [];
-  }
-};
-
-// 🗑 Hapus semua data barangMasuk dan barangKeluar
 export const resetAllStock = async (): Promise<void> => {
   try {
     await AsyncStorage.removeItem("barangMasuk");

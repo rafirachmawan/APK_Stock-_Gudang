@@ -1,6 +1,8 @@
+// OutScreen.tsx - Barang keluar kurangi stok tersedia
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useIsFocused } from "@react-navigation/native";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -15,45 +17,48 @@ import {
 import DropDownPicker from "react-native-dropdown-picker";
 import { Barang, getCurrentStock } from "../../utils/stockManager";
 
-type DropDownItem = {
-  label: string;
-  value: string;
-};
+interface ItemOut {
+  namaBarang: string;
+  kode: string;
+  large: string;
+  medium: string;
+  small: string;
+}
 
 export default function OutScreen() {
-  const [kode, setKode] = useState("");
-  const [nama, setNama] = useState("");
-  const [large, setLarge] = useState("");
-  const [medium, setMedium] = useState("");
-  const [small, setSmall] = useState("");
+  const [gudang] = useState("Gudang A");
+  const [kodeGdng, setKodeGdng] = useState("");
+  const [kodeApos, setKodeApos] = useState("");
+  const [principle, setPrinciple] = useState("");
   const [catatan, setCatatan] = useState("");
-  const [kategori, setKategori] = useState("");
+  const [items, setItems] = useState<ItemOut[]>([
+    { namaBarang: "", kode: "", large: "", medium: "", small: "" },
+  ]);
+
   const [dataMasuk, setDataMasuk] = useState<Barang[]>([]);
-
-  const [kodeOpen, setKodeOpen] = useState(false);
-  const [kodeItems, setKodeItems] = useState<DropDownItem[]>([]);
-
-  const [kategoriOpen, setKategoriOpen] = useState(false);
-  const kategoriItems: DropDownItem[] = [
-    { label: "Gudang A", value: "Gudang A" },
-    { label: "Gudang B", value: "Gudang B" },
-    { label: "Gudang C", value: "Gudang C" },
-  ];
+  const [namaItems, setNamaItems] = useState<
+    { label: string; value: string }[][]
+  >([]);
+  const [openDropdownIndex, setOpenDropdownIndex] = useState<number | null>(
+    null
+  );
+  const [kategori] = useState("Gudang A");
 
   const isFocused = useIsFocused();
 
+  const previewKode = async () => {
+    const kodeKey = "kodeGdngOutCounter";
+    let counter = parseInt((await AsyncStorage.getItem(kodeKey)) || "0") + 1;
+    setKodeGdng(counter.toString().padStart(5, "0"));
+  };
+
+  useEffect(() => {
+    previewKode();
+  }, []);
+
   const loadData = async () => {
-    try {
-      const currentStock = await getCurrentStock();
-      setDataMasuk(currentStock);
-      const kodeList = currentStock.map((item) => ({
-        label: `${item.kode} (${item.nama})`,
-        value: item.kode,
-      }));
-      setKodeItems(kodeList);
-    } catch (error) {
-      console.error("Gagal mengambil data:", error);
-    }
+    const currentStock = await getCurrentStock();
+    setDataMasuk(currentStock);
   };
 
   useEffect(() => {
@@ -63,69 +68,118 @@ export default function OutScreen() {
   }, [isFocused]);
 
   useEffect(() => {
-    const selected = dataMasuk.find((item) => item.kode === kode);
-    setNama(selected?.nama || "");
-  }, [kode, dataMasuk]);
+    const updated = items.map(() => {
+      const filtered = dataMasuk
+        .filter(
+          (item) => item.principle?.toLowerCase() === principle.toLowerCase()
+        )
+        .map((item) => ({ label: item.nama, value: item.nama }));
+      return filtered;
+    });
+    setNamaItems(updated);
+  }, [principle, dataMasuk, items.length]);
+
+  const updateItem = (index: number, field: keyof ItemOut, value: string) => {
+    const updated = [...items];
+    updated[index][field] = value;
+
+    if (field === "namaBarang") {
+      const match = dataMasuk.find(
+        (item) =>
+          item.nama === value &&
+          item.principle?.toLowerCase() === principle.toLowerCase()
+      );
+      updated[index].kode = match ? match.kode : "";
+    }
+
+    setItems(updated);
+  };
+
+  const hapusItem = (index: number) => {
+    if (items.length === 1) return;
+    const updated = [...items];
+    updated.splice(index, 1);
+    setItems(updated);
+  };
+
+  const tambahItem = () => {
+    setItems([
+      ...items,
+      { namaBarang: "", kode: "", large: "", medium: "", small: "" },
+    ]);
+  };
 
   const handleSubmit = async () => {
-    if (!kode || !nama || !kategori) {
-      Alert.alert("Peringatan", "Kode, Nama, dan Kategori wajib diisi!");
-      return;
-    }
-
-    const largeOut = parseInt(large) || 0;
-    const mediumOut = parseInt(medium) || 0;
-    const smallOut = parseInt(small) || 0;
-
-    const currentStock = await getCurrentStock();
-    const barang = currentStock.find((item) => item.kode === kode);
-
-    if (!barang) {
-      Alert.alert("Error", "Barang tidak ditemukan di stok!");
-      return;
-    }
-
-    if (
-      barang.stokLarge < largeOut ||
-      barang.stokMedium < mediumOut ||
-      barang.stokSmall < smallOut
-    ) {
-      Alert.alert(
-        "Error",
-        `Stok tidak mencukupi!\nTersedia: L:${barang.stokLarge}, M:${barang.stokMedium}, S:${barang.stokSmall}`
-      );
-      return;
-    }
-
-    const dataOut: Barang = {
-      kode,
-      nama,
-      stokLarge: largeOut,
-      stokMedium: mediumOut,
-      stokSmall: smallOut,
-      catatan,
-      ed: barang.ed,
-      waktuInput: new Date().toISOString(),
-      principle: barang.principle,
-      kategori,
-    };
-
     try {
-      const existing = await AsyncStorage.getItem("barangKeluar");
-      const parsed = existing ? JSON.parse(existing) : [];
-      parsed.push(dataOut);
-      await AsyncStorage.setItem("barangKeluar", JSON.stringify(parsed));
+      const kodeKey = "kodeGdngOutCounter";
+      let counter = parseInt((await AsyncStorage.getItem(kodeKey)) || "0") + 1;
+      const finalKode = counter.toString().padStart(5, "0");
 
-      await loadData();
+      const updatedStock = [...dataMasuk];
 
-      Alert.alert("Berhasil", "Data berhasil dikeluarkan!");
-      setKode("");
-      setNama("");
-      setLarge("");
-      setMedium("");
-      setSmall("");
+      for (const item of items) {
+        if (!item.namaBarang || !item.kode) {
+          Alert.alert("Peringatan", "Nama dan Kode barang harus diisi.");
+          return;
+        }
+
+        const largeOut = parseInt(item.large) || 0;
+        const mediumOut = parseInt(item.medium) || 0;
+        const smallOut = parseInt(item.small) || 0;
+
+        const stokIndex = updatedStock.findIndex((b) => b.kode === item.kode);
+        if (stokIndex === -1) {
+          Alert.alert("Error", `Barang ${item.namaBarang} tidak ditemukan.`);
+          return;
+        }
+
+        const stok = updatedStock[stokIndex];
+        if (
+          stok.stokLarge < largeOut ||
+          stok.stokMedium < mediumOut ||
+          stok.stokSmall < smallOut
+        ) {
+          Alert.alert("Error", `Stok tidak cukup untuk ${item.namaBarang}`);
+          return;
+        }
+
+        stok.stokLarge -= largeOut;
+        stok.stokMedium -= mediumOut;
+        stok.stokSmall -= smallOut;
+
+        const barangKeluar: Barang = {
+          kode: item.kode,
+          nama: item.namaBarang,
+          stokLarge: largeOut,
+          stokMedium: mediumOut,
+          stokSmall: smallOut,
+          catatan,
+          ed: stok.ed,
+          waktuInput: new Date().toISOString(),
+          principle,
+          kategori,
+        };
+
+        const existing = await AsyncStorage.getItem("barangKeluar");
+        const parsed = existing ? JSON.parse(existing) : [];
+        parsed.push(barangKeluar);
+        await AsyncStorage.setItem("barangKeluar", JSON.stringify(parsed));
+      }
+
+      await AsyncStorage.setItem(kodeKey, counter.toString());
+
+      Alert.alert(
+        "Sukses",
+        `Barang berhasil dikeluarkan dengan kode ${finalKode}`
+      );
+      setKodeGdng((counter + 1).toString().padStart(5, "0"));
+      setKodeApos("");
+      setPrinciple("");
       setCatatan("");
-      setKategori("");
+      setItems([
+        { namaBarang: "", kode: "", large: "", medium: "", small: "" },
+      ]);
+      await loadData();
     } catch (error) {
       console.error("Gagal menyimpan:", error);
       Alert.alert("Error", "Gagal menyimpan data!");
@@ -137,98 +191,111 @@ export default function OutScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       style={{ flex: 1, backgroundColor: "#fff" }}
     >
-      <ScrollView
-        contentContainerStyle={styles.container}
-        keyboardShouldPersistTaps="handled"
-      >
+      <ScrollView contentContainerStyle={styles.container}>
         <Text style={styles.title}>📤 Form Barang Keluar</Text>
 
-        <View style={{ zIndex: 3000 }}>
-          <Text style={styles.label}>Kode Barang</Text>
-          <DropDownPicker
-            open={kodeOpen}
-            setOpen={setKodeOpen}
-            value={kode}
-            setValue={setKode}
-            items={kodeItems}
-            placeholder="Pilih Kode Barang"
-            searchable
-            searchPlaceholder="Cari kode atau nama"
-            dropDownDirection="AUTO"
-            style={styles.dropdown}
-            textStyle={styles.dropdownText}
-            dropDownContainerStyle={styles.dropdownContainer}
-            listMode={Platform.OS === "android" ? "MODAL" : "SCROLLVIEW"}
-          />
-        </View>
-
-        <Text style={styles.label}>Nama Barang</Text>
+        <Text style={styles.label}>Gudang</Text>
         <TextInput
-          style={styles.input}
-          placeholder="Nama Barang"
-          value={nama}
+          style={styles.inputDisabled}
+          value={gudang}
           editable={false}
-          placeholderTextColor="#888"
         />
 
-        <View style={{ zIndex: 2000 }}>
-          <Text style={styles.label}>Kategori Gudang</Text>
-          <DropDownPicker
-            open={kategoriOpen}
-            setOpen={setKategoriOpen}
-            value={kategori}
-            setValue={setKategori}
-            items={kategoriItems}
-            placeholder="Pilih Kategori Gudang"
-            dropDownDirection="AUTO"
-            style={styles.dropdown}
-            textStyle={styles.dropdownText}
-            dropDownContainerStyle={styles.dropdownContainer}
-            listMode={Platform.OS === "android" ? "MODAL" : "SCROLLVIEW"}
-          />
-        </View>
+        <Text style={styles.label}>Kode Gudang</Text>
+        <TextInput
+          style={styles.inputDisabled}
+          value={kodeGdng}
+          editable={false}
+        />
 
-        <Text style={styles.label}>Jumlah Large</Text>
+        <Text style={styles.label}>Kode Apos</Text>
         <TextInput
           style={styles.input}
-          placeholder="Jumlah Large"
-          keyboardType="numeric"
-          value={large}
-          onChangeText={setLarge}
-          placeholderTextColor="#888"
+          value={kodeApos}
+          onChangeText={setKodeApos}
         />
 
-        <Text style={styles.label}>Jumlah Medium</Text>
+        <Text style={styles.label}>Principle</Text>
         <TextInput
           style={styles.input}
-          placeholder="Jumlah Medium"
-          keyboardType="numeric"
-          value={medium}
-          onChangeText={setMedium}
-          placeholderTextColor="#888"
+          value={principle}
+          onChangeText={setPrinciple}
         />
 
-        <Text style={styles.label}>Jumlah Small</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Jumlah Small"
-          keyboardType="numeric"
-          value={small}
-          onChangeText={setSmall}
-          placeholderTextColor="#888"
-        />
+        <Text style={styles.label}>🧾 Item</Text>
+        {items.map((item, index) => (
+          <View
+            key={index}
+            style={{ marginBottom: 16, zIndex: items.length - index }}
+          >
+            <TouchableOpacity onPress={() => hapusItem(index)}>
+              <Text
+                style={{ color: "red", textAlign: "right", marginBottom: 4 }}
+              >
+                ❌ Hapus
+              </Text>
+            </TouchableOpacity>
+            <DropDownPicker
+              items={namaItems[index] || []}
+              open={openDropdownIndex === index}
+              setOpen={() =>
+                setOpenDropdownIndex(openDropdownIndex === index ? null : index)
+              }
+              value={item.namaBarang}
+              setValue={(cb) => {
+                const v = cb(item.namaBarang);
+                updateItem(index, "namaBarang", v);
+              }}
+              placeholder="Pilih Nama Barang"
+              style={styles.dropdown}
+              dropDownContainerStyle={styles.dropdownContainer}
+              listMode="MODAL"
+            />
+            <TextInput
+              value={item.kode}
+              editable={false}
+              placeholder="Kode Barang"
+              style={styles.inputDisabled}
+            />
+            <Text style={styles.label}>Large</Text>
+            <TextInput
+              value={item.large}
+              onChangeText={(t) => updateItem(index, "large", t)}
+              style={styles.input}
+              keyboardType="numeric"
+            />
+            <Text style={styles.label}>Medium</Text>
+            <TextInput
+              value={item.medium}
+              onChangeText={(t) => updateItem(index, "medium", t)}
+              style={styles.input}
+              keyboardType="numeric"
+            />
+            <Text style={styles.label}>Small</Text>
+            <TextInput
+              value={item.small}
+              onChangeText={(t) => updateItem(index, "small", t)}
+              style={styles.input}
+              keyboardType="numeric"
+            />
+          </View>
+        ))}
+
+        <TouchableOpacity onPress={tambahItem}>
+          <Text style={{ color: "#3b82f6", marginBottom: 16 }}>
+            ➕ Tambah Item
+          </Text>
+        </TouchableOpacity>
 
         <Text style={styles.label}>Catatan</Text>
         <TextInput
-          style={styles.input}
-          placeholder="Catatan"
           value={catatan}
           onChangeText={setCatatan}
-          placeholderTextColor="#888"
+          style={styles.input}
         />
 
-        <TouchableOpacity style={styles.button} onPress={handleSubmit}>
-          <Text style={styles.buttonText}>Keluarkan Barang</Text>
+        <TouchableOpacity style={styles.buttonContainer} onPress={handleSubmit}>
+          <Text style={styles.buttonText}>Simpan Pengeluaran</Text>
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -236,53 +303,47 @@ export default function OutScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    padding: 20,
-    backgroundColor: "#fff",
-  },
+  container: { padding: 20 },
   title: {
     fontSize: 20,
     fontWeight: "bold",
-    marginBottom: 16,
     textAlign: "center",
+    marginBottom: 20,
     color: "#1f2937",
   },
-  label: {
-    color: "#111827",
-    marginBottom: 4,
-    marginTop: 12,
-  },
+  label: { marginTop: 12, color: "#111827" },
   input: {
     borderWidth: 1,
     borderColor: "#d1d5db",
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 12,
+    borderRadius: 6,
+    padding: 10,
     backgroundColor: "#f9fafb",
-    color: "#111827",
+    marginBottom: 8,
+  },
+  inputDisabled: {
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderRadius: 6,
+    padding: 10,
+    backgroundColor: "#eee",
+    marginBottom: 8,
+    color: "#6b7280",
   },
   dropdown: {
     borderColor: "#d1d5db",
     backgroundColor: "#f9fafb",
-    marginBottom: 12,
+    marginBottom: 8,
   },
-  dropdownText: {
-    color: "#111827",
-  },
-  dropdownContainer: {
-    borderColor: "#d1d5db",
-    backgroundColor: "#ffffff",
-  },
-  button: {
-    marginTop: 20,
-    backgroundColor: "#3b82f6",
+  dropdownContainer: { borderColor: "#d1d5db", backgroundColor: "#ffffff" },
+  buttonContainer: {
+    marginTop: 24,
+    backgroundColor: "#ef4444",
     borderRadius: 6,
-    paddingVertical: 14,
-    alignItems: "center",
   },
   buttonText: {
-    color: "#ffffff",
+    color: "#fff",
+    textAlign: "center",
+    padding: 12,
     fontWeight: "bold",
-    fontSize: 16,
   },
 });
