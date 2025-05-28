@@ -1,5 +1,3 @@
-// HomeScreen.tsx - Sudah diperbaiki agar sync upload/download berfungsi
-
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useState } from "react";
@@ -7,9 +5,11 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -24,10 +24,23 @@ import { Barang } from "../../utils/stockManager";
 const screenWidth = Dimensions.get("window").width;
 const cardWidth = screenWidth < 400 ? screenWidth - 60 : 160;
 
+// Hardcoded kredensial internal
+const CREDENTIALS = {
+  username: "admin",
+  password: "admin",
+};
+
 export default function HomeScreen() {
   const [loading, setLoading] = useState(false);
   const [barang, setBarang] = useState<Barang[]>([]);
   const [lastSync, setLastSync] = useState<string | null>(null);
+
+  const [authVisible, setAuthVisible] = useState(false);
+  const [authAction, setAuthAction] = useState<
+    "upload" | "download" | "reset" | null
+  >(null);
+  const [inputUsername, setInputUsername] = useState("");
+  const [inputPassword, setInputPassword] = useState("");
 
   const formatWaktu = () => {
     const now = new Date();
@@ -54,7 +67,7 @@ export default function HomeScreen() {
     .length;
   const totalBrand = [...new Set(barang.map((item) => item.nama))].length;
 
-  const handleUpload = () => {
+  const handleUpload = async () => {
     Alert.alert(
       "Konfirmasi",
       "Upload akan menggantikan seluruh data di Firebase dengan data lokal.\nLanjutkan?",
@@ -110,6 +123,22 @@ export default function HomeScreen() {
     ]);
   };
 
+  const verifyAndProceed = () => {
+    if (
+      inputUsername === CREDENTIALS.username &&
+      inputPassword === CREDENTIALS.password
+    ) {
+      setAuthVisible(false);
+      setInputUsername("");
+      setInputPassword("");
+      if (authAction === "upload") handleUpload();
+      else if (authAction === "download") handleDownload();
+      else if (authAction === "reset") handleReset();
+    } else {
+      Alert.alert("❌ Gagal", "Username atau password salah");
+    }
+  };
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#fff" }}>
       <ScrollView contentContainerStyle={styles.container}>
@@ -150,21 +179,30 @@ export default function HomeScreen() {
             <>
               <TouchableOpacity
                 style={styles.syncButton}
-                onPress={handleUpload}
+                onPress={() => {
+                  setAuthAction("upload");
+                  setAuthVisible(true);
+                }}
               >
                 <Text style={styles.syncText}>⬆️ Upload ke Cloud</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 style={styles.syncButton}
-                onPress={handleDownload}
+                onPress={() => {
+                  setAuthAction("download");
+                  setAuthVisible(true);
+                }}
               >
                 <Text style={styles.syncText}>⬇️ Download dari Cloud</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 style={[styles.syncButton, { backgroundColor: "#dc2626" }]}
-                onPress={handleReset}
+                onPress={() => {
+                  setAuthAction("reset");
+                  setAuthVisible(true);
+                }}
               >
                 <Text style={styles.syncText}>🗑️ Reset Semua Data</Text>
               </TouchableOpacity>
@@ -174,6 +212,45 @@ export default function HomeScreen() {
             <Text style={styles.syncStatus}>📅 Terakhir: {lastSync}</Text>
           )}
         </View>
+
+        {/* Modal Login */}
+        <Modal transparent={true} visible={authVisible} animationType="slide">
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>🔐 Verifikasi Akses</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Username"
+                value={inputUsername}
+                onChangeText={setInputUsername}
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="Password"
+                secureTextEntry
+                value={inputPassword}
+                onChangeText={setInputPassword}
+              />
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  onPress={verifyAndProceed}
+                  style={[styles.syncButton, { width: "48%" }]}
+                >
+                  <Text style={styles.syncText}>✅ Lanjut</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setAuthVisible(false)}
+                  style={[
+                    styles.syncButton,
+                    { width: "48%", backgroundColor: "#9ca3af" },
+                  ]}
+                >
+                  <Text style={styles.syncText}>❌ Batal</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </ScrollView>
     </SafeAreaView>
   );
@@ -258,5 +335,36 @@ const styles = StyleSheet.create({
     color: "#0ea5e9",
     fontSize: 13,
     fontStyle: "italic",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    backgroundColor: "#fff",
+    padding: 20,
+    borderRadius: 12,
+    width: "80%",
+    gap: 12,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderRadius: 8,
+    padding: 10,
+    backgroundColor: "#f9fafb",
+  },
+  modalButtons: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 12,
   },
 });
