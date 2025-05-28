@@ -220,6 +220,18 @@ export default function InScreen() {
           style={styles.inputDisabled}
         />
 
+        <TouchableOpacity
+          onPress={async () => {
+            await AsyncStorage.setItem("kodeGdngCounter", "0");
+            previewKodeGdng();
+            Alert.alert("Reset", "Kode Gudang berhasil di-reset ke 00001");
+          }}
+        >
+          <Text style={{ color: "#3b82f6", marginBottom: 12 }}>
+            🔁 Reset Kode Gudang
+          </Text>
+        </TouchableOpacity>
+
         <Text style={styles.label}>Kode Apos</Text>
         <TextInput
           value={kodeApos}

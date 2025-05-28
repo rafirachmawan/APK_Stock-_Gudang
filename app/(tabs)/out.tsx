@@ -1,4 +1,4 @@
-// OutScreen.tsx - Versi Final (Dropdown nama barang, auto-fill kode dan principle)
+// OutScreen.tsx - Versi Final + Reset Kode Gudang
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useIsFocused } from "@react-navigation/native";
@@ -68,6 +68,12 @@ export default function OutScreen() {
     const kodeKey = "kodeGdngOutCounter";
     let counter = parseInt((await AsyncStorage.getItem(kodeKey)) || "0") + 1;
     setKodeGdng(counter.toString().padStart(5, "0"));
+  };
+
+  const resetKodeGudang = async () => {
+    await AsyncStorage.setItem("kodeGdngOutCounter", "0");
+    Alert.alert("Reset", "Kode Gudang berhasil direset ke 00001");
+    previewKode();
   };
 
   useEffect(() => {
@@ -220,6 +226,11 @@ export default function OutScreen() {
           value={kodeGdng}
           editable={false}
         />
+        <TouchableOpacity onPress={resetKodeGudang}>
+          <Text style={{ color: "#3b82f6", marginBottom: 12 }}>
+            🔁 Reset Kode Gudang
+          </Text>
+        </TouchableOpacity>
 
         <Text style={styles.label}>Nomor Kendaraan</Text>
         <TextInput
