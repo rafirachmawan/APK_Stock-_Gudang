@@ -1,5 +1,3 @@
-// StockDetailScreen.tsx - Memperbaiki fitur edit tanggal ED
-
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useFocusEffect } from "@react-navigation/native";
@@ -97,7 +95,6 @@ export default function StockDetailScreen() {
     if (field !== "items") {
       (updatedForms[formIndex] as any)[field] = value;
     }
-
     setForms(updatedForms);
     await AsyncStorage.setItem("barangMasuk", JSON.stringify(updatedForms));
   };
@@ -141,7 +138,7 @@ export default function StockDetailScreen() {
 
   const filteredForms = forms.filter(
     (form) =>
-      form.principle.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      form.suratJalan?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       form.items.some((item) =>
         item.namaBarang.toLowerCase().includes(searchQuery.toLowerCase())
       )
@@ -153,7 +150,7 @@ export default function StockDetailScreen() {
 
       <TextInput
         style={styles.searchInput}
-        placeholder="Cari berdasarkan principle atau nama barang..."
+        placeholder="Cari berdasarkan surat jalan atau nama barang..."
         value={searchQuery}
         onChangeText={setSearchQuery}
       />
@@ -166,19 +163,31 @@ export default function StockDetailScreen() {
         <View key={formIndex} style={styles.itemContainer}>
           <TouchableOpacity onPress={() => toggleExpand(formIndex)}>
             <Text style={styles.itemTitle}>
-              [{formIndex + 1}] Gudang {form.gudang} | Principle:{" "}
-              {form.principle}
+              [{formIndex + 1}] Surat Jalan: {form.suratJalan || "(kosong)"}
             </Text>
           </TouchableOpacity>
 
           {expandedIndexes.includes(formIndex) && (
             <View>
+              <Text style={styles.label}>Gudang</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: "#e5e7eb" }]}
+                value={form.gudang}
+                editable={false}
+              />
+
+              <Text style={styles.label}>Principle</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: "#e5e7eb" }]}
+                value={form.principle}
+                editable={false}
+              />
+
               <Text style={styles.label}>Kode Gudang</Text>
               <TextInput
                 style={[styles.input, { backgroundColor: "#e5e7eb" }]}
                 value={form.kodeGdng}
                 editable={false}
-                placeholder="Kode Gudang"
               />
 
               <Text style={styles.label}>Kode Apos</Text>
@@ -188,17 +197,13 @@ export default function StockDetailScreen() {
                 onChangeText={(text) =>
                   updateFormField(formIndex, "kodeApos", text)
                 }
-                placeholder="Kode Apos"
               />
 
               <Text style={styles.label}>Surat Jalan</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { backgroundColor: "#e5e7eb" }]}
                 value={form.suratJalan || ""}
-                onChangeText={(text) =>
-                  updateFormField(formIndex, "suratJalan", text)
-                }
-                placeholder="Nomor Surat Jalan"
+                editable={false}
               />
 
               <Text style={styles.label}>Waktu Input</Text>
@@ -211,29 +216,24 @@ export default function StockDetailScreen() {
                     • {item.namaBarang} ({item.kode})
                   </Text>
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, { backgroundColor: "#e5e7eb" }]}
                     value={item.large}
-                    onChangeText={(text) =>
-                      updateItem(formIndex, itemIndex, "large", text)
-                    }
+                    editable={false}
                     placeholder="Large"
                   />
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, { backgroundColor: "#e5e7eb" }]}
                     value={item.medium}
-                    onChangeText={(text) =>
-                      updateItem(formIndex, itemIndex, "medium", text)
-                    }
+                    editable={false}
                     placeholder="Medium"
                   />
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, { backgroundColor: "#e5e7eb" }]}
                     value={item.small}
-                    onChangeText={(text) =>
-                      updateItem(formIndex, itemIndex, "small", text)
-                    }
+                    editable={false}
                     placeholder="Small"
                   />
+
                   <Text style={styles.label}>ED (Tanggal Kedaluwarsa)</Text>
                   <TouchableOpacity
                     onPress={() =>
@@ -271,7 +271,6 @@ export default function StockDetailScreen() {
                     onChangeText={(text) =>
                       updateItem(formIndex, itemIndex, "catatan", text)
                     }
-                    placeholder="Catatan untuk barang ini"
                   />
                 </View>
               ))}
