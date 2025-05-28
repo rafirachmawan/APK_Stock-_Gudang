@@ -1,3 +1,5 @@
+// HomeScreen.tsx - Sudah diperbaiki agar sync upload/download berfungsi
+
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useState } from "react";
@@ -19,7 +21,6 @@ import {
 } from "../../utils/firebase";
 import { Barang } from "../../utils/stockManager";
 
-// Ambil lebar layar device
 const screenWidth = Dimensions.get("window").width;
 const cardWidth = screenWidth < 400 ? screenWidth - 60 : 160;
 
@@ -34,9 +35,15 @@ export default function HomeScreen() {
   };
 
   const loadData = async () => {
-    const json = await AsyncStorage.getItem("barangMasuk");
-    const data: Barang[] = json ? JSON.parse(json) : [];
-    setBarang(data);
+    try {
+      const inJson = await AsyncStorage.getItem("barangMasuk");
+      const outJson = await AsyncStorage.getItem("barangKeluar");
+      const dataIn: Barang[] = inJson ? JSON.parse(inJson) : [];
+      const dataOut: Barang[] = outJson ? JSON.parse(outJson) : [];
+      setBarang([...dataIn, ...dataOut]);
+    } catch (e) {
+      console.error("Gagal memuat data dari AsyncStorage", e);
+    }
   };
 
   useEffect(() => {
@@ -60,11 +67,11 @@ export default function HomeScreen() {
             try {
               setLoading(true);
               await syncUpload();
-              await loadData(); // ⬅️ update tabel
+              await loadData();
               setLastSync(`Upload: ${formatWaktu()}`);
               Alert.alert("✅ Berhasil", "Data berhasil diunggah ke Firebase");
             } catch (error) {
-              Alert.alert("❌ Gagal", "Upload gagal");
+              Alert.alert("❌ Gagal", "Upload gagal: " + error);
             } finally {
               setLoading(false);
             }
@@ -78,11 +85,11 @@ export default function HomeScreen() {
     try {
       setLoading(true);
       await syncDownload();
-      await loadData(); // ⬅️ update tabel
+      await loadData();
       setLastSync(`Download: ${formatWaktu()}`);
       Alert.alert("✅ Berhasil", "Data berhasil diunduh dari Firebase");
     } catch (error) {
-      Alert.alert("❌ Gagal", "Gagal mengunduh data");
+      Alert.alert("❌ Gagal", "Gagal mengunduh data: " + error);
     } finally {
       setLoading(false);
     }
@@ -96,7 +103,7 @@ export default function HomeScreen() {
         style: "destructive",
         onPress: async () => {
           await resetSemuaHistory();
-          await loadData(); // ⬅️ update tabel
+          await loadData();
           Alert.alert("✅ Reset", "Data berhasil dihapus");
         },
       },

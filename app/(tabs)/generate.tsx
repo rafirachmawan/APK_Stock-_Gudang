@@ -1,4 +1,4 @@
-// GenerateScreen.tsx
+// GenerateScreen.tsx - Generate berdasarkan input stok dari InScreen + Gudang + manual qty
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -17,9 +17,6 @@ interface Product {
   kode: string;
   nama: string;
   principle: string;
-  stokLarge: number;
-  stokMedium: number;
-  stokSmall: number;
 }
 
 export default function GenerateScreen() {
@@ -28,7 +25,10 @@ export default function GenerateScreen() {
   const [currentBrand, setCurrentBrand] = useState<string | null>(null);
   const [brandProducts, setBrandProducts] = useState<Product[]>([]);
   const [stockInputs, setStockInputs] = useState<
-    Record<string, { L: string; M: string; S: string; ed: string }>
+    Record<
+      string,
+      { gudang: string; L: string; M: string; S: string; ed: string }
+    >
   >({});
   const [tanggal, setTanggal] = useState<string>("");
   const [showDateModal, setShowDateModal] = useState(false);
@@ -38,17 +38,24 @@ export default function GenerateScreen() {
   const loadBrandMap = async (clearGenerated = false) => {
     const stored = await AsyncStorage.getItem("barangMasuk");
     if (stored) {
-      const products: Product[] = JSON.parse(stored);
+      const forms = JSON.parse(stored);
       const grouped: Record<string, Product[]> = {};
       const seen = new Set<string>();
 
-      for (const item of products) {
-        const key = `${item.kode}-${item.nama}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        const brand = item.principle || "UNKNOWN";
-        if (!grouped[brand]) grouped[brand] = [];
-        grouped[brand].push(item);
+      for (const form of forms) {
+        for (const item of form.items) {
+          const key = `${item.kode}-${item.namaBarang}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+
+          const brand = form.principle || "UNKNOWN";
+          if (!grouped[brand]) grouped[brand] = [];
+          grouped[brand].push({
+            kode: item.kode,
+            nama: item.namaBarang,
+            principle: form.principle,
+          });
+        }
       }
       setBrandMap(grouped);
       if (clearGenerated) setGeneratedBrands([]);
@@ -84,7 +91,7 @@ export default function GenerateScreen() {
 
   const handleStockChange = (
     kode: string,
-    field: "L" | "M" | "S" | "ed",
+    field: "L" | "M" | "S" | "ed" | "gudang",
     value: string
   ) => {
     setStockInputs((prev) => ({
@@ -94,6 +101,7 @@ export default function GenerateScreen() {
         M: field === "M" ? value : prev[kode]?.M || "",
         S: field === "S" ? value : prev[kode]?.S || "",
         ed: field === "ed" ? value : prev[kode]?.ed || "",
+        gudang: field === "gudang" ? value : prev[kode]?.gudang || "Gudang A",
       },
     }));
   };
@@ -104,6 +112,7 @@ export default function GenerateScreen() {
       principle: item.principle,
       kode: item.kode,
       nama: item.nama,
+      gudang: stockInputs[item.kode]?.gudang || "Gudang A",
       L: stockInputs[item.kode]?.L || "0",
       M: stockInputs[item.kode]?.M || "0",
       S: stockInputs[item.kode]?.S || "0",
@@ -156,6 +165,14 @@ export default function GenerateScreen() {
             renderItem={({ item }) => (
               <View style={styles.itemBox}>
                 <Text style={styles.itemText}>{item.nama}</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Gudang"
+                  value={stockInputs[item.kode]?.gudang || "Gudang A"}
+                  onChangeText={(val) =>
+                    handleStockChange(item.kode, "gudang", val)
+                  }
+                />
                 <View style={styles.row}>
                   {["L", "M", "S"].map((size) => (
                     <TextInput
@@ -212,7 +229,6 @@ export default function GenerateScreen() {
         {remaining}
       </Text>
 
-      {/* Modal untuk pilih tanggal */}
       {showDateModal && (
         <DateTimePicker
           value={tempDate}
@@ -227,7 +243,6 @@ export default function GenerateScreen() {
         />
       )}
 
-      {/* Modal untuk pilih ED */}
       {showEdModal && (
         <DateTimePicker
           value={tempDate}
@@ -315,6 +330,7 @@ const styles = StyleSheet.create({
     padding: 8,
     width: "30%",
     textAlign: "center",
+    marginBottom: 6,
   },
   infoText: {
     textAlign: "center",

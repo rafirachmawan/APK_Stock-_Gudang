@@ -1,4 +1,4 @@
-// firebase.ts - Final revisi untuk mencegah ID undefined
+// firebase.ts - Final revisi untuk mencegah ID undefined dan menyesuaikan format untuk halaman detail
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { initializeApp } from "firebase/app";
 import {
@@ -11,7 +11,6 @@ import {
 } from "firebase/firestore";
 import { Barang } from "./stockManager";
 
-// 🔧 Konfigurasi Firebase
 const firebaseConfig = {
   apiKey: "AIzaSyDH-0zRYEORIkIfiUlh2Vbd4ZebruFlWtA",
   authDomain: "stockgudang-2c399.firebaseapp.com",
@@ -21,26 +20,49 @@ const firebaseConfig = {
   appId: "1:510255992661:android:605bd663ff5d839d1ee9dc",
 };
 
-// 🔌 Inisialisasi Firebase App & Firestore
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 
-// 📁 Nama koleksi di Firebase
 const COLLECTION_IN = "barangMasuk";
 const COLLECTION_OUT = "barangKeluar";
 
-// 🔽 Download semua data dari Firebase ke local AsyncStorage
 export const syncDownload = async () => {
   try {
-    // Download barangMasuk
     const snapshotIn = await getDocs(collection(db, COLLECTION_IN));
-    const dataIn: Barang[] = [];
-    snapshotIn.forEach((doc) => {
-      dataIn.push(doc.data() as Barang);
-    });
-    await AsyncStorage.setItem("barangMasuk", JSON.stringify(dataIn));
+    const groupedIn: any[] = [];
+    const groupMap = new Map<string, any>();
 
-    // Download barangKeluar
+    snapshotIn.forEach((docSnap) => {
+      const d = docSnap.data();
+      const id = `${d.kodeGdng}-${d.waktuInput}`;
+
+      if (!groupMap.has(id)) {
+        groupMap.set(id, {
+          gudang: d.kategori || "",
+          kodeGdng: d.kodeGdng || "",
+          kodeApos: d.kodeApos || "",
+          suratJalan: d.suratJalan || "",
+          principle: d.principle || "",
+          catatan: d.catatan || "",
+          waktuInput: d.waktuInput,
+          items: [],
+        });
+      }
+
+      const parent = groupMap.get(id);
+      parent.items.push({
+        namaBarang: d.nama,
+        kode: d.kode,
+        large: String(d.stokLarge),
+        medium: String(d.stokMedium),
+        small: String(d.stokSmall),
+        ed: d.ed,
+      });
+    });
+
+    groupedIn.push(...groupMap.values());
+    await AsyncStorage.setItem("barangMasuk", JSON.stringify(groupedIn));
+
     const snapshotOut = await getDocs(collection(db, COLLECTION_OUT));
     const dataOut: Barang[] = [];
     snapshotOut.forEach((doc) => {
@@ -53,41 +75,61 @@ export const syncDownload = async () => {
   }
 };
 
-// 🔼 Upload semua data dari local ke Firebase (sinkronisasi penuh)
 export const syncUpload = async () => {
   try {
-    // Ambil data lokal
     const [inValue, outValue] = await Promise.all([
       AsyncStorage.getItem("barangMasuk"),
       AsyncStorage.getItem("barangKeluar"),
     ]);
 
-    const dataIn: Barang[] = inValue ? JSON.parse(inValue) : [];
+    const dataIn: any[] = inValue ? JSON.parse(inValue) : [];
     const dataOut: Barang[] = outValue ? JSON.parse(outValue) : [];
 
-    // --- Sinkronisasi barangMasuk ---
+    const flatIn: Barang[] = [];
+    for (const form of dataIn) {
+      const waktuInput = form.waktuInput;
+      const base = {
+        kodeGdng: form.kodeGdng,
+        kodeApos: form.kodeApos,
+        suratJalan: form.suratJalan,
+        principle: form.principle,
+        catatan: form.catatan,
+        waktuInput,
+        kategori: form.gudang,
+      };
+
+      for (const item of form.items) {
+        flatIn.push({
+          ...base,
+          kode: item.kode,
+          nama: item.namaBarang,
+          stokLarge: parseInt(item.large) || 0,
+          stokMedium: parseInt(item.medium) || 0,
+          stokSmall: parseInt(item.small) || 0,
+          ed: item.ed,
+        });
+      }
+    }
+
     const snapshotIn = await getDocs(collection(db, COLLECTION_IN));
     const firebaseInIds = snapshotIn.docs.map((doc) => doc.id);
-    const localInIds = dataIn.map((item) => `${item.kode}-${item.waktuInput}`);
-
+    const localInIds = flatIn.map((item) => `${item.kode}-${item.waktuInput}`);
     const toDeleteIn = firebaseInIds.filter((id) => !localInIds.includes(id));
     for (const id of toDeleteIn) {
       await deleteDoc(doc(db, COLLECTION_IN, id));
     }
-    for (const item of dataIn) {
+    for (const item of flatIn) {
       const id = `${item.kode}-${item.waktuInput}`;
       if (item.kode && item.waktuInput) {
         await setDoc(doc(db, COLLECTION_IN, id), item);
       }
     }
 
-    // --- Sinkronisasi barangKeluar ---
     const snapshotOut = await getDocs(collection(db, COLLECTION_OUT));
     const firebaseOutIds = snapshotOut.docs.map((doc) => doc.id);
     const localOutIds = dataOut.map(
       (item) => `${item.kode}-${item.waktuInput}`
     );
-
     const toDeleteOut = firebaseOutIds.filter(
       (id) => !localOutIds.includes(id)
     );
@@ -106,7 +148,6 @@ export const syncUpload = async () => {
   }
 };
 
-// 🗑 Reset semua histori dari penyimpanan lokal (AsyncStorage)
 export const resetSemuaHistory = async (): Promise<void> => {
   try {
     await AsyncStorage.removeItem("barangMasuk");

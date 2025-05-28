@@ -1,6 +1,5 @@
-// StockDetailScreen.tsx - Tambahan fitur export Excel di tampilan collapsible
-
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { useFocusEffect } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
@@ -32,6 +31,7 @@ interface ItemInput {
   medium: string;
   small: string;
   ed?: string;
+  catatan?: string;
 }
 
 interface PurchaseForm {
@@ -40,6 +40,7 @@ interface PurchaseForm {
   kodeApos: string;
   principle: string;
   catatan: string;
+  suratJalan?: string;
   items: ItemInput[];
   waktuInput: string;
 }
@@ -47,6 +48,12 @@ interface PurchaseForm {
 export default function StockDetailScreen() {
   const [forms, setForms] = useState<PurchaseForm[]>([]);
   const [expandedIndexes, setExpandedIndexes] = useState<number[]>([]);
+  const [activeDateIndex, setActiveDateIndex] = useState<{
+    form: number;
+    item: number;
+  } | null>(null);
+  const [tempDate, setTempDate] = useState<Date>(new Date());
+  const [searchQuery, setSearchQuery] = useState<string>("");
 
   useFocusEffect(
     useCallback(() => {
@@ -80,9 +87,16 @@ export default function StockDetailScreen() {
     await AsyncStorage.setItem("barangMasuk", JSON.stringify(updatedForms));
   };
 
-  const updateCatatan = async (formIndex: number, value: string) => {
+  const updateFormField = async (
+    formIndex: number,
+    field: keyof PurchaseForm,
+    value: string
+  ) => {
     const updatedForms = [...forms];
-    updatedForms[formIndex].catatan = value;
+    if (field !== "items") {
+      (updatedForms[formIndex] as any)[field] = value;
+    }
+
     setForms(updatedForms);
     await AsyncStorage.setItem("barangMasuk", JSON.stringify(updatedForms));
   };
@@ -101,7 +115,8 @@ export default function StockDetailScreen() {
         Medium: item.medium,
         Small: item.small,
         ED: item.ed || "-",
-        Catatan: form.catatan,
+        Catatan: item.catatan || form.catatan || "-",
+        SuratJalan: form.suratJalan || "-",
         "Waktu Input": new Date(form.waktuInput).toLocaleString(),
       }))
     );
@@ -123,15 +138,30 @@ export default function StockDetailScreen() {
     await Sharing.shareAsync(filePath);
   };
 
+  const filteredForms = forms.filter(
+    (form) =>
+      form.principle.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      form.items.some((item) =>
+        item.namaBarang.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+  );
+
   return (
     <ScrollView style={styles.container}>
       <Text style={styles.title}>📦 Semua Data Barang Masuk</Text>
+
+      <TextInput
+        style={styles.searchInput}
+        placeholder="Cari berdasarkan principle atau nama barang..."
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+      />
 
       <TouchableOpacity style={styles.exportBtn} onPress={exportToExcel}>
         <Text style={styles.exportText}>📤 Export ke Excel</Text>
       </TouchableOpacity>
 
-      {forms.map((form, formIndex) => (
+      {filteredForms.map((form, formIndex) => (
         <View key={formIndex} style={styles.itemContainer}>
           <TouchableOpacity onPress={() => toggleExpand(formIndex)}>
             <Text style={styles.itemTitle}>
@@ -142,11 +172,38 @@ export default function StockDetailScreen() {
 
           {expandedIndexes.includes(formIndex) && (
             <View>
-              <Text style={styles.label}>Kode Gudang: {form.kodeGdng}</Text>
-              <Text style={styles.label}>Kode Apos: {form.kodeApos}</Text>
-              <Text style={styles.label}>
-                Waktu Input: {new Date(form.waktuInput).toLocaleString()}
-              </Text>
+              <Text style={styles.label}>Kode Gudang</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: "#e5e7eb" }]}
+                value={form.kodeGdng}
+                editable={false}
+                placeholder="Kode Gudang"
+              />
+
+              <Text style={styles.label}>Kode Apos</Text>
+              <TextInput
+                style={styles.input}
+                value={form.kodeApos}
+                onChangeText={(text) =>
+                  updateFormField(formIndex, "kodeApos", text)
+                }
+                placeholder="Kode Apos"
+              />
+
+              <Text style={styles.label}>Surat Jalan</Text>
+              <TextInput
+                style={styles.input}
+                value={form.suratJalan || ""}
+                onChangeText={(text) =>
+                  updateFormField(formIndex, "suratJalan", text)
+                }
+                placeholder="Nomor Surat Jalan"
+              />
+
+              <Text style={styles.label}>Waktu Input</Text>
+              <Text>{new Date(form.waktuInput).toLocaleString()}</Text>
+
+              <Text style={styles.label}>Detail Barang</Text>
               {form.items.map((item, itemIndex) => (
                 <View key={itemIndex} style={styles.subItem}>
                   <Text style={styles.label}>
@@ -176,22 +233,46 @@ export default function StockDetailScreen() {
                     }
                     placeholder="Small"
                   />
+                  <Text style={styles.label}>ED (Tanggal Kedaluwarsa)</Text>
+                  <TouchableOpacity
+                    onPress={() =>
+                      setActiveDateIndex({ form: formIndex, item: itemIndex })
+                    }
+                    style={styles.input}
+                  >
+                    <Text>{item.ed || "Pilih Tanggal"}</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.label}>Catatan</Text>
                   <TextInput
                     style={styles.input}
-                    value={item.ed || ""}
+                    value={item.catatan || ""}
                     onChangeText={(text) =>
-                      updateItem(formIndex, itemIndex, "ed", text)
+                      updateItem(formIndex, itemIndex, "catatan", text)
                     }
-                    placeholder="ED (dd/mm/yyyy)"
+                    placeholder="Catatan untuk barang ini"
                   />
+
+                  {activeDateIndex?.form === formIndex &&
+                    activeDateIndex?.item === itemIndex && (
+                      <DateTimePicker
+                        value={item.ed ? new Date(item.ed) : new Date()}
+                        mode="date"
+                        display="default"
+                        onChange={(event, date) => {
+                          if (event.type === "set" && date) {
+                            updateItem(
+                              formIndex,
+                              itemIndex,
+                              "ed",
+                              date.toISOString().split("T")[0]
+                            );
+                          }
+                          setActiveDateIndex(null);
+                        }}
+                      />
+                    )}
                 </View>
               ))}
-              <TextInput
-                style={styles.input}
-                value={form.catatan}
-                onChangeText={(text) => updateCatatan(formIndex, text)}
-                placeholder="Catatan"
-              />
             </View>
           )}
         </View>
@@ -253,5 +334,14 @@ const styles = StyleSheet.create({
   exportText: {
     color: "#ffffff",
     fontWeight: "bold",
+  },
+  searchInput: {
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 16,
+    backgroundColor: "#f9fafb",
+    color: "#111827",
   },
 });
