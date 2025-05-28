@@ -217,13 +217,26 @@ export default function HomeScreen() {
         <Modal transparent={true} visible={authVisible} animationType="slide">
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>🔐 Verifikasi Akses</Text>
+              <Text style={styles.modalTitle}>
+                🔐 Verifikasi untuk{" "}
+                {authAction === "upload"
+                  ? "Upload"
+                  : authAction === "download"
+                  ? "Download"
+                  : authAction === "reset"
+                  ? "Reset"
+                  : ""}
+              </Text>
+
+              <Text style={styles.fieldLabel}>🧑 Username</Text>
               <TextInput
                 style={styles.input}
                 placeholder="Username"
                 value={inputUsername}
                 onChangeText={setInputUsername}
               />
+
+              <Text style={styles.fieldLabel}>🔒 Password</Text>
               <TextInput
                 style={styles.input}
                 placeholder="Password"
@@ -231,6 +244,7 @@ export default function HomeScreen() {
                 value={inputPassword}
                 onChangeText={setInputPassword}
               />
+
               <View style={styles.modalButtons}>
                 <TouchableOpacity
                   onPress={verifyAndProceed}
@@ -347,13 +361,19 @@ const styles = StyleSheet.create({
     padding: 20,
     borderRadius: 12,
     width: "80%",
-    gap: 12,
+    gap: 8,
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: "bold",
     textAlign: "center",
     marginBottom: 8,
+  },
+  fieldLabel: {
+    fontWeight: "600",
+    color: "#1f2937",
+    marginTop: 8,
+    marginBottom: 4,
   },
   input: {
     borderWidth: 1,
