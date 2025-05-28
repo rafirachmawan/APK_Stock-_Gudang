@@ -33,17 +33,24 @@ export const getCurrentStock = async (): Promise<Barang[]> => {
 
     dataMasuk.forEach((form: any) => {
       if (!form.items || !Array.isArray(form.items)) return;
+
       form.items.forEach((item: any) => {
         const kode = item.kode;
-        if (!stockMap.has(kode)) {
-          stockMap.set(kode, {
+        const key = kode;
+
+        const large = parseInt(item.large) || 0;
+        const medium = parseInt(item.medium) || 0;
+        const small = parseInt(item.small) || 0;
+
+        if (!stockMap.has(key)) {
+          stockMap.set(key, {
             kode,
             nama: item.namaBarang,
-            stokLarge: parseInt(item.large) || 0,
-            stokMedium: parseInt(item.medium) || 0,
-            stokSmall: parseInt(item.small) || 0,
-            ed: "",
-            catatan: form.catatan,
+            stokLarge: large,
+            stokMedium: medium,
+            stokSmall: small,
+            ed: item.ed || "-",
+            catatan: item.catatan || form.catatan || "",
             waktuInput: form.waktuInput,
             principle: form.principle,
             kategori: form.gudang,
@@ -51,10 +58,19 @@ export const getCurrentStock = async (): Promise<Barang[]> => {
             namaSopir: form.namaSopir || "",
           });
         } else {
-          const existing = stockMap.get(kode)!;
-          existing.stokLarge += parseInt(item.large) || 0;
-          existing.stokMedium += parseInt(item.medium) || 0;
-          existing.stokSmall += parseInt(item.small) || 0;
+          const existing = stockMap.get(key)!;
+          existing.stokLarge += large;
+          existing.stokMedium += medium;
+          existing.stokSmall += small;
+
+          // Update ED jika data baru memiliki tanggal ED lebih baru
+          if (item.ed) {
+            const currentED = new Date(existing.ed || "1900-01-01");
+            const newED = new Date(item.ed);
+            if (newED > currentED) {
+              existing.ed = item.ed;
+            }
+          }
         }
       });
     });

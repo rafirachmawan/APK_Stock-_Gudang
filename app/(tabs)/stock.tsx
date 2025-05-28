@@ -1,5 +1,3 @@
-// StockScreen.tsx - Klik principle untuk detail stok + riwayat masuk & keluar
-
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useIsFocused } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system";
@@ -17,11 +15,7 @@ import {
   View,
 } from "react-native";
 import * as XLSX from "xlsx";
-import {
-  Barang,
-  getCurrentStock,
-  resetAllStock,
-} from "../../utils/stockManager";
+import { Barang, getCurrentStock } from "../../utils/stockManager";
 
 interface RiwayatBarang {
   nama: string;
@@ -117,7 +111,6 @@ export default function StockScreen() {
           Large: item.stokLarge,
           Medium: item.stokMedium,
           Small: item.stokSmall,
-          ED: item.ed,
           Catatan: item.catatan,
           WaktuInput: item.waktuInput,
         }))
@@ -153,7 +146,7 @@ export default function StockScreen() {
           📌 Detail Principle: {selectedPrinciple}
         </Text>
 
-        <Text style={styles.subheader}>📥 Riwayat Barang Masuk</Text>
+        <Text style={styles.subheader}>📅 Riwayat Barang Masuk</Text>
         {riwayatMasuk.map((item, index) => (
           <View key={index} style={styles.detailRow}>
             <Text style={styles.label}>
@@ -168,7 +161,7 @@ export default function StockScreen() {
           </View>
         ))}
 
-        <Text style={styles.subheader}>📤 Riwayat Barang Keluar</Text>
+        <Text style={styles.subheader}>📄 Riwayat Barang Keluar</Text>
         {riwayatKeluar.map((item, index) => (
           <View key={index} style={styles.detailRow}>
             <Text style={styles.label}>
@@ -217,10 +210,6 @@ export default function StockScreen() {
         <Text style={styles.label}>Small:</Text>
         <Text style={styles.value}>{item.stokSmall}</Text>
       </View>
-      <View style={styles.row}>
-        <Text style={styles.label}>ED:</Text>
-        <Text style={styles.value}>{item.ed}</Text>
-      </View>
     </TouchableOpacity>
   );
 
@@ -249,26 +238,6 @@ export default function StockScreen() {
 
       <TouchableOpacity style={styles.exportButton} onPress={exportToExcel}>
         <Text style={styles.exportText}>📄 Export ke Excel</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.resetButton}
-        onPress={() =>
-          Alert.alert("Konfirmasi", "Yakin ingin menghapus semua stok?", [
-            { text: "Batal", style: "cancel" },
-            {
-              text: "Hapus Semua",
-              style: "destructive",
-              onPress: async () => {
-                await resetAllStock();
-                await loadStockData();
-                Alert.alert("Berhasil", "Semua stok berhasil dihapus");
-              },
-            },
-          ])
-        }
-      >
-        <Text style={styles.resetText}>🗑 Hapus Semua Stok</Text>
       </TouchableOpacity>
     </View>
   );
@@ -346,17 +315,6 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontWeight: "bold",
   },
-  resetButton: {
-    backgroundColor: "#ef4444",
-    padding: 14,
-    borderRadius: 8,
-    marginTop: 12,
-    alignItems: "center",
-  },
-  resetText: {
-    color: "#ffffff",
-    fontWeight: "bold",
-  },
   emptyText: {
     textAlign: "center",
     color: "#6b7280",
@@ -370,5 +328,16 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#e5e7eb",
     paddingVertical: 10,
+  },
+  resetButton: {
+    backgroundColor: "#ef4444",
+    padding: 14,
+    borderRadius: 8,
+    marginTop: 12,
+    alignItems: "center",
+  },
+  resetText: {
+    color: "#ffffff",
+    fontWeight: "bold",
   },
 });

@@ -1,3 +1,5 @@
+// StockDetailScreen.tsx - Memperbaiki fitur edit tanggal ED
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useFocusEffect } from "@react-navigation/native";
@@ -52,7 +54,6 @@ export default function StockDetailScreen() {
     form: number;
     item: number;
   } | null>(null);
-  const [tempDate, setTempDate] = useState<Date>(new Date());
   const [searchQuery, setSearchQuery] = useState<string>("");
 
   useFocusEffect(
@@ -158,7 +159,7 @@ export default function StockDetailScreen() {
       />
 
       <TouchableOpacity style={styles.exportBtn} onPress={exportToExcel}>
-        <Text style={styles.exportText}>📤 Export ke Excel</Text>
+        <Text style={styles.exportText}>📄 Export ke Excel</Text>
       </TouchableOpacity>
 
       {filteredForms.map((form, formIndex) => (
@@ -242,6 +243,27 @@ export default function StockDetailScreen() {
                   >
                     <Text>{item.ed || "Pilih Tanggal"}</Text>
                   </TouchableOpacity>
+
+                  {activeDateIndex?.form === formIndex &&
+                    activeDateIndex?.item === itemIndex && (
+                      <DateTimePicker
+                        value={item.ed ? new Date(item.ed) : new Date()}
+                        mode="date"
+                        display="default"
+                        onChange={(event, date) => {
+                          if (event?.type === "set" && date) {
+                            updateItem(
+                              formIndex,
+                              itemIndex,
+                              "ed",
+                              date.toISOString().split("T")[0]
+                            );
+                          }
+                          setTimeout(() => setActiveDateIndex(null), 200);
+                        }}
+                      />
+                    )}
+
                   <Text style={styles.label}>Catatan</Text>
                   <TextInput
                     style={styles.input}
@@ -251,26 +273,6 @@ export default function StockDetailScreen() {
                     }
                     placeholder="Catatan untuk barang ini"
                   />
-
-                  {activeDateIndex?.form === formIndex &&
-                    activeDateIndex?.item === itemIndex && (
-                      <DateTimePicker
-                        value={item.ed ? new Date(item.ed) : new Date()}
-                        mode="date"
-                        display="default"
-                        onChange={(event, date) => {
-                          if (event.type === "set" && date) {
-                            updateItem(
-                              formIndex,
-                              itemIndex,
-                              "ed",
-                              date.toISOString().split("T")[0]
-                            );
-                          }
-                          setActiveDateIndex(null);
-                        }}
-                      />
-                    )}
                 </View>
               ))}
             </View>
