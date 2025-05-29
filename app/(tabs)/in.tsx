@@ -213,7 +213,7 @@ export default function InScreen() {
           listMode="MODAL"
         />
 
-        <Text style={styles.label}>Kode Gudang</Text>
+        <Text style={styles.label}>Kode Transaksi Gudang</Text>
         <TextInput
           value={kodeGdng}
           editable={false}
@@ -232,7 +232,7 @@ export default function InScreen() {
           </Text>
         </TouchableOpacity>
 
-        <Text style={styles.label}>Kode Apos</Text>
+        <Text style={styles.label}>Kode Transaksi Apos</Text>
         <TextInput
           value={kodeApos}
           onChangeText={setKodeApos}

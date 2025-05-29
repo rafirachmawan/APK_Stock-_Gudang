@@ -1,7 +1,6 @@
-// OutDetailScreen.tsx - Versi Diedit (Fix TypeScript 'never' Error)
+// OutDetailScreen.tsx
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import DateTimePicker from "@react-native-community/datetimepicker";
 import { useFocusEffect } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
@@ -58,29 +57,31 @@ export default function OutDetailScreen() {
 
   const toggleExpand = (index: number) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    if (expandedIndexes.includes(index)) {
-      setExpandedIndexes(expandedIndexes.filter((i) => i !== index));
-    } else {
-      setExpandedIndexes([...expandedIndexes, index]);
-    }
+    setExpandedIndexes((prev) =>
+      prev.includes(index) ? prev.filter((i) => i !== index) : [...prev, index]
+    );
   };
 
-  const updateFormField = async (
+  const updateFormField = (
     formIndex: number,
     field: keyof Barang,
-    value: string
+    value: any
   ) => {
-    const updatedForms: Barang[] = [...forms];
-
-    const newValue: any =
-      field === "stokLarge" || field === "stokMedium" || field === "stokSmall"
-        ? parseInt(value) || 0
-        : value;
-
-    (updatedForms[formIndex] as any)[field] = newValue;
+    const updatedForms = [...forms];
+    (updatedForms[formIndex] as any)[field] = [
+      "stokLarge",
+      "stokMedium",
+      "stokSmall",
+    ].includes(field)
+      ? parseInt(value) || 0
+      : value;
 
     setForms(updatedForms);
-    await AsyncStorage.setItem("barangKeluar", JSON.stringify(updatedForms));
+  };
+
+  const saveToStorage = async () => {
+    await AsyncStorage.setItem("barangKeluar", JSON.stringify(forms));
+    alert("✅ Data berhasil disimpan");
   };
 
   const exportToExcel = async () => {
@@ -106,8 +107,8 @@ export default function OutDetailScreen() {
       type: "base64",
       bookType: "xlsx",
     });
-    const filePath = FileSystem.documentDirectory + "barang-keluar.xlsx";
 
+    const filePath = FileSystem.documentDirectory + "barang-keluar.xlsx";
     await FileSystem.writeAsStringAsync(filePath, binaryExcel, {
       encoding: FileSystem.EncodingType.Base64,
     });
@@ -132,10 +133,6 @@ export default function OutDetailScreen() {
         onChangeText={setSearchQuery}
       />
 
-      <TouchableOpacity style={styles.exportBtn} onPress={exportToExcel}>
-        <Text style={styles.exportText}>📤 Export ke Excel</Text>
-      </TouchableOpacity>
-
       {filteredForms.map((form, formIndex) => (
         <View key={formIndex} style={styles.itemContainer}>
           <TouchableOpacity onPress={() => toggleExpand(formIndex)}>
@@ -147,30 +144,15 @@ export default function OutDetailScreen() {
           {expandedIndexes.includes(formIndex) && (
             <View>
               <Text style={styles.label}>Kategori</Text>
-              <TextInput
-                style={styles.input}
-                value={form.kategori}
-                onChangeText={(text) =>
-                  updateFormField(formIndex, "kategori", text)
-                }
-              />
+              <Text style={styles.readOnlyText}>{form.kategori}</Text>
 
               <Text style={styles.label}>Principle</Text>
-              <TextInput
-                style={styles.input}
-                value={form.principle}
-                onChangeText={(text) =>
-                  updateFormField(formIndex, "principle", text)
-                }
-              />
+              <Text style={styles.readOnlyText}>{form.principle}</Text>
 
               <Text style={styles.label}>ED</Text>
-              <TouchableOpacity
-                onPress={() => setActiveDateIndex(formIndex)}
-                style={styles.input}
-              >
-                <Text>{form.ed || "Pilih Tanggal"}</Text>
-              </TouchableOpacity>
+              <Text style={styles.readOnlyText}>
+                {form.ed || "📅 Tidak tersedia"}
+              </Text>
 
               <Text style={styles.label}>Catatan</Text>
               <TextInput
@@ -209,28 +191,18 @@ export default function OutDetailScreen() {
                 placeholder="Small"
                 keyboardType="numeric"
               />
-
-              {activeDateIndex === formIndex && (
-                <DateTimePicker
-                  value={form.ed ? new Date(form.ed) : new Date()}
-                  mode="date"
-                  display="default"
-                  onChange={(event, date) => {
-                    if (event.type === "set" && date) {
-                      updateFormField(
-                        formIndex,
-                        "ed",
-                        date.toISOString().split("T")[0]
-                      );
-                    }
-                    setActiveDateIndex(null);
-                  }}
-                />
-              )}
             </View>
           )}
         </View>
       ))}
+
+      <TouchableOpacity style={styles.saveBtn} onPress={saveToStorage}>
+        <Text style={styles.saveText}>💾 Simpan Perubahan</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.exportBtn} onPress={exportToExcel}>
+        <Text style={styles.exportText}>📤 Export ke Excel</Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 }
@@ -274,12 +246,30 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     backgroundColor: "#fff",
   },
-  exportBtn: {
+  readOnlyText: {
+    padding: 8,
+    marginBottom: 6,
+    backgroundColor: "#f3f4f6",
+    borderRadius: 6,
+    color: "#6b7280",
+  },
+  saveBtn: {
     backgroundColor: "#10b981",
     padding: 12,
     borderRadius: 8,
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 12,
+  },
+  saveText: {
+    color: "#ffffff",
+    fontWeight: "bold",
+  },
+  exportBtn: {
+    backgroundColor: "#3b82f6",
+    padding: 12,
+    borderRadius: 8,
+    alignItems: "center",
+    marginBottom: 30,
   },
   exportText: {
     color: "#ffffff",

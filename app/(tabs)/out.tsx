@@ -220,7 +220,7 @@ export default function OutScreen() {
           dropDownContainerStyle={styles.dropdownContainer}
         />
 
-        <Text style={styles.label}>Kode Gudang</Text>
+        <Text style={styles.label}>Kode Transaksi Gudang</Text>
         <TextInput
           style={styles.inputDisabled}
           value={kodeGdng}
@@ -248,7 +248,7 @@ export default function OutScreen() {
           placeholder="Masukkan nama sopir"
         />
 
-        <Text style={styles.label}>Kode Apos</Text>
+        <Text style={styles.label}>Kode Transaksi Apos</Text>
         <TextInput
           style={styles.input}
           value={kodeApos}

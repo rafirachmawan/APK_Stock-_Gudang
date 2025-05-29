@@ -183,14 +183,14 @@ export default function StockDetailScreen() {
                 editable={false}
               />
 
-              <Text style={styles.label}>Kode Gudang</Text>
+              <Text style={styles.label}>Kode Transaksi Gudang</Text>
               <TextInput
                 style={[styles.input, { backgroundColor: "#e5e7eb" }]}
                 value={form.kodeGdng}
                 editable={false}
               />
 
-              <Text style={styles.label}>Kode Apos</Text>
+              <Text style={styles.label}>Kode Transaksi Apos</Text>
               <TextInput
                 style={styles.input}
                 value={form.kodeApos}
