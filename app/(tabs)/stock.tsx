@@ -1,3 +1,6 @@
+// Versi final StockScreen.tsx
+// Menampilkan riwayat masuk/keluar hanya untuk 1 kode barang yang diklik
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useIsFocused } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system";
@@ -17,24 +20,21 @@ import {
 import * as XLSX from "xlsx";
 import { Barang, getCurrentStock } from "../../utils/stockManager";
 
-interface RiwayatBarang {
-  nama: string;
-  kode: string;
+interface RiwayatTransaksi {
+  waktu: string;
   large: number;
   medium: number;
   small: number;
-  waktu: string;
+  catatan?: string;
 }
 
 export default function StockScreen() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [stockData, setStockData] = useState<Barang[]>([]);
-  const [selectedPrinciple, setSelectedPrinciple] = useState<string | null>(
-    null
-  );
+  const [selectedBarang, setSelectedBarang] = useState<Barang | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
-  const [riwayatMasuk, setRiwayatMasuk] = useState<RiwayatBarang[]>([]);
-  const [riwayatKeluar, setRiwayatKeluar] = useState<RiwayatBarang[]>([]);
+  const [riwayatMasuk, setRiwayatMasuk] = useState<RiwayatTransaksi[]>([]);
+  const [riwayatKeluar, setRiwayatKeluar] = useState<RiwayatTransaksi[]>([]);
 
   const isFocused = useIsFocused();
 
@@ -54,44 +54,41 @@ export default function StockScreen() {
     }
   };
 
-  const loadRiwayat = async (principle: string) => {
+  const loadRiwayat = async (kode: string) => {
     const masukRaw = await AsyncStorage.getItem("barangMasuk");
     const keluarRaw = await AsyncStorage.getItem("barangKeluar");
 
     const masuk = masukRaw ? JSON.parse(masukRaw) : [];
     const keluar = keluarRaw ? JSON.parse(keluarRaw) : [];
 
-    const masukFiltered = masuk
-      .filter((f: any) => f.principle === principle)
-      .flatMap((f: any) =>
-        f.items.map((i: any) => ({
-          nama: i.namaBarang,
-          kode: i.kode,
+    const masukFiltered = masuk.flatMap((f: any) =>
+      f.items
+        .filter((i: any) => i.kode === kode)
+        .map((i: any) => ({
+          waktu: f.waktuInput,
           large: parseInt(i.large),
           medium: parseInt(i.medium),
           small: parseInt(i.small),
-          waktu: f.waktuInput,
+          catatan: i.catatan || "",
         }))
-      );
+    );
 
     const keluarFiltered = keluar
-      .filter((f: any) => f.principle === principle)
+      .filter((f: any) => f.kode === kode)
       .map((i: any) => ({
-        nama: i.nama,
-        kode: i.kode,
+        waktu: i.waktuInput,
         large: i.stokLarge,
         medium: i.stokMedium,
         small: i.stokSmall,
-        waktu: i.waktuInput,
       }));
 
     setRiwayatMasuk(masukFiltered);
     setRiwayatKeluar(keluarFiltered);
   };
 
-  const handleShowDetail = async (principle: string) => {
-    setSelectedPrinciple(principle);
-    await loadRiwayat(principle);
+  const handleShowDetail = async (barang: Barang) => {
+    setSelectedBarang(barang);
+    await loadRiwayat(barang.kode);
     setModalVisible(true);
   };
 
@@ -143,38 +140,43 @@ export default function StockScreen() {
     <Modal visible={modalVisible} animationType="slide">
       <ScrollView style={styles.container}>
         <Text style={styles.header}>
-          📌 Detail Principle: {selectedPrinciple}
+          📌 Detail Barang: {selectedBarang?.nama} ({selectedBarang?.kode})
         </Text>
 
         <Text style={styles.subheader}>📅 Riwayat Barang Masuk</Text>
-        {riwayatMasuk.map((item, index) => (
-          <View key={index} style={styles.detailRow}>
-            <Text style={styles.label}>
-              {item.nama} ({item.kode})
-            </Text>
-            <Text style={styles.label}>
-              Large: {item.large} | Medium: {item.medium} | Small: {item.small}
-            </Text>
-            <Text style={styles.label}>
-              Tanggal: {new Date(item.waktu).toLocaleDateString()}
-            </Text>
-          </View>
-        ))}
+        {riwayatMasuk.length === 0 ? (
+          <Text style={styles.label}>Tidak ada data masuk</Text>
+        ) : (
+          riwayatMasuk.map((t, idx) => (
+            <View key={idx} style={styles.detailRow}>
+              <Text style={styles.label}>
+                Tanggal: {new Date(t.waktu).toLocaleDateString()}
+              </Text>
+              <Text style={styles.label}>
+                Large: {t.large} | Medium: {t.medium} | Small: {t.small}
+              </Text>
+              {t.catatan ? (
+                <Text style={styles.label}>Catatan: {t.catatan}</Text>
+              ) : null}
+            </View>
+          ))
+        )}
 
         <Text style={styles.subheader}>📄 Riwayat Barang Keluar</Text>
-        {riwayatKeluar.map((item, index) => (
-          <View key={index} style={styles.detailRow}>
-            <Text style={styles.label}>
-              {item.nama} ({item.kode})
-            </Text>
-            <Text style={styles.label}>
-              Large: {item.large} | Medium: {item.medium} | Small: {item.small}
-            </Text>
-            <Text style={styles.label}>
-              Tanggal: {new Date(item.waktu).toLocaleDateString()}
-            </Text>
-          </View>
-        ))}
+        {riwayatKeluar.length === 0 ? (
+          <Text style={styles.label}>Tidak ada data keluar</Text>
+        ) : (
+          riwayatKeluar.map((t, idx) => (
+            <View key={idx} style={styles.detailRow}>
+              <Text style={styles.label}>
+                Tanggal: {new Date(t.waktu).toLocaleDateString()}
+              </Text>
+              <Text style={styles.label}>
+                Large: {t.large} | Medium: {t.medium} | Small: {t.small}
+              </Text>
+            </View>
+          ))
+        )}
 
         <TouchableOpacity
           style={styles.resetButton}
@@ -189,7 +191,7 @@ export default function StockScreen() {
   const renderItem = ({ item }: { item: Barang }) => (
     <TouchableOpacity
       style={styles.card}
-      onPress={() => handleShowDetail(item.principle)}
+      onPress={() => handleShowDetail(item)}
     >
       <Text style={styles.cardTitle}>
         {item.nama} ({item.kode})
@@ -244,11 +246,7 @@ export default function StockScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 16,
-    backgroundColor: "#ffffff",
-  },
+  container: { flex: 1, padding: 16, backgroundColor: "#ffffff" },
   header: {
     fontSize: 22,
     fontWeight: "bold",
@@ -295,15 +293,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 8,
   },
-  label: {
-    color: "#475569",
-    fontSize: 15,
-  },
-  value: {
-    color: "#1e293b",
-    fontSize: 15,
-    fontWeight: "500",
-  },
+  label: { color: "#475569", fontSize: 15 },
+  value: { color: "#1e293b", fontSize: 15, fontWeight: "500" },
   exportButton: {
     backgroundColor: "#10b981",
     padding: 14,
@@ -311,19 +302,14 @@ const styles = StyleSheet.create({
     marginTop: 12,
     alignItems: "center",
   },
-  exportText: {
-    color: "#ffffff",
-    fontWeight: "bold",
-  },
+  exportText: { color: "#ffffff", fontWeight: "bold" },
   emptyText: {
     textAlign: "center",
     color: "#6b7280",
     marginTop: 40,
     fontSize: 16,
   },
-  listContent: {
-    paddingBottom: 20,
-  },
+  listContent: { paddingBottom: 20 },
   detailRow: {
     borderBottomWidth: 1,
     borderBottomColor: "#e5e7eb",
@@ -336,8 +322,5 @@ const styles = StyleSheet.create({
     marginTop: 12,
     alignItems: "center",
   },
-  resetText: {
-    color: "#ffffff",
-    fontWeight: "bold",
-  },
+  resetText: { color: "#ffffff", fontWeight: "bold" },
 });

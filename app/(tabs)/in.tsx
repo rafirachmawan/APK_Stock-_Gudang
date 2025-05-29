@@ -1,4 +1,4 @@
-// InScreen.tsx - Dengan input ED per item (manual input tanggal) + Surat Jalan
+// InScreen.tsx - Catatan per item
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -25,6 +25,7 @@ interface ItemInput {
   large: string;
   medium: string;
   small: string;
+  catatan: string;
 }
 
 interface PurchaseForm {
@@ -33,9 +34,8 @@ interface PurchaseForm {
   kodeApos: string;
   suratJalan: string;
   principle: string;
-  catatan: string;
-  items: ItemInput[];
   waktuInput: string;
+  items: ItemInput[];
 }
 
 export default function InScreen() {
@@ -44,10 +44,18 @@ export default function InScreen() {
   const [kodeApos, setKodeApos] = useState("");
   const [suratJalan, setSuratJalan] = useState("");
   const [principle, setPrinciple] = useState("");
-  const [catatan, setCatatan] = useState("");
   const [items, setItems] = useState<ItemInput[]>([
-    { namaBarang: "", kode: "", ed: "", large: "", medium: "", small: "" },
+    {
+      namaBarang: "",
+      kode: "",
+      ed: "",
+      large: "",
+      medium: "",
+      small: "",
+      catatan: "",
+    },
   ]);
+
   const [openDropdownIndex, setOpenDropdownIndex] = useState<number | null>(
     null
   );
@@ -105,7 +113,10 @@ export default function InScreen() {
 
       const principles = Array.from(
         new Set(jsonData.map((item: any) => item.brand))
-      ).map((p) => ({ label: p, value: p }));
+      ).map((p) => ({
+        label: p,
+        value: p,
+      }));
       setPrincipleList(principles);
     } catch (err) {
       Alert.alert("Error", "Gagal membaca data Excel");
@@ -143,7 +154,15 @@ export default function InScreen() {
   const tambahItem = () => {
     setItems([
       ...items,
-      { namaBarang: "", kode: "", ed: "", large: "", medium: "", small: "" },
+      {
+        namaBarang: "",
+        kode: "",
+        ed: "",
+        large: "",
+        medium: "",
+        small: "",
+        catatan: "",
+      },
     ]);
   };
 
@@ -166,7 +185,6 @@ export default function InScreen() {
         kodeApos,
         suratJalan,
         principle,
-        catatan,
         waktuInput: new Date().toISOString(),
         items,
       };
@@ -182,9 +200,16 @@ export default function InScreen() {
       setKodeApos("");
       setSuratJalan("");
       setPrinciple("");
-      setCatatan("");
       setItems([
-        { namaBarang: "", kode: "", ed: "", large: "", medium: "", small: "" },
+        {
+          namaBarang: "",
+          kode: "",
+          ed: "",
+          large: "",
+          medium: "",
+          small: "",
+          catatan: "",
+        },
       ]);
     } catch (error) {
       console.error(error);
@@ -273,6 +298,7 @@ export default function InScreen() {
                 ❌ Hapus
               </Text>
             </TouchableOpacity>
+
             <DropDownPicker
               items={filteredNamaItems[index] || []}
               open={openDropdownIndex === index}
@@ -291,12 +317,14 @@ export default function InScreen() {
               searchable={true}
               disabled={!principle}
             />
+
             <TextInput
               value={item.kode}
               editable={false}
               placeholder="Kode Barang"
               style={styles.inputDisabled}
             />
+
             <Text style={styles.label}>ED (Tanggal Kedaluwarsa)</Text>
             <TouchableOpacity
               onPress={() => setDatePickerIndex(index)}
@@ -321,6 +349,7 @@ export default function InScreen() {
                 }}
               />
             )}
+
             <Text style={styles.label}>Large</Text>
             <TextInput
               value={item.large}
@@ -328,6 +357,7 @@ export default function InScreen() {
               style={styles.input}
               keyboardType="numeric"
             />
+
             <Text style={styles.label}>Medium</Text>
             <TextInput
               value={item.medium}
@@ -335,12 +365,20 @@ export default function InScreen() {
               style={styles.input}
               keyboardType="numeric"
             />
+
             <Text style={styles.label}>Small</Text>
             <TextInput
               value={item.small}
               onChangeText={(t) => updateItem(index, "small", t)}
               style={styles.input}
               keyboardType="numeric"
+            />
+
+            <Text style={styles.label}>Catatan</Text>
+            <TextInput
+              value={item.catatan}
+              onChangeText={(t) => updateItem(index, "catatan", t)}
+              style={styles.input}
             />
           </View>
         ))}
@@ -350,13 +388,6 @@ export default function InScreen() {
             ➕ Tambah Item
           </Text>
         </TouchableOpacity>
-
-        <Text style={styles.label}>Catatan</Text>
-        <TextInput
-          value={catatan}
-          onChangeText={setCatatan}
-          style={styles.input}
-        />
 
         <TouchableOpacity style={styles.buttonContainer} onPress={handleSubmit}>
           <Text style={styles.buttonText}>Simpan Pembelian</Text>
