@@ -1,5 +1,3 @@
-// OutDetailScreen.tsx
-
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system";
@@ -25,102 +23,105 @@ if (
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-interface Barang {
+interface ItemOut {
+  namaBarang: string;
   kode: string;
-  nama: string;
-  stokLarge: number;
-  stokMedium: number;
-  stokSmall: number;
-  ed: string;
-  catatan: string;
-  waktuInput: string;
-  kategori: string;
+  large: number;
+  medium: number;
+  small: number;
   principle: string;
+  ed?: string;
+  catatan?: string;
 }
 
+interface TransaksiOut {
+  kodeGdng: string;
+  kodeApos: string;
+  kategori: string;
+  catatan: string;
+  nomorKendaraan: string;
+  namaSopir: string;
+  waktuInput: string;
+  items: ItemOut[];
+}
+// ... import tetap sama
+
 export default function OutDetailScreen() {
-  const [forms, setForms] = useState<Barang[]>([]);
-  const [expandedIndexes, setExpandedIndexes] = useState<number[]>([]);
-  const [activeDateIndex, setActiveDateIndex] = useState<number | null>(null);
+  const [data, setData] = useState<TransaksiOut[]>([]);
+  const [expanded, setExpanded] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
 
   useFocusEffect(
     useCallback(() => {
       const load = async () => {
         const json = await AsyncStorage.getItem("barangKeluar");
-        const data: Barang[] = json ? JSON.parse(json) : [];
-        setForms(data);
+        const parsed: TransaksiOut[] = json ? JSON.parse(json) : [];
+        setData(parsed);
       };
       load();
     }, [])
   );
 
-  const toggleExpand = (index: number) => {
+  const toggleExpand = (kodeApos: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setExpandedIndexes((prev) =>
-      prev.includes(index) ? prev.filter((i) => i !== index) : [...prev, index]
+    setExpanded((prev) =>
+      prev.includes(kodeApos)
+        ? prev.filter((k) => k !== kodeApos)
+        : [...prev, kodeApos]
     );
   };
 
-  const updateFormField = (
-    formIndex: number,
-    field: keyof Barang,
-    value: any
-  ) => {
-    const updatedForms = [...forms];
-    (updatedForms[formIndex] as any)[field] = [
-      "stokLarge",
-      "stokMedium",
-      "stokSmall",
-    ].includes(field)
-      ? parseInt(value) || 0
-      : value;
-
-    setForms(updatedForms);
-  };
-
   const saveToStorage = async () => {
-    await AsyncStorage.setItem("barangKeluar", JSON.stringify(forms));
+    await AsyncStorage.setItem("barangKeluar", JSON.stringify(data));
     alert("✅ Data berhasil disimpan");
   };
 
   const exportToExcel = async () => {
-    const allItems = forms.map((form, index) => ({
-      No: index + 1,
-      Kategori: form.kategori,
-      Principle: form.principle,
-      Kode: form.kode,
-      Nama: form.nama,
-      Large: form.stokLarge,
-      Medium: form.stokMedium,
-      Small: form.stokSmall,
-      ED: form.ed || "-",
-      Catatan: form.catatan || "-",
-      "Waktu Input": new Date(form.waktuInput).toLocaleString(),
-    }));
+    const allItems = data.flatMap((trx) =>
+      trx.items.map((item) => ({
+        KodeApos: trx.kodeApos,
+        KodeGudang: trx.kodeGdng,
+        Waktu: new Date(trx.waktuInput).toLocaleString(),
+        Kategori: trx.kategori,
+        Principle: item.principle,
+        Nama: item.namaBarang,
+        Kode: item.kode,
+        Large: item.large,
+        Medium: item.medium,
+        Small: item.small,
+        ED: item.ed || "-",
+        Catatan: item.catatan || "-",
+      }))
+    );
 
-    const worksheet = XLSX.utils.json_to_sheet(allItems);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "BarangKeluar");
+    const ws = XLSX.utils.json_to_sheet(allItems);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "BarangKeluar");
 
-    const binaryExcel = XLSX.write(workbook, {
-      type: "base64",
-      bookType: "xlsx",
-    });
-
-    const filePath = FileSystem.documentDirectory + "barang-keluar.xlsx";
-    await FileSystem.writeAsStringAsync(filePath, binaryExcel, {
+    const base64 = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
+    const fileUri = FileSystem.documentDirectory + "barang-keluar.xlsx";
+    await FileSystem.writeAsStringAsync(fileUri, base64, {
       encoding: FileSystem.EncodingType.Base64,
     });
 
-    await Sharing.shareAsync(filePath);
+    await Sharing.shareAsync(fileUri);
   };
 
-  const filteredForms = forms.filter(
-    (form) =>
-      form.principle.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      form.nama.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filtered = data.filter((trx) => {
+    const kodeAposMatch = (trx?.kodeApos || "")
+      .toLowerCase()
+      .includes(searchQuery.toLowerCase());
+
+    const namaMatch = Array.isArray(trx?.items)
+      ? trx.items.some((item) =>
+          (item?.namaBarang || "")
+            .toLowerCase()
+            .includes(searchQuery.toLowerCase())
+        )
+      : false;
+
+    return kodeAposMatch || namaMatch;
+  });
 
   return (
     <ScrollView style={styles.container}>
@@ -128,91 +129,110 @@ export default function OutDetailScreen() {
 
       <TextInput
         style={styles.searchInput}
-        placeholder="Cari berdasarkan principle atau nama barang..."
+        placeholder="Cari berdasarkan kodeApos atau nama barang..."
         value={searchQuery}
         onChangeText={setSearchQuery}
       />
 
-      {filteredForms.map((form, formIndex) => (
-        <View key={formIndex} style={styles.itemContainer}>
-          <TouchableOpacity onPress={() => toggleExpand(formIndex)}>
+      <TouchableOpacity style={styles.exportBtn} onPress={exportToExcel}>
+        <Text style={styles.exportText}>📤 Export ke Excel</Text>
+      </TouchableOpacity>
+
+      {filtered.map((trx, trxIndex) => (
+        <View key={trxIndex} style={{ marginBottom: 16 }}>
+          <TouchableOpacity onPress={() => toggleExpand(trx.kodeApos)}>
             <Text style={styles.itemTitle}>
-              [{formIndex + 1}] {form.nama} ({form.kode})
+              📌 Kode Apos: {trx.kodeApos} (
+              {Array.isArray(trx.items) ? trx.items.length : 0} item)
+            </Text>
+
+            <Text style={styles.readOnlyText}>
+              Gudang: {trx.kategori} | Sopir: {trx.namaSopir} | No. Kendaraan:{" "}
+              {trx.nomorKendaraan}
             </Text>
           </TouchableOpacity>
 
-          {expandedIndexes.includes(formIndex) && (
-            <View>
-              <Text style={styles.label}>Kategori</Text>
-              <Text style={styles.readOnlyText}>{form.kategori}</Text>
+          {expanded.includes(trx.kodeApos) &&
+            trx.items.map((item, itemIndex) => (
+              <View key={itemIndex} style={styles.itemContainer}>
+                <Text style={styles.itemTitle}>
+                  {item.namaBarang} ({item.kode})
+                </Text>
 
-              <Text style={styles.label}>Principle</Text>
-              <Text style={styles.readOnlyText}>{form.principle}</Text>
+                <Text style={styles.label}>Principle</Text>
+                <Text style={styles.readOnlyText}>{item.principle}</Text>
 
-              <Text style={styles.label}>ED</Text>
-              <Text style={styles.readOnlyText}>
-                {form.ed || "📅 Tidak tersedia"}
-              </Text>
+                <Text style={styles.label}>ED</Text>
+                <TextInput
+                  style={styles.input}
+                  value={item.ed || ""}
+                  onChangeText={(text) => {
+                    const copy = [...data];
+                    copy[trxIndex].items[itemIndex].ed = text;
+                    setData(copy);
+                  }}
+                />
 
-              <Text style={styles.label}>Catatan</Text>
-              <TextInput
-                style={styles.input}
-                value={form.catatan}
-                onChangeText={(text) =>
-                  updateFormField(formIndex, "catatan", text)
-                }
-              />
+                <Text style={styles.label}>Catatan</Text>
+                <TextInput
+                  style={styles.input}
+                  value={item.catatan || ""}
+                  onChangeText={(text) => {
+                    const copy = [...data];
+                    copy[trxIndex].items[itemIndex].catatan = text;
+                    setData(copy);
+                  }}
+                />
 
-              <Text style={styles.label}>Stok</Text>
-              <TextInput
-                style={styles.input}
-                value={form.stokLarge.toString()}
-                onChangeText={(text) =>
-                  updateFormField(formIndex, "stokLarge", text)
-                }
-                placeholder="Large"
-                keyboardType="numeric"
-              />
-              <TextInput
-                style={styles.input}
-                value={form.stokMedium.toString()}
-                onChangeText={(text) =>
-                  updateFormField(formIndex, "stokMedium", text)
-                }
-                placeholder="Medium"
-                keyboardType="numeric"
-              />
-              <TextInput
-                style={styles.input}
-                value={form.stokSmall.toString()}
-                onChangeText={(text) =>
-                  updateFormField(formIndex, "stokSmall", text)
-                }
-                placeholder="Small"
-                keyboardType="numeric"
-              />
-            </View>
-          )}
+                <Text style={styles.label}>Stok</Text>
+                <TextInput
+                  style={styles.input}
+                  value={item.large.toString()}
+                  onChangeText={(text) => {
+                    const copy = [...data];
+                    copy[trxIndex].items[itemIndex].large = parseInt(text) || 0;
+                    setData(copy);
+                  }}
+                  placeholder="Large"
+                  keyboardType="numeric"
+                />
+                <TextInput
+                  style={styles.input}
+                  value={item.medium.toString()}
+                  onChangeText={(text) => {
+                    const copy = [...data];
+                    copy[trxIndex].items[itemIndex].medium =
+                      parseInt(text) || 0;
+                    setData(copy);
+                  }}
+                  placeholder="Medium"
+                  keyboardType="numeric"
+                />
+                <TextInput
+                  style={styles.input}
+                  value={item.small.toString()}
+                  onChangeText={(text) => {
+                    const copy = [...data];
+                    copy[trxIndex].items[itemIndex].small = parseInt(text) || 0;
+                    setData(copy);
+                  }}
+                  placeholder="Small"
+                  keyboardType="numeric"
+                />
+              </View>
+            ))}
         </View>
       ))}
 
       <TouchableOpacity style={styles.saveBtn} onPress={saveToStorage}>
         <Text style={styles.saveText}>💾 Simpan Perubahan</Text>
       </TouchableOpacity>
-
-      <TouchableOpacity style={styles.exportBtn} onPress={exportToExcel}>
-        <Text style={styles.exportText}>📤 Export ke Excel</Text>
-      </TouchableOpacity>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 16,
-    backgroundColor: "#fff",
-  },
+  container: { flex: 1, padding: 16, backgroundColor: "#fff" },
   title: {
     fontSize: 20,
     fontWeight: "bold",
@@ -223,7 +243,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "bold",
     color: "#1e293b",
-    marginBottom: 6,
+    marginBottom: 8,
   },
   label: {
     fontSize: 14,
@@ -260,10 +280,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 12,
   },
-  saveText: {
-    color: "#ffffff",
-    fontWeight: "bold",
-  },
+  saveText: { color: "#fff", fontWeight: "bold" },
   exportBtn: {
     backgroundColor: "#3b82f6",
     padding: 12,
@@ -271,10 +288,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 30,
   },
-  exportText: {
-    color: "#ffffff",
-    fontWeight: "bold",
-  },
+  exportText: { color: "#fff", fontWeight: "bold" },
   searchInput: {
     borderWidth: 1,
     borderColor: "#d1d5db",

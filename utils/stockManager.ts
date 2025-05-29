@@ -31,6 +31,7 @@ export const getCurrentStock = async (): Promise<Barang[]> => {
 
     const stockMap = new Map<string, Barang>();
 
+    // Proses barang masuk
     dataMasuk.forEach((form: any) => {
       if (!form.items || !Array.isArray(form.items)) return;
 
@@ -63,7 +64,6 @@ export const getCurrentStock = async (): Promise<Barang[]> => {
           existing.stokMedium += medium;
           existing.stokSmall += small;
 
-          // Update ED jika data baru memiliki tanggal ED lebih baru
           if (item.ed) {
             const currentED = new Date(existing.ed || "1900-01-01");
             const newED = new Date(item.ed);
@@ -75,17 +75,24 @@ export const getCurrentStock = async (): Promise<Barang[]> => {
       });
     });
 
-    dataKeluar.forEach((item: any) => {
-      const existing = stockMap.get(item.kode);
-      if (existing) {
-        existing.stokLarge -= item.stokLarge;
-        existing.stokMedium -= item.stokMedium;
-        existing.stokSmall -= item.stokSmall;
+    // Proses barang keluar
+    dataKeluar.forEach((trx: any) => {
+      if (!trx.items || !Array.isArray(trx.items)) return;
 
-        if (existing.stokLarge < 0) existing.stokLarge = 0;
-        if (existing.stokMedium < 0) existing.stokMedium = 0;
-        if (existing.stokSmall < 0) existing.stokSmall = 0;
-      }
+      trx.items.forEach((item: any) => {
+        const kode = item.kode;
+        const existing = stockMap.get(kode);
+
+        if (existing) {
+          existing.stokLarge -= parseInt(item.large) || 0;
+          existing.stokMedium -= parseInt(item.medium) || 0;
+          existing.stokSmall -= parseInt(item.small) || 0;
+
+          if (existing.stokLarge < 0) existing.stokLarge = 0;
+          if (existing.stokMedium < 0) existing.stokMedium = 0;
+          if (existing.stokSmall < 0) existing.stokSmall = 0;
+        }
+      });
     });
 
     return Array.from(stockMap.values());
@@ -125,5 +132,50 @@ export const resetAllStock = async (): Promise<void> => {
     console.log("Semua stok berhasil dihapus.");
   } catch (error) {
     console.error("Gagal menghapus semua stok:", error);
+  }
+};
+
+// 🔄 Fungsi opsional untuk migrasi data lama (flat item) ke bentuk transaksi
+export const migrateOldOutFormat = async (): Promise<void> => {
+  try {
+    const json = await AsyncStorage.getItem("barangKeluar");
+    const oldData = json ? JSON.parse(json) : [];
+
+    const grouped: Record<string, any> = {};
+
+    for (const item of oldData) {
+      if (!item.kodeApos || item.items) continue; // skip jika sudah format baru
+
+      const key = item.kodeApos;
+      if (!grouped[key]) {
+        grouped[key] = {
+          kodeApos: item.kodeApos,
+          kodeGdng: item.kodeGdng || "",
+          kategori: item.kategori || "",
+          catatan: item.catatan || "",
+          nomorKendaraan: item.nomorKendaraan || "",
+          namaSopir: item.namaSopir || "",
+          waktuInput: item.waktuInput || new Date().toISOString(),
+          items: [],
+        };
+      }
+
+      grouped[key].items.push({
+        namaBarang: item.nama || item.namaBarang,
+        kode: item.kode,
+        large: item.stokLarge || 0,
+        medium: item.stokMedium || 0,
+        small: item.stokSmall || 0,
+        principle: item.principle || "",
+        ed: item.ed || "",
+        catatan: item.catatan || "",
+      });
+    }
+
+    const final = Object.values(grouped);
+    await AsyncStorage.setItem("barangKeluar", JSON.stringify(final));
+    console.log("✅ Migrasi selesai. Data sudah dalam format transaksi.");
+  } catch (error) {
+    console.error("Gagal migrasi data lama:", error);
   }
 };

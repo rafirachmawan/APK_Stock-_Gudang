@@ -1,5 +1,3 @@
-// OutScreen.tsx - Versi Final + Reset Kode Gudang
-
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useIsFocused } from "@react-navigation/native";
 import React, { useEffect, useState } from "react";
@@ -150,29 +148,32 @@ export default function OutScreen() {
           Alert.alert("Error", `Stok tidak cukup untuk ${item.namaBarang}`);
           return;
         }
-
-        const barangKeluar: Barang = {
-          kode: item.kode,
-          nama: item.namaBarang,
-          stokLarge: parseInt(item.large || "0"),
-          stokMedium: parseInt(item.medium || "0"),
-          stokSmall: parseInt(item.small || "0"),
-          catatan,
-          ed: stok.ed,
-          waktuInput: new Date().toISOString(),
-          principle: item.principle,
-          kategori,
-          nomorKendaraan,
-          namaSopir,
-        };
-
-        const existing = await AsyncStorage.getItem("barangKeluar");
-        const parsed = existing ? JSON.parse(existing) : [];
-        parsed.push(barangKeluar);
-        await AsyncStorage.setItem("barangKeluar", JSON.stringify(parsed));
       }
 
+      const transaksiBaru = {
+        kodeGdng: finalKode,
+        kodeApos,
+        kategori,
+        catatan,
+        nomorKendaraan,
+        namaSopir,
+        waktuInput: new Date().toISOString(),
+        items: items.map((item) => ({
+          namaBarang: item.namaBarang,
+          kode: item.kode,
+          large: parseInt(item.large || "0"),
+          medium: parseInt(item.medium || "0"),
+          small: parseInt(item.small || "0"),
+          principle: item.principle,
+        })),
+      };
+
+      const existing = await AsyncStorage.getItem("barangKeluar");
+      const parsed = existing ? JSON.parse(existing) : [];
+      parsed.push(transaksiBaru);
+      await AsyncStorage.setItem("barangKeluar", JSON.stringify(parsed));
       await AsyncStorage.setItem(kodeKey, counter.toString());
+
       Alert.alert(
         "Sukses",
         `Barang berhasil dikeluarkan dengan kode ${finalKode}`
