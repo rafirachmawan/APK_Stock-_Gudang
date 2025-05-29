@@ -44,7 +44,6 @@ interface TransaksiOut {
   waktuInput: string;
   items: ItemOut[];
 }
-// ... import tetap sama
 
 export default function OutDetailScreen() {
   const [data, setData] = useState<TransaksiOut[]>([]);
@@ -72,7 +71,20 @@ export default function OutDetailScreen() {
   };
 
   const saveToStorage = async () => {
-    await AsyncStorage.setItem("barangKeluar", JSON.stringify(data));
+    const filtered = data.filter(
+      (trx) =>
+        trx.kodeApos &&
+        trx.waktuInput &&
+        Array.isArray(trx.items) &&
+        trx.items.length > 0
+    );
+
+    console.log(
+      "📦 Data disimpan ke AsyncStorage:",
+      JSON.stringify(filtered, null, 2)
+    );
+
+    await AsyncStorage.setItem("barangKeluar", JSON.stringify(filtered));
     alert("✅ Data berhasil disimpan");
   };
 

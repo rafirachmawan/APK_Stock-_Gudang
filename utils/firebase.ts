@@ -1,4 +1,3 @@
-// firebase.ts - Final revisi untuk mencegah ID undefined dan menyesuaikan format untuk halaman detail
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { initializeApp } from "firebase/app";
 import {
@@ -38,12 +37,12 @@ export const syncDownload = async () => {
 
       if (!groupMap.has(id)) {
         groupMap.set(id, {
-          gudang: d.kategori || "",
-          kodeGdng: d.kodeGdng || "",
-          kodeApos: d.kodeApos || "",
-          suratJalan: d.suratJalan || "",
-          principle: d.principle || "",
-          catatan: d.catatan || "",
+          gudang: d.kategori ?? "",
+          kodeGdng: d.kodeGdng ?? "",
+          kodeApos: d.kodeApos ?? "",
+          suratJalan: d.suratJalan ?? "",
+          principle: d.principle ?? "",
+          catatan: d.catatan ?? "",
           waktuInput: d.waktuInput,
           items: [],
         });
@@ -51,12 +50,13 @@ export const syncDownload = async () => {
 
       const parent = groupMap.get(id);
       parent.items.push({
-        namaBarang: d.nama,
-        kode: d.kode,
-        large: String(d.stokLarge),
-        medium: String(d.stokMedium),
-        small: String(d.stokSmall),
-        ed: d.ed,
+        namaBarang: d.nama ?? "",
+        kode: d.kode ?? "",
+        large: String(d.stokLarge ?? 0),
+        medium: String(d.stokMedium ?? 0),
+        small: String(d.stokSmall ?? 0),
+        ed: d.ed ?? "",
+        catatan: d.catatan ?? "",
       });
     });
 
@@ -83,34 +83,66 @@ export const syncUpload = async () => {
     ]);
 
     const dataIn: any[] = inValue ? JSON.parse(inValue) : [];
-    const dataOut: Barang[] = outValue ? JSON.parse(outValue) : [];
+    const dataOut: any[] = outValue ? JSON.parse(outValue) : [];
 
+    // Flatten barangMasuk
     const flatIn: Barang[] = [];
     for (const form of dataIn) {
       const waktuInput = form.waktuInput;
       const base = {
-        kodeGdng: form.kodeGdng,
-        kodeApos: form.kodeApos,
-        suratJalan: form.suratJalan,
-        principle: form.principle,
-        catatan: form.catatan,
-        waktuInput,
-        kategori: form.gudang,
+        kodeGdng: form.kodeGdng ?? "",
+        kodeApos: form.kodeApos ?? "",
+        suratJalan: form.suratJalan ?? "",
+        principle: form.principle ?? "",
+        catatan: typeof form.catatan === "string" ? form.catatan : "",
+        waktuInput: waktuInput ?? new Date().toISOString(),
+        kategori: form.gudang ?? "",
       };
 
-      for (const item of form.items) {
+      for (const item of form.items ?? []) {
         flatIn.push({
           ...base,
-          kode: item.kode,
-          nama: item.namaBarang,
+          kode: item.kode ?? "",
+          nama: item.namaBarang ?? "",
           stokLarge: parseInt(item.large) || 0,
           stokMedium: parseInt(item.medium) || 0,
           stokSmall: parseInt(item.small) || 0,
-          ed: item.ed,
+          ed: item.ed ?? "",
+          catatan: typeof item.catatan === "string" ? item.catatan : "",
         });
       }
     }
 
+    // Flatten barangKeluar
+    const flatOut: Barang[] = [];
+    for (const trx of dataOut) {
+      const waktuInput = trx.waktuInput;
+      const base = {
+        kodeApos: trx.kodeApos ?? "",
+        kodeGdng: trx.kodeGdng ?? "",
+        kategori: trx.kategori ?? "",
+        catatan: trx.catatan ?? "",
+        waktuInput: waktuInput ?? new Date().toISOString(),
+        nomorKendaraan: trx.nomorKendaraan ?? "",
+        namaSopir: trx.namaSopir ?? "",
+      };
+
+      for (const item of trx.items ?? []) {
+        flatOut.push({
+          ...base,
+          kode: item.kode ?? "",
+          nama: item.namaBarang ?? "",
+          stokLarge: parseInt(item.large) || 0,
+          stokMedium: parseInt(item.medium) || 0,
+          stokSmall: parseInt(item.small) || 0,
+          ed: item.ed ?? "",
+          principle: item.principle ?? "",
+          catatan: item.catatan ?? "",
+        });
+      }
+    }
+
+    // Sync barangMasuk ke Firebase
     const snapshotIn = await getDocs(collection(db, COLLECTION_IN));
     const firebaseInIds = snapshotIn.docs.map((doc) => doc.id);
     const localInIds = flatIn.map((item) => `${item.kode}-${item.waktuInput}`);
@@ -125,9 +157,10 @@ export const syncUpload = async () => {
       }
     }
 
+    // Sync barangKeluar ke Firebase
     const snapshotOut = await getDocs(collection(db, COLLECTION_OUT));
     const firebaseOutIds = snapshotOut.docs.map((doc) => doc.id);
-    const localOutIds = dataOut.map(
+    const localOutIds = flatOut.map(
       (item) => `${item.kode}-${item.waktuInput}`
     );
     const toDeleteOut = firebaseOutIds.filter(
@@ -136,12 +169,14 @@ export const syncUpload = async () => {
     for (const id of toDeleteOut) {
       await deleteDoc(doc(db, COLLECTION_OUT, id));
     }
-    for (const item of dataOut) {
+    for (const item of flatOut) {
       const id = `${item.kode}-${item.waktuInput}`;
       if (item.kode && item.waktuInput) {
         await setDoc(doc(db, COLLECTION_OUT, id), item);
       }
     }
+
+    console.log("✅ Upload barangMasuk & barangKeluar selesai.");
   } catch (error) {
     console.error("❌ Gagal syncUpload:", error);
     throw error;

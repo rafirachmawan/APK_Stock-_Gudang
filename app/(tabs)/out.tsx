@@ -22,6 +22,7 @@ interface ItemOut {
   medium: string;
   small: string;
   principle: string;
+  waktuInput?: string;
 }
 
 export default function OutScreen() {
@@ -133,6 +134,7 @@ export default function OutScreen() {
       const kodeKey = "kodeGdngOutCounter";
       let counter = parseInt((await AsyncStorage.getItem(kodeKey)) || "0") + 1;
       const finalKode = counter.toString().padStart(5, "0");
+      const waktuInput = new Date().toISOString();
 
       for (const item of items) {
         const stok = dataMasuk.find((b) => b.kode === item.kode);
@@ -157,7 +159,7 @@ export default function OutScreen() {
         catatan,
         nomorKendaraan,
         namaSopir,
-        waktuInput: new Date().toISOString(),
+        waktuInput,
         items: items.map((item) => ({
           namaBarang: item.namaBarang,
           kode: item.kode,
@@ -165,6 +167,7 @@ export default function OutScreen() {
           medium: parseInt(item.medium || "0"),
           small: parseInt(item.small || "0"),
           principle: item.principle,
+          waktuInput, // ✅ Ditambahkan
         })),
       };
 
