@@ -1,12 +1,11 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { collection, doc, getDocs, setDoc } from "firebase/firestore";
 import { db } from "./firebase";
-import { Barang } from "./stockManager";
 
 const COLLECTION_MASUK = "barangMasuk";
 const COLLECTION_KELUAR = "barangKeluar";
 
-// Tidak hapus string kosong, hanya undefined yang dibuang
+// Membersihkan field undefined (tapi biarkan string kosong)
 const deepClean = (obj: any): any => {
   if (Array.isArray(obj)) {
     return obj.map(deepClean).filter((v) => v !== undefined);
@@ -32,7 +31,6 @@ export const syncUpload = async () => {
   for (const trx of dataMasuk) {
     if (!trx.kodeGdng || !trx.waktuInput) continue;
 
-    // 🔍 DEBUG: tampilkan isi transaksi
     console.log("📦 Upload barangMasuk:");
     console.log(JSON.stringify(trx, null, 2));
 
@@ -45,7 +43,6 @@ export const syncUpload = async () => {
       console.log(`🔹 Item #${index + 1}:`, item);
     });
 
-    // Perbaiki data agar tidak undefined
     const fixedItems = trx.items.map((item: any) => ({
       namaBarang: item.namaBarang ?? "",
       kode: item.kode ?? "",
@@ -53,7 +50,7 @@ export const syncUpload = async () => {
       large: item.large ?? "",
       medium: item.medium ?? "",
       small: item.small ?? "",
-      catatan: item.catatan ?? "", // 💡 ini kunci
+      catatan: item.catatan ?? "",
     }));
 
     const cleaned = deepClean({
@@ -111,15 +108,30 @@ export const syncUpload = async () => {
 };
 
 export const syncDownload = async () => {
-  const snapshot = await getDocs(collection(db, COLLECTION_MASUK));
-  const data: Barang[] = [];
-  snapshot.forEach((doc) => {
-    data.push(doc.data() as Barang);
-  });
-  await AsyncStorage.setItem("barangMasuk", JSON.stringify(data));
+  try {
+    console.log("⏬ Mulai download dari Firebase...");
+
+    // Barang Masuk
+    const snapshotMasuk = await getDocs(collection(db, COLLECTION_MASUK));
+    const dataMasuk = snapshotMasuk.docs.map((doc) => doc.data());
+    await AsyncStorage.setItem("barangMasuk", JSON.stringify(dataMasuk));
+    console.log(`✅ Download barangMasuk: ${dataMasuk.length} data`);
+
+    // Barang Keluar
+    const snapshotKeluar = await getDocs(collection(db, COLLECTION_KELUAR));
+    const dataKeluar = snapshotKeluar.docs.map((doc) => doc.data());
+    await AsyncStorage.setItem("barangKeluar", JSON.stringify(dataKeluar));
+    console.log(`✅ Download barangKeluar: ${dataKeluar.length} data`);
+
+    console.log("🟢 Selesai syncDownload.");
+  } catch (err) {
+    console.error("❌ Gagal syncDownload:", err);
+    throw err;
+  }
 };
 
 export const resetSemuaHistory = async () => {
   await AsyncStorage.removeItem("barangMasuk");
   await AsyncStorage.removeItem("barangKeluar");
+  console.log("🧹 Semua histori berhasil dihapus dari lokal.");
 };

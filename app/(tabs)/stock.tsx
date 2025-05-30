@@ -1,5 +1,4 @@
-// Versi final StockScreen.tsx
-// Menampilkan riwayat masuk/keluar hanya untuk 1 kode barang yang diklik
+// StockScreen.tsx - Versi Final Menampilkan Riwayat Masuk & Keluar per Barang
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useIsFocused } from "@react-navigation/native";
@@ -73,14 +72,17 @@ export default function StockScreen() {
         }))
     );
 
-    const keluarFiltered = keluar
-      .filter((f: any) => f.kode === kode)
-      .map((i: any) => ({
-        waktu: i.waktuInput,
-        large: i.stokLarge,
-        medium: i.stokMedium,
-        small: i.stokSmall,
-      }));
+    const keluarFiltered = keluar.flatMap((trx: any) =>
+      (trx.items || [])
+        .filter((item: any) => item.kode === kode)
+        .map((item: any) => ({
+          waktu: trx.waktuInput,
+          large: parseInt(item.large),
+          medium: parseInt(item.medium),
+          small: parseInt(item.small),
+          catatan: item.catatan || "",
+        }))
+    );
 
     setRiwayatMasuk(masukFiltered);
     setRiwayatKeluar(keluarFiltered);
@@ -174,6 +176,9 @@ export default function StockScreen() {
               <Text style={styles.label}>
                 Large: {t.large} | Medium: {t.medium} | Small: {t.small}
               </Text>
+              {t.catatan ? (
+                <Text style={styles.label}>Catatan: {t.catatan}</Text>
+              ) : null}
             </View>
           ))
         )}

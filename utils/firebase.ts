@@ -1,4 +1,3 @@
-// firebase.ts
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { initializeApp } from "firebase/app";
 import {
@@ -25,17 +24,17 @@ export const db = getFirestore(app);
 
 const COLLECTION_IN = "barangMasuk";
 const COLLECTION_OUT = "barangKeluar";
+const COLLECTION_GENERATE = "hasilGenerate";
 
+// ------------------ SYNC DOWNLOAD ------------------
 export const syncDownload = async () => {
   try {
-    // --- Barang Masuk ---
+    // Barang Masuk
     const snapshotIn = await getDocs(collection(db, COLLECTION_IN));
     const groupMapIn = new Map<string, any>();
-
     snapshotIn.forEach((docSnap) => {
       const d = docSnap.data();
       const id = `${d.kodeGdng}-${d.waktuInput}`;
-
       if (!groupMapIn.has(id)) {
         groupMapIn.set(id, {
           gudang: d.kategori ?? "",
@@ -48,7 +47,6 @@ export const syncDownload = async () => {
           items: [],
         });
       }
-
       const parent = groupMapIn.get(id);
       parent.items.push({
         namaBarang: d.nama ?? "",
@@ -60,18 +58,15 @@ export const syncDownload = async () => {
         catatan: d.catatan ?? "",
       });
     });
-
     const groupedIn = [...groupMapIn.values()];
     await AsyncStorage.setItem("barangMasuk", JSON.stringify(groupedIn));
 
-    // --- Barang Keluar ---
+    // Barang Keluar
     const snapshotOut = await getDocs(collection(db, COLLECTION_OUT));
     const groupMapOut = new Map<string, any>();
-
     snapshotOut.forEach((docSnap) => {
       const d = docSnap.data();
       const id = `${d.kodeGdng}-${d.waktuInput}`;
-
       if (!groupMapOut.has(id)) {
         groupMapOut.set(id, {
           kodeApos: d.kodeApos ?? "",
@@ -84,7 +79,6 @@ export const syncDownload = async () => {
           items: [],
         });
       }
-
       const parent = groupMapOut.get(id);
       parent.items.push({
         namaBarang: d.nama ?? "",
@@ -97,9 +91,13 @@ export const syncDownload = async () => {
         catatan: d.catatan ?? "",
       });
     });
-
     const groupedOut = [...groupMapOut.values()];
     await AsyncStorage.setItem("barangKeluar", JSON.stringify(groupedOut));
+
+    // Hasil Generate
+    const snapshotGen = await getDocs(collection(db, COLLECTION_GENERATE));
+    const dataGenerate = snapshotGen.docs.map((doc) => doc.data());
+    await AsyncStorage.setItem("hasilGenerate", JSON.stringify(dataGenerate));
 
     console.log("✅ syncDownload selesai mengambil data terbaru.");
   } catch (error) {
@@ -108,15 +106,18 @@ export const syncDownload = async () => {
   }
 };
 
+// ------------------ SYNC UPLOAD ------------------
 export const syncUpload = async () => {
   try {
-    const [inValue, outValue] = await Promise.all([
+    const [inValue, outValue, genValue] = await Promise.all([
       AsyncStorage.getItem("barangMasuk"),
       AsyncStorage.getItem("barangKeluar"),
+      AsyncStorage.getItem("hasilGenerate"),
     ]);
 
     const dataIn: any[] = inValue ? JSON.parse(inValue) : [];
     const dataOut: any[] = outValue ? JSON.parse(outValue) : [];
+    const dataGen: any[] = genValue ? JSON.parse(genValue) : [];
 
     // Flatten barangMasuk
     const flatIn: Barang[] = [];
@@ -131,7 +132,6 @@ export const syncUpload = async () => {
         waktuInput: waktuInput ?? new Date().toISOString(),
         kategori: form.gudang ?? "",
       };
-
       for (const item of form.items ?? []) {
         flatIn.push({
           ...base,
@@ -159,7 +159,6 @@ export const syncUpload = async () => {
         nomorKendaraan: trx.nomorKendaraan ?? "",
         namaSopir: trx.namaSopir ?? "",
       };
-
       for (const item of trx.items ?? []) {
         flatOut.push({
           ...base,
@@ -175,7 +174,7 @@ export const syncUpload = async () => {
       }
     }
 
-    // Sync barangMasuk ke Firebase
+    // Upload barangMasuk
     const snapshotIn = await getDocs(collection(db, COLLECTION_IN));
     const firebaseInIds = snapshotIn.docs.map((doc) => doc.id);
     const localInIds = flatIn.map((item) => `${item.kode}-${item.waktuInput}`);
@@ -190,7 +189,7 @@ export const syncUpload = async () => {
       }
     }
 
-    // Sync barangKeluar ke Firebase
+    // Upload barangKeluar
     const snapshotOut = await getDocs(collection(db, COLLECTION_OUT));
     const firebaseOutIds = snapshotOut.docs.map((doc) => doc.id);
     const localOutIds = flatOut.map(
@@ -209,17 +208,25 @@ export const syncUpload = async () => {
       }
     }
 
-    console.log("✅ Upload barangMasuk & barangKeluar selesai.");
+    // Upload hasilGenerate
+    for (const item of dataGen) {
+      const id = `${item.brand}-${item.waktu}`;
+      await setDoc(doc(db, COLLECTION_GENERATE, id), item);
+    }
+
+    console.log("✅ Upload barangMasuk, barangKeluar, hasilGenerate selesai.");
   } catch (error) {
     console.error("❌ Gagal syncUpload:", error);
     throw error;
   }
 };
 
+// ------------------ RESET ------------------
 export const resetSemuaHistory = async (): Promise<void> => {
   try {
     await AsyncStorage.removeItem("barangMasuk");
     await AsyncStorage.removeItem("barangKeluar");
+    await AsyncStorage.removeItem("hasilGenerate");
     console.log("✅ Semua histori berhasil dihapus dari lokal");
   } catch (error) {
     console.error("❌ Gagal menghapus histori:", error);
