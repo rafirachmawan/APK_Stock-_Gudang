@@ -54,6 +54,16 @@ export default function StockDetailScreen() {
   } | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>("");
 
+  const [authVisible, setAuthVisible] = useState(false);
+  const [authTargetIndex, setAuthTargetIndex] = useState<number | null>(null);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+
+  const CREDENTIALS = {
+    username: "admin",
+    password: "admin",
+  };
+
   useFocusEffect(
     useCallback(() => {
       const load = async () => {
@@ -97,6 +107,13 @@ export default function StockDetailScreen() {
     }
     setForms(updatedForms);
     await AsyncStorage.setItem("barangMasuk", JSON.stringify(updatedForms));
+  };
+
+  const hapusSuratJalan = async (index: number) => {
+    const updated = [...forms];
+    updated.splice(index, 1);
+    setForms(updated);
+    await AsyncStorage.setItem("barangMasuk", JSON.stringify(updated));
   };
 
   const exportToExcel = async () => {
@@ -219,19 +236,16 @@ export default function StockDetailScreen() {
                     style={[styles.input, { backgroundColor: "#e5e7eb" }]}
                     value={item.large}
                     editable={false}
-                    placeholder="Large"
                   />
                   <TextInput
                     style={[styles.input, { backgroundColor: "#e5e7eb" }]}
                     value={item.medium}
                     editable={false}
-                    placeholder="Medium"
                   />
                   <TextInput
                     style={[styles.input, { backgroundColor: "#e5e7eb" }]}
                     value={item.small}
                     editable={false}
-                    placeholder="Small"
                   />
 
                   <Text style={styles.label}>ED (Tanggal Kedaluwarsa)</Text>
@@ -274,10 +288,110 @@ export default function StockDetailScreen() {
                   />
                 </View>
               ))}
+
+              <TouchableOpacity
+                style={{
+                  backgroundColor: "#ef4444",
+                  padding: 10,
+                  borderRadius: 6,
+                  alignItems: "center",
+                  marginTop: 10,
+                }}
+                onPress={() => {
+                  setAuthTargetIndex(formIndex);
+                  setAuthVisible(true);
+                }}
+              >
+                <Text style={{ color: "#fff", fontWeight: "bold" }}>
+                  🗑️ Hapus Surat Jalan Ini
+                </Text>
+              </TouchableOpacity>
             </View>
           )}
         </View>
       ))}
+
+      {authVisible && (
+        <View
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: "white",
+              padding: 20,
+              borderRadius: 8,
+              width: "80%",
+            }}
+          >
+            <Text
+              style={{ fontWeight: "bold", fontSize: 16, marginBottom: 10 }}
+            >
+              Autentikasi Diperlukan
+            </Text>
+            <TextInput
+              placeholder="Username"
+              value={username}
+              onChangeText={setUsername}
+              style={styles.input}
+            />
+            <TextInput
+              placeholder="Password"
+              secureTextEntry
+              value={password}
+              onChangeText={setPassword}
+              style={styles.input}
+            />
+            <TouchableOpacity
+              onPress={() => {
+                if (
+                  username === CREDENTIALS.username &&
+                  password === CREDENTIALS.password
+                ) {
+                  if (authTargetIndex !== null)
+                    hapusSuratJalan(authTargetIndex);
+                  setAuthVisible(false);
+                  setAuthTargetIndex(null);
+                  setUsername("");
+                  setPassword("");
+                } else {
+                  alert("Username atau Password salah.");
+                }
+              }}
+              style={{
+                backgroundColor: "#ef4444",
+                padding: 10,
+                borderRadius: 6,
+                alignItems: "center",
+                marginTop: 10,
+              }}
+            >
+              <Text style={{ color: "#fff", fontWeight: "bold" }}>Hapus</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => {
+                setAuthVisible(false);
+                setUsername("");
+                setPassword("");
+              }}
+              style={{
+                marginTop: 10,
+                alignItems: "center",
+              }}
+            >
+              <Text style={{ color: "#3b82f6" }}>Batal</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </ScrollView>
   );
 }
