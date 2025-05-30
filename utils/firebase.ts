@@ -1,3 +1,4 @@
+// firebase.ts
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { initializeApp } from "firebase/app";
 import {
@@ -27,16 +28,16 @@ const COLLECTION_OUT = "barangKeluar";
 
 export const syncDownload = async () => {
   try {
+    // --- Barang Masuk ---
     const snapshotIn = await getDocs(collection(db, COLLECTION_IN));
-    const groupedIn: any[] = [];
-    const groupMap = new Map<string, any>();
+    const groupMapIn = new Map<string, any>();
 
     snapshotIn.forEach((docSnap) => {
       const d = docSnap.data();
       const id = `${d.kodeGdng}-${d.waktuInput}`;
 
-      if (!groupMap.has(id)) {
-        groupMap.set(id, {
+      if (!groupMapIn.has(id)) {
+        groupMapIn.set(id, {
           gudang: d.kategori ?? "",
           kodeGdng: d.kodeGdng ?? "",
           kodeApos: d.kodeApos ?? "",
@@ -48,7 +49,7 @@ export const syncDownload = async () => {
         });
       }
 
-      const parent = groupMap.get(id);
+      const parent = groupMapIn.get(id);
       parent.items.push({
         namaBarang: d.nama ?? "",
         kode: d.kode ?? "",
@@ -60,15 +61,47 @@ export const syncDownload = async () => {
       });
     });
 
-    groupedIn.push(...groupMap.values());
+    const groupedIn = [...groupMapIn.values()];
     await AsyncStorage.setItem("barangMasuk", JSON.stringify(groupedIn));
 
+    // --- Barang Keluar ---
     const snapshotOut = await getDocs(collection(db, COLLECTION_OUT));
-    const dataOut: Barang[] = [];
-    snapshotOut.forEach((doc) => {
-      dataOut.push(doc.data() as Barang);
+    const groupMapOut = new Map<string, any>();
+
+    snapshotOut.forEach((docSnap) => {
+      const d = docSnap.data();
+      const id = `${d.kodeGdng}-${d.waktuInput}`;
+
+      if (!groupMapOut.has(id)) {
+        groupMapOut.set(id, {
+          kodeApos: d.kodeApos ?? "",
+          kodeGdng: d.kodeGdng ?? "",
+          kategori: d.kategori ?? "",
+          catatan: d.catatan ?? "",
+          nomorKendaraan: d.nomorKendaraan ?? "",
+          namaSopir: d.namaSopir ?? "",
+          waktuInput: d.waktuInput,
+          items: [],
+        });
+      }
+
+      const parent = groupMapOut.get(id);
+      parent.items.push({
+        namaBarang: d.nama ?? "",
+        kode: d.kode ?? "",
+        large: String(d.stokLarge ?? 0),
+        medium: String(d.stokMedium ?? 0),
+        small: String(d.stokSmall ?? 0),
+        ed: d.ed ?? "",
+        principle: d.principle ?? "",
+        catatan: d.catatan ?? "",
+      });
     });
-    await AsyncStorage.setItem("barangKeluar", JSON.stringify(dataOut));
+
+    const groupedOut = [...groupMapOut.values()];
+    await AsyncStorage.setItem("barangKeluar", JSON.stringify(groupedOut));
+
+    console.log("✅ syncDownload selesai mengambil data terbaru.");
   } catch (error) {
     console.error("❌ Gagal syncDownload:", error);
     throw error;

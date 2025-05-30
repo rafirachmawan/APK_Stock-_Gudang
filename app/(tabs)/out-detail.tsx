@@ -1,3 +1,5 @@
+// OutDetailScreen.tsx - Versi Fix 'map of undefined'
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system";
@@ -53,9 +55,17 @@ export default function OutDetailScreen() {
   useFocusEffect(
     useCallback(() => {
       const load = async () => {
-        const json = await AsyncStorage.getItem("barangKeluar");
-        const parsed: TransaksiOut[] = json ? JSON.parse(json) : [];
-        setData(parsed);
+        try {
+          const json = await AsyncStorage.getItem("barangKeluar");
+          const parsed: TransaksiOut[] = json ? JSON.parse(json) : [];
+
+          // Filter hanya data yang punya array items valid
+          const valid = parsed.filter((trx) => Array.isArray(trx.items));
+          setData(valid);
+        } catch (err) {
+          console.error("❌ Gagal memuat data barangKeluar:", err);
+          setData([]);
+        }
       };
       load();
     }, [])
@@ -79,31 +89,28 @@ export default function OutDetailScreen() {
         trx.items.length > 0
     );
 
-    console.log(
-      "📦 Data disimpan ke AsyncStorage:",
-      JSON.stringify(filtered, null, 2)
-    );
-
     await AsyncStorage.setItem("barangKeluar", JSON.stringify(filtered));
     alert("✅ Data berhasil disimpan");
   };
 
   const exportToExcel = async () => {
     const allItems = data.flatMap((trx) =>
-      trx.items.map((item) => ({
-        KodeApos: trx.kodeApos,
-        KodeGudang: trx.kodeGdng,
-        Waktu: new Date(trx.waktuInput).toLocaleString(),
-        Kategori: trx.kategori,
-        Principle: item.principle,
-        Nama: item.namaBarang,
-        Kode: item.kode,
-        Large: item.large,
-        Medium: item.medium,
-        Small: item.small,
-        ED: item.ed || "-",
-        Catatan: item.catatan || "-",
-      }))
+      Array.isArray(trx.items)
+        ? trx.items.map((item) => ({
+            KodeApos: trx.kodeApos,
+            KodeGudang: trx.kodeGdng,
+            Waktu: new Date(trx.waktuInput).toLocaleString(),
+            Kategori: trx.kategori,
+            Principle: item.principle,
+            Nama: item.namaBarang,
+            Kode: item.kode,
+            Large: item.large,
+            Medium: item.medium,
+            Small: item.small,
+            ED: item.ed || "-",
+            Catatan: item.catatan || "-",
+          }))
+        : []
     );
 
     const ws = XLSX.utils.json_to_sheet(allItems);
@@ -165,6 +172,7 @@ export default function OutDetailScreen() {
           </TouchableOpacity>
 
           {expanded.includes(trx.kodeApos) &&
+            Array.isArray(trx.items) &&
             trx.items.map((item, itemIndex) => (
               <View key={itemIndex} style={styles.itemContainer}>
                 <Text style={styles.itemTitle}>
