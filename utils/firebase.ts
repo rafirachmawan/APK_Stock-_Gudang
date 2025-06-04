@@ -119,7 +119,6 @@ export const syncUpload = async () => {
     const dataOut: any[] = outValue ? JSON.parse(outValue) : [];
     const dataGen: any[] = genValue ? JSON.parse(genValue) : [];
 
-    // Flatten barangMasuk
     const flatIn: Barang[] = [];
     for (const form of dataIn) {
       const waktuInput = form.waktuInput;
@@ -146,7 +145,6 @@ export const syncUpload = async () => {
       }
     }
 
-    // Flatten barangKeluar
     const flatOut: Barang[] = [];
     for (const trx of dataOut) {
       const waktuInput = trx.waktuInput;
@@ -174,7 +172,6 @@ export const syncUpload = async () => {
       }
     }
 
-    // Upload barangMasuk
     const snapshotIn = await getDocs(collection(db, COLLECTION_IN));
     const firebaseInIds = snapshotIn.docs.map((doc) => doc.id);
     const localInIds = flatIn.map((item) => `${item.kode}-${item.waktuInput}`);
@@ -189,7 +186,6 @@ export const syncUpload = async () => {
       }
     }
 
-    // Upload barangKeluar
     const snapshotOut = await getDocs(collection(db, COLLECTION_OUT));
     const firebaseOutIds = snapshotOut.docs.map((doc) => doc.id);
     const localOutIds = flatOut.map(
@@ -208,7 +204,6 @@ export const syncUpload = async () => {
       }
     }
 
-    // Upload hasilGenerate
     for (const item of dataGen) {
       const id = `${item.brand}-${item.waktu}`;
       await setDoc(doc(db, COLLECTION_GENERATE, id), item);
@@ -224,9 +219,7 @@ export const syncUpload = async () => {
 // ------------------ RESET ------------------
 export const resetSemuaHistory = async (): Promise<void> => {
   try {
-    await AsyncStorage.removeItem("barangMasuk");
-    await AsyncStorage.removeItem("barangKeluar");
-    await AsyncStorage.removeItem("hasilGenerate");
+    await AsyncStorage.clear();
     console.log("✅ Semua histori berhasil dihapus dari lokal");
   } catch (error) {
     console.error("❌ Gagal menghapus histori:", error);

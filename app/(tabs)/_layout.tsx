@@ -1,26 +1,46 @@
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   DarkTheme,
   DefaultTheme,
   ThemeProvider,
 } from "@react-navigation/native";
+import { Redirect } from "expo-router";
 import { Drawer } from "expo-router/drawer";
 import { StatusBar } from "expo-status-bar";
-import { useEffect } from "react";
-import { LogBox } from "react-native";
+import React, { useEffect, useState } from "react";
+import { ActivityIndicator, LogBox, View } from "react-native";
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
 
   useEffect(() => {
     LogBox.ignoreLogs(["VirtualizedLists should never be nested"]);
+    checkLoginStatus();
   }, []);
+
+  const checkLoginStatus = async () => {
+    const token = await AsyncStorage.getItem("userLoggedIn");
+    setIsLoggedIn(token === "true");
+  };
+
+  if (isLoggedIn === null) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
+
+  if (!isLoggedIn) {
+    return <Redirect href="/auth/login" />;
+  }
 
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
       <Drawer initialRouteName="index">
-        {/* 🏠 Dashboard */}
         <Drawer.Screen
           name="index"
           options={{
@@ -35,8 +55,6 @@ export default function RootLayout() {
             ),
           }}
         />
-
-        {/* 📥 Barang Masuk */}
         <Drawer.Screen
           name="in"
           options={{
@@ -51,8 +69,6 @@ export default function RootLayout() {
             ),
           }}
         />
-
-        {/* 📤 Barang Keluar */}
         <Drawer.Screen
           name="out"
           options={{
@@ -67,8 +83,6 @@ export default function RootLayout() {
             ),
           }}
         />
-
-        {/* 🎲 Generate */}
         <Drawer.Screen
           name="generate"
           options={{
@@ -83,8 +97,6 @@ export default function RootLayout() {
             ),
           }}
         />
-
-        {/* 🧾 Hasil Generate */}
         <Drawer.Screen
           name="hasil-generate"
           options={{
@@ -99,8 +111,6 @@ export default function RootLayout() {
             ),
           }}
         />
-
-        {/* 📋 In Detail */}
         <Drawer.Screen
           name="stock-detail"
           options={{
@@ -115,8 +125,6 @@ export default function RootLayout() {
             ),
           }}
         />
-
-        {/* 📋 Out Detail */}
         <Drawer.Screen
           name="out-detail"
           options={{
@@ -131,8 +139,6 @@ export default function RootLayout() {
             ),
           }}
         />
-
-        {/* 📦 Stock Saat Ini */}
         <Drawer.Screen
           name="stock"
           options={{
@@ -147,8 +153,6 @@ export default function RootLayout() {
             ),
           }}
         />
-
-        {/* 📤 Export All */}
         <Drawer.Screen
           name="export-all"
           options={{
@@ -160,6 +164,16 @@ export default function RootLayout() {
                 size={size}
                 color={color}
               />
+            ),
+          }}
+        />
+        <Drawer.Screen
+          name="logout"
+          options={{
+            drawerLabel: "🔓 Logout",
+            title: "Logout",
+            drawerIcon: ({ color, size }) => (
+              <MaterialCommunityIcons name="logout" size={size} color={color} />
             ),
           }}
         />

@@ -1,13 +1,7 @@
-// StockScreen.tsx - Versi Final Menampilkan Riwayat Masuk & Keluar per Barang
-
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useIsFocused } from "@react-navigation/native";
-import * as FileSystem from "expo-file-system";
-import * as Sharing from "expo-sharing";
 import React, { useEffect, useState } from "react";
 import {
-  Alert,
-  FlatList,
   Modal,
   ScrollView,
   StyleSheet,
@@ -16,316 +10,294 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import * as XLSX from "xlsx";
-import { Barang, getCurrentStock } from "../../utils/stockManager";
+import { getCurrentStokBarang } from "../../utils/stockManager";
 
-interface RiwayatTransaksi {
-  waktu: string;
-  large: number;
-  medium: number;
-  small: number;
+interface StokBarang {
+  kode: string;
+  nama: string;
+  totalLarge: number;
+  totalMedium: number;
+  totalSmall: number;
+  principle: string;
+}
+
+interface Item {
+  namaBarang: string;
+  kode: string;
+  large: string;
+  medium: string;
+  small: string;
+  ed?: string;
   catatan?: string;
 }
 
+interface Transaksi {
+  jenisForm: string;
+  waktuInput: string;
+  gudang?: string;
+  kodeApos?: string;
+  suratJalan?: string;
+  principle?: string;
+  kategori?: string;
+  nomorKendaraan?: string;
+  namaSopir?: string;
+  items: Item[];
+}
+
 export default function StockScreen() {
-  const [searchQuery, setSearchQuery] = useState<string>("");
-  const [stockData, setStockData] = useState<Barang[]>([]);
-  const [selectedBarang, setSelectedBarang] = useState<Barang | null>(null);
+  const [stockData, setStockData] = useState<StokBarang[]>([]);
+  const [groupedPrinciple, setGroupedPrinciple] = useState<
+    Record<string, StokBarang[]>
+  >({});
+  const [selectedPrinciple, setSelectedPrinciple] = useState<string | null>(
+    null
+  );
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedItem, setSelectedItem] = useState<StokBarang | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
-  const [riwayatMasuk, setRiwayatMasuk] = useState<RiwayatTransaksi[]>([]);
-  const [riwayatKeluar, setRiwayatKeluar] = useState<RiwayatTransaksi[]>([]);
+  const [transaksiGabungan, setTransaksiGabungan] = useState<Transaksi[]>([]);
 
   const isFocused = useIsFocused();
 
   useEffect(() => {
-    if (isFocused) {
-      loadStockData();
-    }
+    if (isFocused) fetchStock();
   }, [isFocused]);
 
-  const loadStockData = async () => {
-    try {
-      const currentStock = await getCurrentStock();
-      setStockData(currentStock);
-    } catch (error) {
-      console.error("Gagal memuat data:", error);
-      Alert.alert("Error", "Gagal memuat data stok");
-    }
+  const fetchStock = async () => {
+    const data = await getCurrentStokBarang();
+    const grouped: Record<string, StokBarang[]> = {};
+    data.forEach((item) => {
+      if (!grouped[item.principle]) grouped[item.principle] = [];
+      grouped[item.principle].push(item);
+    });
+    setStockData(data);
+    setGroupedPrinciple(grouped);
   };
 
-  const loadRiwayat = async (kode: string) => {
-    const masukRaw = await AsyncStorage.getItem("barangMasuk");
-    const keluarRaw = await AsyncStorage.getItem("barangKeluar");
-
-    const masuk = masukRaw ? JSON.parse(masukRaw) : [];
-    const keluar = keluarRaw ? JSON.parse(keluarRaw) : [];
-
-    const masukFiltered = masuk.flatMap((f: any) =>
-      f.items
-        .filter((i: any) => i.kode === kode)
-        .map((i: any) => ({
-          waktu: f.waktuInput,
-          large: parseInt(i.large),
-          medium: parseInt(i.medium),
-          small: parseInt(i.small),
-          catatan: i.catatan || "",
-        }))
-    );
-
-    const keluarFiltered = keluar.flatMap((trx: any) =>
-      (trx.items || [])
-        .filter((item: any) => item.kode === kode)
-        .map((item: any) => ({
-          waktu: trx.waktuInput,
-          large: parseInt(item.large),
-          medium: parseInt(item.medium),
-          small: parseInt(item.small),
-          catatan: item.catatan || "",
-        }))
-    );
-
-    setRiwayatMasuk(masukFiltered);
-    setRiwayatKeluar(keluarFiltered);
-  };
-
-  const handleShowDetail = async (barang: Barang) => {
-    setSelectedBarang(barang);
-    await loadRiwayat(barang.kode);
+  const handleSelectItem = async (item: StokBarang) => {
+    setSelectedItem(item);
+    await loadTransaksi(item.kode);
     setModalVisible(true);
   };
 
-  const exportToExcel = async () => {
-    try {
-      if (stockData.length === 0) {
-        Alert.alert("Info", "Tidak ada data stok untuk diekspor.");
-        return;
-      }
+  const loadTransaksi = async (kodeBarang: string) => {
+    const [jsonMasuk, jsonKeluar] = await Promise.all([
+      AsyncStorage.getItem("barangMasuk"),
+      AsyncStorage.getItem("barangKeluar"),
+    ]);
 
-      const worksheet = XLSX.utils.json_to_sheet(
-        stockData.map((item) => ({
-          Kategori: item.kategori,
-          Principle: item.principle,
-          Kode: item.kode,
-          Nama: item.nama,
-          Large: item.stokLarge,
-          Medium: item.stokMedium,
-          Small: item.stokSmall,
-          Catatan: item.catatan,
-          WaktuInput: item.waktuInput,
-        }))
-      );
+    const masuk: Transaksi[] = (
+      JSON.parse(jsonMasuk || "[]") as Transaksi[]
+    ).flatMap((trx) =>
+      trx.items.some((item) => item.kode === kodeBarang)
+        ? [
+            {
+              jenisForm: trx.jenisForm || "Pembelian",
+              waktuInput: trx.waktuInput,
+              gudang: trx.gudang,
+              kodeApos: trx.kodeApos,
+              suratJalan: trx.suratJalan,
+              principle: trx.principle,
+              kategori: trx.kategori,
+              items: trx.items.filter((item) => item.kode === kodeBarang),
+            },
+          ]
+        : []
+    );
 
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "StockBarang");
+    const keluar: Transaksi[] = (
+      JSON.parse(jsonKeluar || "[]") as Transaksi[]
+    ).flatMap((trx) =>
+      trx.items.some((item) => item.kode === kodeBarang)
+        ? [
+            {
+              jenisForm: trx.jenisForm || "Keluar",
+              waktuInput: trx.waktuInput,
+              gudang: trx.gudang,
+              kodeApos: trx.kodeApos,
+              nomorKendaraan: trx.nomorKendaraan,
+              namaSopir: trx.namaSopir,
+              kategori: trx.kategori,
+              items: trx.items.filter((item) => item.kode === kodeBarang),
+            },
+          ]
+        : []
+    );
 
-      const buffer = XLSX.write(workbook, { type: "base64", bookType: "xlsx" });
-      const filePath = FileSystem.cacheDirectory + `stock-barang.xlsx`;
+    const combined = [...masuk, ...keluar].sort(
+      (a, b) =>
+        new Date(a.waktuInput).getTime() - new Date(b.waktuInput).getTime()
+    );
 
-      await FileSystem.writeAsStringAsync(filePath, buffer, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-
-      await Sharing.shareAsync(filePath);
-    } catch (error) {
-      console.error("Gagal export Excel:", error);
-      Alert.alert("Error", "Gagal export ke Excel");
-    }
+    setTransaksiGabungan(combined);
   };
 
-  const filteredData = stockData.filter(
-    (item) =>
-      item.nama.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.kode.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const renderPrincipleList = () => {
+    const filteredPrinciples = Object.keys(groupedPrinciple).filter(
+      (principle) => principle.toLowerCase().includes(searchQuery.toLowerCase())
+    );
 
-  const DetailModal = () => (
-    <Modal visible={modalVisible} animationType="slide">
-      <ScrollView style={styles.container}>
-        <Text style={styles.header}>
-          📌 Detail Barang: {selectedBarang?.nama} ({selectedBarang?.kode})
-        </Text>
+    return (
+      <ScrollView>
+        {filteredPrinciples.map((principle) => (
+          <TouchableOpacity
+            key={principle}
+            onPress={() => {
+              setSearchQuery(""); // reset pencarian barang
+              setSelectedPrinciple(principle);
+            }}
+            style={styles.card}
+          >
+            <Text style={styles.nama}>{principle}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    );
+  };
 
-        <Text style={styles.subheader}>📅 Riwayat Barang Masuk</Text>
-        {riwayatMasuk.length === 0 ? (
-          <Text style={styles.label}>Tidak ada data masuk</Text>
-        ) : (
-          riwayatMasuk.map((t, idx) => (
-            <View key={idx} style={styles.detailRow}>
-              <Text style={styles.label}>
-                Tanggal: {new Date(t.waktu).toLocaleDateString()}
-              </Text>
-              <Text style={styles.label}>
-                Large: {t.large} | Medium: {t.medium} | Small: {t.small}
-              </Text>
-              {t.catatan ? (
-                <Text style={styles.label}>Catatan: {t.catatan}</Text>
-              ) : null}
-            </View>
-          ))
-        )}
+  const renderBarangList = () => {
+    const list = groupedPrinciple[selectedPrinciple!] || [];
+    const filteredList = list.filter((item) =>
+      item.nama.toLowerCase().includes(searchQuery.toLowerCase())
+    );
 
-        <Text style={styles.subheader}>📄 Riwayat Barang Keluar</Text>
-        {riwayatKeluar.length === 0 ? (
-          <Text style={styles.label}>Tidak ada data keluar</Text>
-        ) : (
-          riwayatKeluar.map((t, idx) => (
-            <View key={idx} style={styles.detailRow}>
-              <Text style={styles.label}>
-                Tanggal: {new Date(t.waktu).toLocaleDateString()}
-              </Text>
-              <Text style={styles.label}>
-                Large: {t.large} | Medium: {t.medium} | Small: {t.small}
-              </Text>
-              {t.catatan ? (
-                <Text style={styles.label}>Catatan: {t.catatan}</Text>
-              ) : null}
-            </View>
-          ))
-        )}
-
+    return (
+      <ScrollView>
+        <Text style={styles.sectionTitle}>Barang dari {selectedPrinciple}</Text>
+        <TextInput
+          placeholder="Cari nama barang..."
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          style={styles.searchInput}
+        />
+        {filteredList.map((item) => (
+          <TouchableOpacity
+            key={item.kode}
+            onPress={() => handleSelectItem(item)}
+            style={styles.card}
+          >
+            <Text style={styles.nama}>{item.nama}</Text>
+            <Text style={styles.detail}>Kode: {item.kode}</Text>
+            <Text style={styles.detail}>
+              Stok: L:{item.totalLarge} M:{item.totalMedium} S:{item.totalSmall}
+            </Text>
+          </TouchableOpacity>
+        ))}
         <TouchableOpacity
-          style={styles.resetButton}
-          onPress={() => setModalVisible(false)}
+          onPress={() => {
+            setSelectedPrinciple(null);
+            setSearchQuery("");
+          }}
+          style={styles.closeButton}
         >
-          <Text style={styles.resetText}>⬅️ Kembali</Text>
+          <Text style={{ color: "#fff", fontWeight: "bold" }}>← Kembali</Text>
         </TouchableOpacity>
       </ScrollView>
-    </Modal>
-  );
+    );
+  };
 
-  const renderItem = ({ item }: { item: Barang }) => (
-    <TouchableOpacity
-      style={styles.card}
-      onPress={() => handleShowDetail(item)}
-    >
-      <Text style={styles.cardTitle}>
-        {item.nama} ({item.kode})
-      </Text>
-      <View style={styles.row}>
-        <Text style={styles.label}>Kategori:</Text>
-        <Text style={styles.value}>{item.kategori}</Text>
+  const renderTransaksi = () =>
+    transaksiGabungan.map((trx, i) => (
+      <View key={i} style={styles.transaksiBox}>
+        <Text style={styles.trxTitle}>
+          [{trx.jenisForm}] {new Date(trx.waktuInput).toLocaleString()}
+        </Text>
+        <Text>Gudang: {trx.gudang || "-"}</Text>
+        <Text>Principle: {trx.principle || "-"}</Text>
+        <Text>Kode Apos: {trx.kodeApos || "-"}</Text>
+        <Text>Surat Jalan: {trx.suratJalan || "-"}</Text>
+        <Text>Kategori: {trx.kategori || "-"}</Text>
+        <Text>Nomor Kendaraan: {trx.nomorKendaraan || "-"}</Text>
+        <Text>Nama Sopir: {trx.namaSopir || "-"}</Text>
+        {trx.items.map((item, j) => (
+          <View key={j} style={styles.itemBox}>
+            <Text>
+              Large: {item.large} | Medium: {item.medium} | Small: {item.small}
+            </Text>
+            <Text>ED: {item.ed || "-"}</Text>
+            <Text>Catatan: {item.catatan || "-"}</Text>
+          </View>
+        ))}
       </View>
-      <View style={styles.row}>
-        <Text style={styles.label}>Large:</Text>
-        <Text style={styles.value}>{item.stokLarge}</Text>
-      </View>
-      <View style={styles.row}>
-        <Text style={styles.label}>Medium:</Text>
-        <Text style={styles.value}>{item.stokMedium}</Text>
-      </View>
-      <View style={styles.row}>
-        <Text style={styles.label}>Small:</Text>
-        <Text style={styles.value}>{item.stokSmall}</Text>
-      </View>
-    </TouchableOpacity>
-  );
+    ));
 
   return (
     <View style={styles.container}>
-      {modalVisible && <DetailModal />}
+      <Text style={styles.title}>Stok Barang</Text>
+      {!selectedPrinciple && (
+        <TextInput
+          placeholder="Cari principle..."
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          style={styles.searchInput}
+        />
+      )}
+      {!selectedPrinciple ? renderPrincipleList() : renderBarangList()}
 
-      <Text style={styles.header}>📦 Daftar Stok Barang</Text>
-      <TextInput
-        style={styles.searchInput}
-        placeholder="Cari barang..."
-        placeholderTextColor="#999"
-        value={searchQuery}
-        onChangeText={setSearchQuery}
-      />
-
-      <FlatList
-        data={filteredData}
-        renderItem={renderItem}
-        keyExtractor={(item) => `${item.kode}-${item.waktuInput}`}
-        ListEmptyComponent={
-          <Text style={styles.emptyText}>Tidak ada data stok</Text>
-        }
-        contentContainerStyle={styles.listContent}
-      />
-
-      <TouchableOpacity style={styles.exportButton} onPress={exportToExcel}>
-        <Text style={styles.exportText}>📄 Export ke Excel</Text>
-      </TouchableOpacity>
+      <Modal visible={modalVisible} animationType="slide">
+        <View style={styles.modalContainer}>
+          <Text style={styles.modalTitle}>Riwayat: {selectedItem?.nama}</Text>
+          <ScrollView>{renderTransaksi()}</ScrollView>
+          <TouchableOpacity
+            onPress={() => setModalVisible(false)}
+            style={styles.closeButton}
+          >
+            <Text style={{ color: "#fff", fontWeight: "bold" }}>Tutup</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, backgroundColor: "#ffffff" },
-  header: {
-    fontSize: 22,
-    fontWeight: "bold",
-    color: "#1f2937",
-    marginBottom: 20,
-    textAlign: "center",
-  },
-  subheader: {
-    fontSize: 18,
-    fontWeight: "600",
-    marginTop: 16,
-    marginBottom: 8,
-    color: "#1e3a8a",
-  },
-  searchInput: {
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-    padding: 14,
-    marginBottom: 16,
-    backgroundColor: "#f9fafb",
-    color: "#111827",
-    borderRadius: 10,
+  container: { flex: 1, padding: 16, backgroundColor: "#fff" },
+  title: { fontSize: 20, fontWeight: "bold", marginBottom: 12 },
+  sectionTitle: {
     fontSize: 16,
+    fontWeight: "bold",
+    marginVertical: 10,
+    color: "#333",
   },
   card: {
-    backgroundColor: "#f1f5f9",
-    padding: 18,
-    marginBottom: 14,
-    borderRadius: 12,
+    padding: 12,
+    backgroundColor: "#f2f2f2",
+    borderRadius: 8,
+    marginBottom: 10,
+  },
+  nama: { fontSize: 16, fontWeight: "bold" },
+  detail: { fontSize: 14, marginTop: 4 },
+  searchInput: {
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#1e293b",
+    borderColor: "#ccc",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
     marginBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#cbd5e1",
-    paddingBottom: 8,
+    backgroundColor: "#fff",
   },
-  row: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 8,
+  modalContainer: { flex: 1, backgroundColor: "#fff", padding: 16 },
+  modalTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 12 },
+  transaksiBox: {
+    backgroundColor: "#f9f9f9",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 12,
   },
-  label: { color: "#475569", fontSize: 15 },
-  value: { color: "#1e293b", fontSize: 15, fontWeight: "500" },
-  exportButton: {
-    backgroundColor: "#10b981",
+  trxTitle: { fontWeight: "bold", marginBottom: 6 },
+  itemBox: {
+    backgroundColor: "#fff",
+    padding: 8,
+    marginTop: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#ccc",
+  },
+  closeButton: {
+    backgroundColor: "#007bff",
     padding: 14,
     borderRadius: 8,
-    marginTop: 12,
     alignItems: "center",
+    marginTop: 10,
   },
-  exportText: { color: "#ffffff", fontWeight: "bold" },
-  emptyText: {
-    textAlign: "center",
-    color: "#6b7280",
-    marginTop: 40,
-    fontSize: 16,
-  },
-  listContent: { paddingBottom: 20 },
-  detailRow: {
-    borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
-    paddingVertical: 10,
-  },
-  resetButton: {
-    backgroundColor: "#ef4444",
-    padding: 14,
-    borderRadius: 8,
-    marginTop: 12,
-    alignItems: "center",
-  },
-  resetText: { color: "#ffffff", fontWeight: "bold" },
 });

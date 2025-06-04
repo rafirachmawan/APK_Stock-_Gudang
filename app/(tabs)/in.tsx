@@ -1,13 +1,9 @@
-// InScreen.tsx - Catatan per item
-
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import * as FileSystem from "expo-file-system";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
-  KeyboardAvoidingView,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -17,6 +13,12 @@ import {
 } from "react-native";
 import DropDownPicker from "react-native-dropdown-picker";
 import * as XLSX from "xlsx";
+
+interface PrincipalItem {
+  principle: string;
+  namaBarang: string;
+  kode: string;
+}
 
 interface ItemInput {
   namaBarang: string;
@@ -31,129 +33,108 @@ interface ItemInput {
 interface PurchaseForm {
   gudang: string;
   kodeGdng: string;
-  kodeApos: string;
-  suratJalan: string;
+  kodeApos?: string;
+  kodeRetur?: string;
+  suratJalan?: string;
   principle: string;
+  jenisForm: string;
   waktuInput: string;
   items: ItemInput[];
 }
 
 export default function InScreen() {
-  const [gudang, setGudang] = useState("Gudang A");
-  const [kodeGdng, setKodeGdng] = useState("");
-  const [kodeApos, setKodeApos] = useState("");
-  const [suratJalan, setSuratJalan] = useState("");
+  const [itemList, setItemList] = useState<ItemInput[]>([]);
   const [principle, setPrinciple] = useState("");
-  const [items, setItems] = useState<ItemInput[]>([
-    {
-      namaBarang: "",
-      kode: "",
-      ed: "",
-      large: "",
-      medium: "",
-      small: "",
-      catatan: "",
-    },
-  ]);
+  const [principleList, setPrincipleList] = useState<string[]>([]);
+  const [dataExcel, setDataExcel] = useState<PrincipalItem[]>([]);
 
-  const [openDropdownIndex, setOpenDropdownIndex] = useState<number | null>(
-    null
+  const [jenisForm, setJenisForm] = useState<"Pembelian" | "Return">(
+    "Pembelian"
   );
-  const [gudangOpen, setGudangOpen] = useState(false);
-  const [principleOpen, setPrincipleOpen] = useState(false);
-  const [datePickerIndex, setDatePickerIndex] = useState<number | null>(null);
-  const [principleList, setPrincipleList] = useState<
-    { label: string; value: string }[]
-  >([]);
-  const [masterBarangList, setMasterBarangList] = useState<any[]>([]);
-  const [filteredNamaItems, setFilteredNamaItems] = useState<
-    { label: string; value: string }[][]
-  >([[]]);
+  const [subJenisPembelian, setSubJenisPembelian] = useState<
+    "Pabrik" | "Mutasi"
+  >("Pabrik");
+  const [subJenisReturn, setSubJenisReturn] =
+    useState<string>("Return Good Stock");
 
-  const gudangOptions = [
-    { label: "Gudang A", value: "Gudang A" },
-    { label: "Gudang B", value: "Gudang B" },
-    { label: "Gudang C", value: "Gudang C" },
-    { label: "Gudang D", value: "Gudang D" },
-    { label: "Gudang E", value: "Gudang E" },
-  ];
+  const [openJenis, setOpenJenis] = useState(false);
+  const [openSubJenis, setOpenSubJenis] = useState(false);
+  const [openSubReturn, setOpenSubReturn] = useState(false);
+  const [openPrinciple, setOpenPrinciple] = useState(false);
+  const [openGudang, setOpenGudang] = useState(false);
+  const [openNamaBarang, setOpenNamaBarang] = useState<boolean[]>([]);
+
+  const [gudang, setGudang] = useState("");
+  const [kodeGdng, setKodeGdng] = useState("0001");
+  const [kodeApos, setKodeApos] = useState("");
+  const [kodeRetur, setKodeRetur] = useState("");
+  const [suratJalan, setSuratJalan] = useState("");
+
+  const [manualTanggal, setManualTanggal] = useState("");
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [indexEDPicker, setIndexEDPicker] = useState<number | null>(null);
 
   useEffect(() => {
-    importExcel();
-    previewKodeGdng();
+    loadExcelHybrid();
+    loadLastKodeGudang();
   }, []);
 
-  const previewKodeGdng = async () => {
-    const kodeKey = "kodeGdngCounter";
-    let counter = parseInt((await AsyncStorage.getItem(kodeKey)) || "0") + 1;
-    setKodeGdng(counter.toString().padStart(5, "0"));
+  const loadLastKodeGudang = async () => {
+    const lastKode = await AsyncStorage.getItem("lastKodeGdng");
+    if (lastKode) {
+      const next = (parseInt(lastKode, 10) + 1).toString().padStart(4, "0");
+      setKodeGdng(next);
+    }
   };
 
-  const importExcel = async () => {
+  const loadExcelHybrid = async () => {
     try {
-      const EXCEL_URL =
-        "https://docs.google.com/spreadsheets/d/1c9E19bcynRxJg_47GFu0GWE6LbldI5L8_YFSxxCsFwI/export?format=xlsx";
-
-      const downloadResumable = FileSystem.createDownloadResumable(
-        EXCEL_URL,
-        FileSystem.cacheDirectory + "temp-list.xlsx"
-      );
-
-      const result = await downloadResumable.downloadAsync();
-      if (!result || !result.uri) throw new Error("Gagal unduh Excel");
-
-      const fileContent = await FileSystem.readAsStringAsync(result.uri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-
-      const workbook = XLSX.read(fileContent, { type: "base64" });
-      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet);
-      setMasterBarangList(jsonData);
-
-      const principles = Array.from(
-        new Set(jsonData.map((item: any) => item.brand))
-      ).map((p) => ({
-        label: p,
-        value: p,
-      }));
-      setPrincipleList(principles);
-    } catch (err) {
-      Alert.alert("Error", "Gagal membaca data Excel");
+      await loadExcelFromURL();
+    } catch {
+      await loadExcelFromAssets();
     }
   };
 
-  useEffect(() => {
-    const updated = items.map(() => {
-      const filtered = masterBarangList
-        .filter(
-          (item: any) => item.brand?.toLowerCase() === principle.toLowerCase()
-        )
-        .map((item: any) => ({ label: item.nama, value: item.nama }));
-      return filtered;
+  const loadExcelFromURL = async () => {
+    const EXCEL_URL =
+      "https://docs.google.com/spreadsheets/d/1c9E19bcynRxJg_47GFu0GWE6LbldI5L8_YFSxxCsFwI/export?format=xlsx";
+    const downloadResumable = FileSystem.createDownloadResumable(
+      EXCEL_URL,
+      FileSystem.cacheDirectory + "list-online.xlsx"
+    );
+    const result = await downloadResumable.downloadAsync();
+    if (!result || !result.uri) throw new Error("Gagal unduh dari internet");
+    const fileContent = await FileSystem.readAsStringAsync(result.uri, {
+      encoding: FileSystem.EncodingType.Base64,
     });
-    setFilteredNamaItems(updated);
-  }, [principle, masterBarangList, items.length]);
-
-  const updateItem = (index: number, field: keyof ItemInput, value: string) => {
-    const updated = [...items];
-    updated[index][field] = value;
-
-    if (field === "namaBarang") {
-      const match = masterBarangList.find(
-        (item: any) =>
-          item.nama === value &&
-          item.brand?.toLowerCase() === principle.toLowerCase()
-      );
-      updated[index].kode = match ? match.kode : "";
-    }
-
-    setItems(updated);
+    parseExcel(fileContent);
   };
 
-  const tambahItem = () => {
-    setItems([
-      ...items,
+  const loadExcelFromAssets = async () => {
+    const filePath = FileSystem.bundleDirectory + "list-principal.xlsx";
+    const b64 = await FileSystem.readAsStringAsync(filePath, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    parseExcel(b64);
+  };
+
+  const parseExcel = (base64: string) => {
+    const workbook = XLSX.read(base64, { type: "base64" });
+    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+    const raw: any[] = XLSX.utils.sheet_to_json(worksheet);
+    const jsonData: PrincipalItem[] = raw.map((row) => ({
+      principle: row.brand,
+      kode: row.kode,
+      namaBarang: row.nama,
+    }));
+    setDataExcel(jsonData);
+    setPrincipleList([...new Set(jsonData.map((d) => d.principle))]);
+  };
+
+  const addItem = () => {
+    setItemList((prev) => [
+      ...prev,
       {
         namaBarang: "",
         kode: "",
@@ -164,287 +145,392 @@ export default function InScreen() {
         catatan: "",
       },
     ]);
+    setOpenNamaBarang((prev) => [...prev, false]);
   };
 
-  const hapusItem = (index: number) => {
-    if (items.length === 1) return;
-    const updated = [...items];
+  const removeItem = (index: number) => {
+    const updated = [...itemList];
     updated.splice(index, 1);
-    setItems(updated);
+    setItemList(updated);
+    const openCopy = [...openNamaBarang];
+    openCopy.splice(index, 1);
+    setOpenNamaBarang(openCopy);
   };
 
-  const handleSubmit = async () => {
-    try {
-      const kodeKey = "kodeGdngCounter";
-      let counter = parseInt((await AsyncStorage.getItem(kodeKey)) || "0") + 1;
-      const finalKode = counter.toString().padStart(5, "0");
+  const handleChangeItem = (
+    index: number,
+    key: keyof ItemInput,
+    value: string
+  ) => {
+    const updated = [...itemList];
+    updated[index][key] = value;
+    setItemList(updated);
+  };
 
-      const form: PurchaseForm = {
-        gudang,
-        kodeGdng: finalKode,
-        kodeApos,
-        suratJalan,
-        principle,
-        waktuInput: new Date().toISOString(),
-        items,
-      };
-
-      const existing = await AsyncStorage.getItem("barangMasuk");
-      const parsed = existing ? JSON.parse(existing) : [];
-      parsed.push(form);
-      await AsyncStorage.setItem("barangMasuk", JSON.stringify(parsed));
-      await AsyncStorage.setItem(kodeKey, counter.toString());
-
-      Alert.alert("Sukses", `Data disimpan sebagai kode ${finalKode}`);
-      setKodeGdng((counter + 1).toString().padStart(5, "0"));
-      setKodeApos("");
-      setSuratJalan("");
-      setPrinciple("");
-      setItems([
-        {
-          namaBarang: "",
-          kode: "",
-          ed: "",
-          large: "",
-          medium: "",
-          small: "",
-          catatan: "",
-        },
-      ]);
-    } catch (error) {
-      console.error(error);
-      Alert.alert("Error", "Gagal menyimpan data");
+  const handleSelectBarang = (index: number, namaBarang: string) => {
+    const found = dataExcel.find(
+      (d) => d.principle === principle && d.namaBarang === namaBarang
+    );
+    if (found) {
+      const updated = [...itemList];
+      updated[index].namaBarang = found.namaBarang;
+      updated[index].kode = found.kode;
+      setItemList(updated);
     }
   };
 
+  const barangByPrinciple = dataExcel.filter((d) => d.principle === principle);
+
+  const convertToISODate = (ddmmyyyy: string) => {
+    const [day, month, year] = ddmmyyyy.split("-");
+    return new Date(`${year}-${month}-${day}T00:00:00.000Z`).toISOString();
+  };
+
+  const parseDate = (ddmmyyyy: string): Date => {
+    const [day, month, year] = ddmmyyyy.split("-").map(Number);
+    return new Date(year, month - 1, day);
+  };
+
+  const onChangeDate = (event: any, selected?: Date) => {
+    setShowDatePicker(false);
+    if (selected) {
+      const d = selected;
+      const day = d.getDate().toString().padStart(2, "0");
+      const month = (d.getMonth() + 1).toString().padStart(2, "0");
+      const year = d.getFullYear();
+      const formatted = `${day}-${month}-${year}`;
+      setManualTanggal(formatted);
+      setSelectedDate(d);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!principle || !gudang || itemList.length === 0) {
+      Alert.alert("Isi semua field wajib");
+      return;
+    }
+
+    const newEntry: PurchaseForm = {
+      gudang,
+      kodeGdng,
+      kodeApos: jenisForm !== "Return" ? kodeApos : undefined,
+      kodeRetur: jenisForm === "Return" ? kodeRetur : undefined,
+      suratJalan: jenisForm !== "Return" ? suratJalan : undefined,
+      principle,
+      jenisForm:
+        jenisForm === "Pembelian"
+          ? `Pembelian - ${subJenisPembelian}`
+          : `Return - ${subJenisReturn}`,
+      waktuInput: manualTanggal
+        ? convertToISODate(manualTanggal)
+        : new Date().toISOString(),
+      items: itemList,
+    };
+
+    const existing = await AsyncStorage.getItem("barangMasuk");
+    const parsed = existing ? JSON.parse(existing) : [];
+    parsed.push(newEntry);
+    await AsyncStorage.setItem("barangMasuk", JSON.stringify(parsed));
+    await AsyncStorage.setItem("lastKodeGdng", kodeGdng);
+
+    const next = (parseInt(kodeGdng, 10) + 1).toString().padStart(4, "0");
+    setKodeGdng(next);
+
+    Alert.alert("Data berhasil disimpan");
+    setItemList([]);
+    setOpenNamaBarang([]);
+    setKodeApos("");
+    setKodeRetur("");
+    setSuratJalan("");
+    setPrinciple("");
+    setManualTanggal("");
+  };
+
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      style={{ flex: 1, backgroundColor: "#fff" }}
-    >
-      <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.title}>🛒 Form Pembelian</Text>
+    <ScrollView style={styles.container}>
+      <Text style={styles.title}>Form Barang Masuk</Text>
 
-        <Text style={styles.label}>Gudang</Text>
-        <DropDownPicker
-          open={gudangOpen}
-          setOpen={setGudangOpen}
-          value={gudang}
-          setValue={setGudang}
-          items={gudangOptions}
-          placeholder="Pilih Gudang"
-          style={styles.dropdown}
-          dropDownContainerStyle={styles.dropdownContainer}
-          listMode="MODAL"
+      <Text style={styles.label}>Jenis Form</Text>
+      <DropDownPicker
+        open={openJenis}
+        setOpen={setOpenJenis}
+        value={jenisForm}
+        setValue={setJenisForm}
+        items={[
+          { label: "Pembelian", value: "Pembelian" },
+          { label: "Return", value: "Return" },
+        ]}
+        style={styles.dropdown}
+        zIndex={11000}
+        mode="BADGE"
+        listMode="SCROLLVIEW"
+      />
+
+      {jenisForm === "Pembelian" && (
+        <>
+          <Text style={styles.label}>Jenis Pembelian</Text>
+          <DropDownPicker
+            open={openSubJenis}
+            setOpen={setOpenSubJenis}
+            value={subJenisPembelian}
+            setValue={setSubJenisPembelian}
+            items={[
+              { label: "Pembelian Pabrik", value: "Pabrik" },
+              { label: "Mutasi Antar Depo", value: "Mutasi" },
+            ]}
+            style={styles.dropdown}
+            zIndex={1100}
+            zIndexInverse={1099}
+            mode="BADGE"
+            listMode="SCROLLVIEW"
+          />
+        </>
+      )}
+
+      {jenisForm === "Return" && (
+        <>
+          <Text style={styles.label}>Jenis Return</Text>
+          <DropDownPicker
+            open={openSubReturn}
+            setOpen={setOpenSubReturn}
+            value={subJenisReturn}
+            setValue={setSubJenisReturn}
+            items={[
+              { label: "Return Good Stock", value: "Return Good Stock" },
+              { label: "Return Bad Stock", value: "Return Bad Stock" },
+              { label: "Return Batal Kirim", value: "Return Batal Kirim" },
+              { label: "Return Coret Faktur", value: "Return Coret Faktur" },
+              { label: "Return Salah Input", value: "Return Salah Input" },
+            ]}
+            style={styles.dropdown}
+            zIndex={1095}
+            zIndexInverse={1094}
+            mode="BADGE"
+            listMode="SCROLLVIEW"
+          />
+        </>
+      )}
+
+      <Text style={styles.label}>Principle</Text>
+      <DropDownPicker
+        open={openPrinciple}
+        setOpen={setOpenPrinciple}
+        value={principle}
+        setValue={setPrinciple}
+        items={principleList.map((p) => ({ label: p, value: p }))}
+        placeholder="Pilih Principle"
+        searchable
+        style={styles.dropdown}
+        zIndex={999}
+        mode="BADGE"
+        listMode="SCROLLVIEW"
+      />
+
+      <Text style={styles.label}>Gudang</Text>
+      <DropDownPicker
+        open={openGudang}
+        setOpen={setOpenGudang}
+        value={gudang}
+        setValue={setGudang}
+        items={[
+          { label: "Gudang A", value: "Gudang A" },
+          { label: "Gudang B", value: "Gudang B" },
+          { label: "Gudang C", value: "Gudang C" },
+          { label: "Gudang D", value: "Gudang D" },
+          { label: "Gudang E", value: "Gudang E" },
+        ]}
+        placeholder="Pilih Gudang"
+        style={styles.dropdown}
+        zIndex={998}
+        mode="BADGE"
+        listMode="SCROLLVIEW"
+      />
+
+      <Text style={styles.label}>Tanggal Input</Text>
+      <TouchableOpacity
+        onPress={() => setShowDatePicker(true)}
+        style={styles.input}
+      >
+        <Text>{manualTanggal || "Pilih Tanggal"}</Text>
+      </TouchableOpacity>
+      {showDatePicker && (
+        <DateTimePicker
+          value={selectedDate || new Date()}
+          mode="date"
+          display="default"
+          onChange={onChangeDate}
         />
+      )}
 
-        <Text style={styles.label}>Kode Transaksi Gudang</Text>
-        <TextInput
-          value={kodeGdng}
-          editable={false}
-          style={styles.inputDisabled}
-        />
+      {jenisForm === "Return" ? (
+        <>
+          <Text style={styles.label}>No Faktur</Text>
+          <TextInput
+            style={styles.input}
+            value={kodeRetur}
+            onChangeText={setKodeRetur}
+          />
+        </>
+      ) : (
+        <>
+          <Text style={styles.label}>No Faktur</Text>
+          <TextInput
+            style={styles.input}
+            value={kodeApos}
+            onChangeText={setKodeApos}
+          />
+          <Text style={styles.label}>No Faktur Supplier (Surat Jalan)</Text>
+          <TextInput
+            style={styles.input}
+            value={suratJalan}
+            onChangeText={setSuratJalan}
+          />
+        </>
+      )}
 
-        <TouchableOpacity
-          onPress={async () => {
-            await AsyncStorage.setItem("kodeGdngCounter", "0");
-            previewKodeGdng();
-            Alert.alert("Reset", "Kode Gudang berhasil di-reset ke 00001");
-          }}
-        >
-          <Text style={{ color: "#3b82f6", marginBottom: 12 }}>
-            🔁 Reset Kode Gudang
-          </Text>
-        </TouchableOpacity>
+      {itemList.map((item, i) => (
+        <View key={i} style={styles.itemBox}>
+          <Text style={styles.label}>Nama Barang</Text>
+          <DropDownPicker
+            open={openNamaBarang[i] || false}
+            setOpen={(val) => {
+              const copy = [...openNamaBarang];
+              copy[i] = val;
+              setOpenNamaBarang(copy);
+            }}
+            value={item.namaBarang}
+            setValue={(cb) => {
+              const v = cb(item.namaBarang);
+              handleSelectBarang(i, v);
+            }}
+            items={barangByPrinciple.map((b) => ({
+              label: b.namaBarang,
+              value: b.namaBarang,
+            }))}
+            placeholder="Pilih Nama Barang"
+            searchable
+            style={styles.dropdown}
+            zIndex={900 - i}
+            mode="BADGE"
+            listMode="SCROLLVIEW"
+          />
 
-        <Text style={styles.label}>Kode Transaksi Apos</Text>
-        <TextInput
-          value={kodeApos}
-          onChangeText={setKodeApos}
-          style={styles.input}
-        />
-
-        <Text style={styles.label}>Surat Jalan</Text>
-        <TextInput
-          value={suratJalan}
-          onChangeText={setSuratJalan}
-          style={styles.input}
-        />
-
-        <Text style={styles.label}>Principle</Text>
-        <DropDownPicker
-          open={principleOpen}
-          setOpen={setPrincipleOpen}
-          value={principle}
-          setValue={setPrinciple}
-          items={principleList}
-          placeholder="Pilih Principle"
-          style={styles.dropdown}
-          dropDownContainerStyle={styles.dropdownContainer}
-          listMode="MODAL"
-          searchable={true}
-        />
-
-        <Text style={[styles.label, { marginTop: 16 }]}>🧾 Item</Text>
-        {items.map((item, index) => (
-          <View
-            key={index}
-            style={{ marginBottom: 16, zIndex: items.length - index }}
+          <Text style={styles.label}>ED</Text>
+          <TouchableOpacity
+            onPress={() => setIndexEDPicker(i)}
+            style={styles.input}
           >
-            <TouchableOpacity onPress={() => hapusItem(index)}>
-              <Text
-                style={{ color: "red", textAlign: "right", marginBottom: 4 }}
-              >
-                ❌ Hapus
-              </Text>
-            </TouchableOpacity>
-
-            <DropDownPicker
-              items={filteredNamaItems[index] || []}
-              open={openDropdownIndex === index}
-              setOpen={() =>
-                setOpenDropdownIndex(openDropdownIndex === index ? null : index)
-              }
-              value={item.namaBarang}
-              setValue={(cb) => {
-                const v = cb(item.namaBarang);
-                updateItem(index, "namaBarang", v);
+            <Text>{item.ed || "Pilih Tanggal ED"}</Text>
+          </TouchableOpacity>
+          {indexEDPicker === i && (
+            <DateTimePicker
+              value={item.ed ? parseDate(item.ed) : new Date()}
+              mode="date"
+              display="default"
+              onChange={(event, date) => {
+                if (event.type === "set" && date) {
+                  const d = date;
+                  const day = d.getDate().toString().padStart(2, "0");
+                  const month = (d.getMonth() + 1).toString().padStart(2, "0");
+                  const year = d.getFullYear();
+                  const formatted = `${day}-${month}-${year}`;
+                  handleChangeItem(i, "ed", formatted);
+                }
+                setIndexEDPicker(null);
               }}
-              placeholder="Pilih Nama Barang"
-              style={styles.dropdown}
-              dropDownContainerStyle={styles.dropdownContainer}
-              listMode="MODAL"
-              searchable={true}
-              disabled={!principle}
             />
+          )}
 
-            <TextInput
-              value={item.kode}
-              editable={false}
-              placeholder="Kode Barang"
-              style={styles.inputDisabled}
-            />
+          <Text style={styles.label}>Large</Text>
+          <TextInput
+            style={styles.input}
+            keyboardType="numeric"
+            value={item.large}
+            onChangeText={(t) => handleChangeItem(i, "large", t)}
+          />
 
-            <Text style={styles.label}>ED (Tanggal Kedaluwarsa)</Text>
-            <TouchableOpacity
-              onPress={() => setDatePickerIndex(index)}
-              style={styles.input}
-            >
-              <Text>{item.ed ? item.ed : "Pilih Tanggal ED"}</Text>
-            </TouchableOpacity>
-            {datePickerIndex === index && (
-              <DateTimePicker
-                mode="date"
-                display="default"
-                value={item.ed ? new Date(item.ed) : new Date()}
-                onChange={(event, selectedDate) => {
-                  setDatePickerIndex(null);
-                  if (selectedDate) {
-                    const updated = [...items];
-                    updated[index].ed = selectedDate
-                      .toISOString()
-                      .split("T")[0];
-                    setItems(updated);
-                  }
-                }}
-              />
-            )}
+          <Text style={styles.label}>Medium</Text>
+          <TextInput
+            style={styles.input}
+            keyboardType="numeric"
+            value={item.medium}
+            onChangeText={(t) => handleChangeItem(i, "medium", t)}
+          />
 
-            <Text style={styles.label}>Large</Text>
-            <TextInput
-              value={item.large}
-              onChangeText={(t) => updateItem(index, "large", t)}
-              style={styles.input}
-              keyboardType="numeric"
-            />
+          <Text style={styles.label}>Small</Text>
+          <TextInput
+            style={styles.input}
+            keyboardType="numeric"
+            value={item.small}
+            onChangeText={(t) => handleChangeItem(i, "small", t)}
+          />
 
-            <Text style={styles.label}>Medium</Text>
-            <TextInput
-              value={item.medium}
-              onChangeText={(t) => updateItem(index, "medium", t)}
-              style={styles.input}
-              keyboardType="numeric"
-            />
+          <Text style={styles.label}>Catatan</Text>
+          <TextInput
+            style={styles.input}
+            value={item.catatan}
+            onChangeText={(t) => handleChangeItem(i, "catatan", t)}
+          />
 
-            <Text style={styles.label}>Small</Text>
-            <TextInput
-              value={item.small}
-              onChangeText={(t) => updateItem(index, "small", t)}
-              style={styles.input}
-              keyboardType="numeric"
-            />
+          <TouchableOpacity
+            onPress={() => removeItem(i)}
+            style={styles.removeButton}
+          >
+            <Text style={styles.removeText}>Hapus Item</Text>
+          </TouchableOpacity>
+        </View>
+      ))}
 
-            <Text style={styles.label}>Catatan</Text>
-            <TextInput
-              value={item.catatan}
-              onChangeText={(t) => updateItem(index, "catatan", t)}
-              style={styles.input}
-            />
-          </View>
-        ))}
+      <TouchableOpacity onPress={addItem} style={styles.addButton}>
+        <Text style={styles.addText}>+ Tambah Item</Text>
+      </TouchableOpacity>
 
-        <TouchableOpacity onPress={tambahItem}>
-          <Text style={{ color: "#3b82f6", marginBottom: 16 }}>
-            ➕ Tambah Item
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.buttonContainer} onPress={handleSubmit}>
-          <Text style={styles.buttonText}>Simpan Pembelian</Text>
-        </TouchableOpacity>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      <TouchableOpacity onPress={handleSubmit} style={styles.submitButton}>
+        <Text style={styles.submitText}>Simpan</Text>
+      </TouchableOpacity>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 20 },
-  title: {
-    fontSize: 20,
-    fontWeight: "bold",
-    textAlign: "center",
-    marginBottom: 20,
-    color: "#1f2937",
-  },
-  label: {
-    marginTop: 12,
-    color: "#111827",
-  },
+  container: { flex: 1, padding: 16, backgroundColor: "#fff" },
+  title: { fontSize: 18, fontWeight: "bold", marginBottom: 12 },
+  label: { fontWeight: "bold", marginTop: 8 },
   input: {
     borderWidth: 1,
-    borderColor: "#d1d5db",
-    borderRadius: 6,
+    borderColor: "#ccc",
+    borderRadius: 8,
     padding: 10,
-    backgroundColor: "#f9fafb",
-    marginBottom: 8,
+    marginBottom: 10,
   },
-  inputDisabled: {
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-    borderRadius: 6,
+  dropdown: { marginBottom: 12 },
+  itemBox: {
+    marginBottom: 20,
     padding: 10,
-    backgroundColor: "#eee",
-    marginBottom: 8,
-    color: "#6b7280",
+    backgroundColor: "#f9f9f9",
+    borderRadius: 8,
   },
-  dropdown: {
-    borderColor: "#d1d5db",
-    backgroundColor: "#f9fafb",
-    marginBottom: 8,
-  },
-  dropdownContainer: {
-    borderColor: "#d1d5db",
-    backgroundColor: "#ffffff",
-  },
-  buttonContainer: {
-    marginTop: 24,
-    backgroundColor: "#3b82f6",
-    borderRadius: 6,
-  },
-  buttonText: {
-    color: "#fff",
-    textAlign: "center",
+  addButton: {
+    backgroundColor: "#6c757d",
     padding: 12,
-    fontWeight: "bold",
+    borderRadius: 8,
+    marginBottom: 10,
+    alignItems: "center",
   },
+  addText: { color: "#fff" },
+  submitButton: {
+    backgroundColor: "#007bff",
+    padding: 14,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  submitText: { color: "#fff", fontWeight: "bold" },
+  removeButton: {
+    backgroundColor: "#dc3545",
+    padding: 8,
+    borderRadius: 8,
+    marginTop: 8,
+    alignItems: "center",
+  },
+  removeText: { color: "#fff", fontWeight: "bold" },
 });

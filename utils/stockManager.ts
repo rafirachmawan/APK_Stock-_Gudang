@@ -13,6 +13,16 @@ export interface Barang {
   kategori: string;
   nomorKendaraan?: string;
   namaSopir?: string;
+  jenisForm?: string;
+}
+
+export interface StokBarang {
+  kode: string;
+  nama: string;
+  totalLarge: number;
+  totalMedium: number;
+  totalSmall: number;
+  principle: string; // ✅ tambahan
 }
 
 export const getCurrentStock = async (): Promise<Barang[]> => {
@@ -31,7 +41,6 @@ export const getCurrentStock = async (): Promise<Barang[]> => {
 
     const stockMap = new Map<string, Barang>();
 
-    // Proses barang masuk
     dataMasuk.forEach((form: any) => {
       if (!form.items || !Array.isArray(form.items)) return;
 
@@ -54,9 +63,10 @@ export const getCurrentStock = async (): Promise<Barang[]> => {
             catatan: item.catatan || form.catatan || "",
             waktuInput: form.waktuInput,
             principle: form.principle,
-            kategori: form.gudang,
+            kategori: form.gudang || form.kategori || "",
             nomorKendaraan: form.nomorKendaraan || "",
             namaSopir: form.namaSopir || "",
+            jenisForm: form.jenisForm || "Pembelian",
           });
         } else {
           const existing = stockMap.get(key)!;
@@ -75,7 +85,6 @@ export const getCurrentStock = async (): Promise<Barang[]> => {
       });
     });
 
-    // Proses barang keluar
     dataKeluar.forEach((trx: any) => {
       if (!trx.items || !Array.isArray(trx.items)) return;
 
@@ -100,6 +109,19 @@ export const getCurrentStock = async (): Promise<Barang[]> => {
     console.error("Error mendapatkan stok:", error);
     return [];
   }
+};
+
+// ✅ Fungsi diperbaiki: Menyertakan field principle
+export const getCurrentStokBarang = async (): Promise<StokBarang[]> => {
+  const fullStock = await getCurrentStock();
+  return fullStock.map((item) => ({
+    kode: item.kode,
+    nama: item.nama,
+    totalLarge: item.stokLarge,
+    totalMedium: item.stokMedium,
+    totalSmall: item.stokSmall,
+    principle: item.principle || "Tidak Diketahui",
+  }));
 };
 
 export const deleteBarang = async (
@@ -129,13 +151,12 @@ export const resetAllStock = async (): Promise<void> => {
   try {
     await AsyncStorage.removeItem("barangMasuk");
     await AsyncStorage.removeItem("barangKeluar");
-    console.log("Semua stok berhasil dihapus.");
+    console.log("✅ Semua stok berhasil dihapus.");
   } catch (error) {
-    console.error("Gagal menghapus semua stok:", error);
+    console.error("❌ Gagal menghapus semua stok:", error);
   }
 };
 
-// 🔄 Fungsi opsional untuk migrasi data lama (flat item) ke bentuk transaksi
 export const migrateOldOutFormat = async (): Promise<void> => {
   try {
     const json = await AsyncStorage.getItem("barangKeluar");
@@ -144,7 +165,7 @@ export const migrateOldOutFormat = async (): Promise<void> => {
     const grouped: Record<string, any> = {};
 
     for (const item of oldData) {
-      if (!item.kodeApos || item.items) continue; // skip jika sudah format baru
+      if (!item.kodeApos || item.items) continue;
 
       const key = item.kodeApos;
       if (!grouped[key]) {
@@ -156,6 +177,7 @@ export const migrateOldOutFormat = async (): Promise<void> => {
           nomorKendaraan: item.nomorKendaraan || "",
           namaSopir: item.namaSopir || "",
           waktuInput: item.waktuInput || new Date().toISOString(),
+          jenisForm: item.jenisForm || "DR",
           items: [],
         };
       }

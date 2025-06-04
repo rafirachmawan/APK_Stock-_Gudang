@@ -1,3 +1,5 @@
+// HomeScreen.tsx
+
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useState } from "react";
@@ -24,7 +26,6 @@ import { Barang } from "../../utils/stockManager";
 const screenWidth = Dimensions.get("window").width;
 const cardWidth = screenWidth < 400 ? screenWidth - 60 : 160;
 
-// Hardcoded kredensial internal
 const CREDENTIALS = {
   username: "admin",
   password: "admin",
@@ -139,6 +140,14 @@ export default function HomeScreen() {
     }
   };
 
+  const handleLogout = async () => {
+    await AsyncStorage.removeItem("userLoggedIn");
+    Alert.alert("Logout", "Anda telah keluar dari akun.");
+    setTimeout(() => {
+      window.location.reload();
+    }, 500);
+  };
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#fff" }}>
       <ScrollView contentContainerStyle={styles.container}>
@@ -212,6 +221,17 @@ export default function HomeScreen() {
             <Text style={styles.syncStatus}>📅 Terakhir: {lastSync}</Text>
           )}
         </View>
+
+        {/* 🔓 Tombol Logout */}
+        <TouchableOpacity
+          style={[
+            styles.syncButton,
+            { backgroundColor: "#6b7280", marginTop: 40 },
+          ]}
+          onPress={handleLogout}
+        >
+          <Text style={styles.syncText}>🔓 Logout</Text>
+        </TouchableOpacity>
 
         {/* Modal Login */}
         <Modal transparent={true} visible={authVisible} animationType="slide">

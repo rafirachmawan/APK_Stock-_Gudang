@@ -5,7 +5,7 @@ import { db } from "./firebase";
 const COLLECTION_MASUK = "barangMasuk";
 const COLLECTION_KELUAR = "barangKeluar";
 
-// Membersihkan field undefined (tapi biarkan string kosong)
+// Membersihkan object dari field undefined atau kosong
 const deepClean = (obj: any): any => {
   if (Array.isArray(obj)) {
     return obj.map(deepClean).filter((v) => v !== undefined);
@@ -21,6 +21,7 @@ const deepClean = (obj: any): any => {
   return obj;
 };
 
+// Upload barangMasuk dan barangKeluar ke Firebase
 export const syncUpload = async () => {
   console.log("🟡 Mulai Sync Upload...");
 
@@ -29,21 +30,9 @@ export const syncUpload = async () => {
   const dataMasuk = jsonMasuk ? JSON.parse(jsonMasuk) : [];
 
   for (const trx of dataMasuk) {
-    if (!trx.kodeGdng || !trx.waktuInput) continue;
+    if (!trx.kodeGdng || !trx.waktuInput || !trx.items?.length) continue;
 
-    console.log("📦 Upload barangMasuk:");
-    console.log(JSON.stringify(trx, null, 2));
-
-    if (!trx.items || !Array.isArray(trx.items)) {
-      console.log("⚠️ Tidak ada items, dilewati");
-      continue;
-    }
-
-    trx.items.forEach((item: any, index: number) => {
-      console.log(`🔹 Item #${index + 1}:`, item);
-    });
-
-    const fixedItems = trx.items.map((item: any) => ({
+    const cleanedItems = trx.items.map((item: any) => ({
       namaBarang: item.namaBarang ?? "",
       kode: item.kode ?? "",
       ed: item.ed ?? "",
@@ -55,15 +44,18 @@ export const syncUpload = async () => {
 
     const cleaned = deepClean({
       ...trx,
-      items: fixedItems,
+      jenisForm: trx.jenisForm ?? "Pembelian",
+      items: cleanedItems,
     });
 
-    const id = `${trx.kodeGdng}-${trx.waktuInput}`;
+    const id = `${trx.kodeGdng}-${trx.jenisForm ?? "Pembelian"}-${
+      trx.waktuInput
+    }`;
 
     try {
       await setDoc(doc(db, COLLECTION_MASUK, id), cleaned);
-      console.log(`✅ Berhasil upload barangMasuk ID: ${id}`);
-    } catch (err: any) {
+      console.log(`✅ Upload barangMasuk: ${id}`);
+    } catch (err) {
       console.error("❌ Gagal upload barangMasuk:", err);
     }
   }
@@ -73,33 +65,31 @@ export const syncUpload = async () => {
   const dataKeluar = jsonKeluar ? JSON.parse(jsonKeluar) : [];
 
   for (const trx of dataKeluar) {
-    if (!trx.kodeApos || !trx.waktuInput) continue;
+    if (!trx.kodeApos || !trx.waktuInput || !trx.items?.length) continue;
 
-    console.log("📦 Upload barangKeluar:");
-    console.log(JSON.stringify(trx, null, 2));
-
-    const fixedItems =
-      trx.items?.map((item: any) => ({
-        namaBarang: item.namaBarang ?? "",
-        kode: item.kode ?? "",
-        large: item.large ?? "",
-        medium: item.medium ?? "",
-        small: item.small ?? "",
-        principle: item.principle ?? "",
-        catatan: item.catatan ?? "",
-      })) ?? [];
+    const cleanedItems = trx.items.map((item: any) => ({
+      namaBarang: item.namaBarang ?? "",
+      kode: item.kode ?? "",
+      large: item.large ?? "",
+      medium: item.medium ?? "",
+      small: item.small ?? "",
+      principle: item.principle ?? "",
+      ed: item.ed ?? "",
+      catatan: item.catatan ?? "",
+    }));
 
     const cleaned = deepClean({
       ...trx,
-      items: fixedItems,
+      jenisForm: trx.jenisForm ?? "DR",
+      items: cleanedItems,
     });
 
-    const id = `${trx.kodeApos}-${trx.waktuInput}`;
+    const id = `${trx.kodeApos}-${trx.jenisForm ?? "DR"}-${trx.waktuInput}`;
 
     try {
       await setDoc(doc(db, COLLECTION_KELUAR, id), cleaned);
-      console.log(`✅ Berhasil upload barangKeluar ID: ${id}`);
-    } catch (err: any) {
+      console.log(`✅ Upload barangKeluar: ${id}`);
+    } catch (err) {
       console.error("❌ Gagal upload barangKeluar:", err);
     }
   }
@@ -107,17 +97,16 @@ export const syncUpload = async () => {
   console.log("🟢 Selesai Sync Upload.");
 };
 
+// Download semua data dari Firebase ke AsyncStorage
 export const syncDownload = async () => {
   try {
     console.log("⏬ Mulai download dari Firebase...");
 
-    // Barang Masuk
     const snapshotMasuk = await getDocs(collection(db, COLLECTION_MASUK));
     const dataMasuk = snapshotMasuk.docs.map((doc) => doc.data());
     await AsyncStorage.setItem("barangMasuk", JSON.stringify(dataMasuk));
     console.log(`✅ Download barangMasuk: ${dataMasuk.length} data`);
 
-    // Barang Keluar
     const snapshotKeluar = await getDocs(collection(db, COLLECTION_KELUAR));
     const dataKeluar = snapshotKeluar.docs.map((doc) => doc.data());
     await AsyncStorage.setItem("barangKeluar", JSON.stringify(dataKeluar));
@@ -130,6 +119,7 @@ export const syncDownload = async () => {
   }
 };
 
+// Menghapus semua histori dari local
 export const resetSemuaHistory = async () => {
   await AsyncStorage.removeItem("barangMasuk");
   await AsyncStorage.removeItem("barangKeluar");
