@@ -1,4 +1,4 @@
-// OutScreen.tsx
+// OutScreen.tsx - Dengan Jenis Gudang di atas, dan filter item berdasarkan gudang
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useFocusEffect } from "@react-navigation/native";
 import {
@@ -32,6 +32,7 @@ interface ItemOut {
 }
 
 interface TransaksiOut {
+  jenisGudang: string;
   kodeGdng: string;
   kodeApos: string;
   kategori: string;
@@ -45,6 +46,8 @@ interface TransaksiOut {
 }
 
 export default function OutScreen() {
+  const [jenisGudang, setJenisGudang] = useState("");
+  const [openJenisGudang, setOpenJenisGudang] = useState(false);
   const [jenisForm, setJenisForm] = useState<"DR" | "MB" | "RB">("DR");
   const [openJenis, setOpenJenis] = useState(false);
   const [kodeApos, setKodeApos] = useState("");
@@ -54,21 +57,21 @@ export default function OutScreen() {
   const [nomorKendaraan, setNomorKendaraan] = useState("");
   const [tanggalTransaksi, setTanggalTransaksi] = useState(new Date());
   const [showDate, setShowDate] = useState(false);
-  const [openKendaraan, setOpenKendaraan] = useState(false);
   const [openNamaBarang, setOpenNamaBarang] = useState<boolean[]>([]);
+  const [openKendaraan, setOpenKendaraan] = useState(false);
+  const [openSopir, setOpenSopir] = useState(false);
+  const [openJenisReturn, setOpenJenisReturn] = useState(false);
 
   const kendaraanList = [
     { label: "B 1234 XY", value: "B 1234 XY" },
     { label: "B 5678 ZZ", value: "B 5678 ZZ" },
     { label: "B 9012 AA", value: "B 9012 AA" },
   ];
-
   const sopirList = [
     { label: "Andi", value: "Andi" },
     { label: "Budi", value: "Budi" },
     { label: "Citra", value: "Citra" },
   ];
-
   const jenisReturnList = [
     { label: "Mutasi Antar Depo", value: "Mutasi Antar Depo" },
     { label: "Hangover (ReturnBeli)", value: "Hangover (ReturnBeli)" },
@@ -76,8 +79,6 @@ export default function OutScreen() {
     { label: "Pemusnahan", value: "Pemusnahan" },
   ];
 
-  const [openJenisReturn, setOpenJenisReturn] = useState(false);
-  const [openSopir, setOpenSopir] = useState(false);
   const [dataBarangMasuk, setDataBarangMasuk] = useState<ItemOut[]>([]);
   const [itemList, setItemList] = useState<ItemOut[]>([]);
 
@@ -93,10 +94,7 @@ export default function OutScreen() {
             gdg: data.gudang || data.kodeGdng || "-",
           }));
         });
-        const uniqueItems = Array.from(
-          new Map(allItems.map((i) => [i.namaBarang, i])).values()
-        );
-        setDataBarangMasuk(uniqueItems);
+        setDataBarangMasuk(allItems);
       });
       return () => unsub();
     }, [])
@@ -109,8 +107,10 @@ export default function OutScreen() {
     return `${day}-${month}-${year}`;
   };
 
+  const barangFiltered = dataBarangMasuk.filter((b) => b.gdg === jenisGudang);
+
   const handleSelectBarang = (index: number, nama: string) => {
-    const found = dataBarangMasuk.find((b) => b.namaBarang === nama);
+    const found = barangFiltered.find((b) => b.namaBarang === nama);
     if (found) {
       const updated = [...itemList];
       updated[index] = {
@@ -147,23 +147,14 @@ export default function OutScreen() {
         medium: "",
         small: "",
         principle: "",
-        gdg: "",
+        gdg: jenisGudang,
       },
     ]);
     setOpenNamaBarang((prev) => [...prev, false]);
   };
 
-  const removeItem = (index: number) => {
-    const updated = [...itemList];
-    updated.splice(index, 1);
-    setItemList(updated);
-    const openCopy = [...openNamaBarang];
-    openCopy.splice(index, 1);
-    setOpenNamaBarang(openCopy);
-  };
-
   const handleSubmit = async () => {
-    if (!kodeApos || itemList.length === 0) {
+    if (!kodeApos || !jenisGudang || itemList.length === 0) {
       Alert.alert("Harap lengkapi semua data penting");
       return;
     }
@@ -172,6 +163,7 @@ export default function OutScreen() {
     const kodeGdngFinal = jenisForm === "MB" ? itemList[0]?.gdg || "-" : "-";
 
     const newEntry: TransaksiOut = {
+      jenisGudang,
       kodeGdng: kodeGdngFinal,
       kodeApos,
       kategori,
@@ -201,7 +193,25 @@ export default function OutScreen() {
 
   return (
     <ScrollView style={styles.container}>
-      <Text style={styles.title}>Form Barang Keluar</Text>
+      <Text style={styles.label}>Jenis Gudang</Text>
+      <DropDownPicker
+        open={openJenisGudang}
+        value={jenisGudang}
+        items={[
+          { label: "Gudang A", value: "Gudang A" },
+          { label: "Gudang B", value: "Gudang B" },
+          { label: "Gudang C", value: "Gudang C" },
+          { label: "Gudang D", value: "Gudang D" },
+          { label: "Gudang E", value: "Gudang E" },
+        ]}
+        setOpen={setOpenJenisGudang}
+        setValue={setJenisGudang}
+        placeholder="Pilih Jenis Gudang"
+        style={styles.dropdown}
+        zIndex={6000}
+        listMode="SCROLLVIEW"
+      />
+
       <Text style={styles.label}>Jenis Form</Text>
       <DropDownPicker
         open={openJenis}
@@ -315,9 +325,14 @@ export default function OutScreen() {
             value={item.namaBarang}
             setValue={(cb) => {
               const val = cb(item.namaBarang);
-              handleSelectBarang(i, val);
+              const exists = barangFiltered.some((b) => b.namaBarang === val);
+              if (exists) {
+                handleSelectBarang(i, val);
+              } else {
+                Alert.alert("Barang tidak tersedia di gudang ini");
+              }
             }}
-            items={dataBarangMasuk.map((b) => ({
+            items={barangFiltered.map((b) => ({
               label: b.namaBarang,
               value: b.namaBarang,
             }))}
@@ -328,6 +343,7 @@ export default function OutScreen() {
             zIndex={1000 - i}
             zIndexInverse={i}
           />
+
           <Text style={styles.label}>Kode</Text>
           <TextInput style={styles.input} value={item.kode} editable={false} />
           <Text style={styles.label}>Principle</Text>

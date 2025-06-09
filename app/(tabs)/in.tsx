@@ -86,9 +86,11 @@ export default function InScreen() {
   const barangByPrinciple = dataExcel.filter((d) => d.principle === principle);
 
   useEffect(() => {
-    loadExcelHybrid();
-    loadLastKodeGudang();
-  }, []);
+    if (jenisGudang === "Gudang BS") {
+      setGudang("Gudang E");
+      setOpenGudang(false); // tutup dropdown supaya tidak bisa buka
+    }
+  }, [jenisGudang]);
 
   const loadLastKodeGudang = async () => {
     const lastKode = await AsyncStorage.getItem("lastKodeGdng");
@@ -370,6 +372,7 @@ export default function InScreen() {
         zIndex={998}
         mode="BADGE"
         listMode="SCROLLVIEW"
+        disabled={jenisGudang === "Gudang BS"} // <--- ini dia!
       />
 
       <Text style={styles.label}>Tanggal Input</Text>

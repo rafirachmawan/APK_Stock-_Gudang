@@ -1,4 +1,6 @@
-import { collection, getDocs } from "firebase/firestore";
+// StockScreen.tsx dengan fitur realtime refresh setelah inputan selesai
+
+import { collection, getDocs, onSnapshot } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
   Modal,
@@ -18,6 +20,7 @@ interface StokBarang {
   totalMedium: number;
   totalSmall: number;
   principle: string;
+  jenisGudang?: string;
 }
 
 interface Item {
@@ -55,9 +58,20 @@ export default function StockScreen() {
   const [selectedItem, setSelectedItem] = useState<StokBarang | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [transaksiGabungan, setTransaksiGabungan] = useState<Transaksi[]>([]);
+  const [selectedJenisGudang, setSelectedJenisGudang] = useState<string | null>(
+    null
+  );
 
   useEffect(() => {
-    fetchStock();
+    const unsubscribeIn = onSnapshot(collection(db, "barangMasuk"), fetchStock);
+    const unsubscribeOut = onSnapshot(
+      collection(db, "barangKeluar"),
+      fetchStock
+    );
+    return () => {
+      unsubscribeIn();
+      unsubscribeOut();
+    };
   }, []);
 
   const fetchStock = async () => {
@@ -83,6 +97,7 @@ export default function StockScreen() {
             totalMedium: 0,
             totalSmall: 0,
             principle: item.principle || trx.principle || "-",
+            jenisGudang: trx.jenisGudang || "-",
           };
         }
         stokMap[key].totalLarge += parseInt(item.large || "0");
@@ -156,7 +171,11 @@ export default function StockScreen() {
 
   const renderPrincipleList = () => {
     const filtered = Object.keys(groupedPrinciple).filter((key) =>
-      key.toLowerCase().includes(searchQuery.toLowerCase())
+      groupedPrinciple[key].some(
+        (item) =>
+          (!selectedJenisGudang || item.jenisGudang === selectedJenisGudang) &&
+          key.toLowerCase().includes(searchQuery.toLowerCase())
+      )
     );
 
     return (
@@ -175,7 +194,9 @@ export default function StockScreen() {
   };
 
   const renderBarangList = () => {
-    const list = groupedPrinciple[selectedPrinciple!] || [];
+    const list = (groupedPrinciple[selectedPrinciple!] || []).filter(
+      (item) => !selectedJenisGudang || item.jenisGudang === selectedJenisGudang
+    );
     return (
       <ScrollView>
         <Text style={styles.sectionTitle}>Barang dari {selectedPrinciple}</Text>
@@ -205,6 +226,44 @@ export default function StockScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Stok Barang</Text>
+
+      {/* Filter Jenis Gudang */}
+      <Text style={{ fontWeight: "bold", marginBottom: 4 }}>
+        Pilih Jenis Gudang
+      </Text>
+      <View
+        style={{
+          borderWidth: 1,
+          borderColor: "#ccc",
+          borderRadius: 8,
+          marginBottom: 12,
+        }}
+      >
+        <ScrollView horizontal>
+          {["Gudang Utama", "Gudang BS"].map((jenis) => (
+            <TouchableOpacity
+              key={jenis}
+              onPress={() => setSelectedJenisGudang(jenis)}
+              style={{
+                padding: 8,
+                backgroundColor:
+                  selectedJenisGudang === jenis ? "#007bff" : "#eee",
+                margin: 4,
+                borderRadius: 6,
+              }}
+            >
+              <Text
+                style={{
+                  color: selectedJenisGudang === jenis ? "#fff" : "#000",
+                }}
+              >
+                {jenis}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+
       {!selectedPrinciple && (
         <TextInput
           placeholder="Cari principle..."
@@ -213,6 +272,7 @@ export default function StockScreen() {
           style={styles.searchInput}
         />
       )}
+
       {!selectedPrinciple ? renderPrincipleList() : renderBarangList()}
 
       <Modal visible={modalVisible} animationType="slide">
