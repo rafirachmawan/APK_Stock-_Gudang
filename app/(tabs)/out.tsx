@@ -1,6 +1,12 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
+// OutScreen.tsx
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useFocusEffect } from "@react-navigation/native";
+import {
+  addDoc,
+  collection,
+  onSnapshot,
+  serverTimestamp,
+} from "firebase/firestore";
 import React, { useCallback, useState } from "react";
 import {
   Alert,
@@ -13,6 +19,7 @@ import {
   View,
 } from "react-native";
 import DropDownPicker from "react-native-dropdown-picker";
+import { db } from "../../utils/firebase";
 
 interface ItemOut {
   namaBarang: string;
@@ -21,13 +28,6 @@ interface ItemOut {
   medium: string;
   small: string;
   principle: string;
-  catatan?: string;
-  harga?: string;
-  disc1?: string;
-  disc2?: string;
-  disc3?: string;
-  discRp?: string;
-  total?: string;
   gdg?: string;
 }
 
@@ -41,29 +41,32 @@ interface TransaksiOut {
   waktuInput: string;
   jenisForm: "DR" | "MB" | "RB";
   items: ItemOut[];
+  createdAt?: any;
 }
 
 export default function OutScreen() {
   const [jenisForm, setJenisForm] = useState<"DR" | "MB" | "RB">("DR");
   const [openJenis, setOpenJenis] = useState(false);
-
   const [kodeApos, setKodeApos] = useState("");
   const [kategori, setKategori] = useState("");
   const [catatan, setCatatan] = useState("");
   const [namaSopir, setNamaSopir] = useState("");
-
+  const [nomorKendaraan, setNomorKendaraan] = useState("");
   const [tanggalTransaksi, setTanggalTransaksi] = useState(new Date());
   const [showDate, setShowDate] = useState(false);
-
-  const [nomorKendaraan, setNomorKendaraan] = useState("");
   const [openKendaraan, setOpenKendaraan] = useState(false);
-
-  const [openJenisReturn, setOpenJenisReturn] = useState(false);
+  const [openNamaBarang, setOpenNamaBarang] = useState<boolean[]>([]);
 
   const kendaraanList = [
     { label: "B 1234 XY", value: "B 1234 XY" },
     { label: "B 5678 ZZ", value: "B 5678 ZZ" },
     { label: "B 9012 AA", value: "B 9012 AA" },
+  ];
+
+  const sopirList = [
+    { label: "Andi", value: "Andi" },
+    { label: "Budi", value: "Budi" },
+    { label: "Citra", value: "Citra" },
   ];
 
   const jenisReturnList = [
@@ -73,37 +76,65 @@ export default function OutScreen() {
     { label: "Pemusnahan", value: "Pemusnahan" },
   ];
 
-  const [itemList, setItemList] = useState<ItemOut[]>([]);
+  const [openJenisReturn, setOpenJenisReturn] = useState(false);
+  const [openSopir, setOpenSopir] = useState(false);
   const [dataBarangMasuk, setDataBarangMasuk] = useState<ItemOut[]>([]);
-  const [openNamaBarang, setOpenNamaBarang] = useState<boolean[]>([]);
+  const [itemList, setItemList] = useState<ItemOut[]>([]);
 
   useFocusEffect(
     useCallback(() => {
-      loadBarangMasuk();
+      const unsub = onSnapshot(collection(db, "barangMasuk"), (snapshot) => {
+        const allItems = snapshot.docs.flatMap((doc) => {
+          const data = doc.data();
+          if (!data || !Array.isArray(data.items)) return [];
+          return data.items.map((item: any) => ({
+            ...item,
+            principle: item.principle || data.principle || "-",
+            gdg: data.gudang || data.kodeGdng || "-",
+          }));
+        });
+        const uniqueItems = Array.from(
+          new Map(allItems.map((i) => [i.namaBarang, i])).values()
+        );
+        setDataBarangMasuk(uniqueItems);
+      });
+      return () => unsub();
     }, [])
   );
-
-  const loadBarangMasuk = async () => {
-    const json = await AsyncStorage.getItem("barangMasuk");
-    const parsed = json ? JSON.parse(json) : [];
-    const items = parsed.flatMap((trx: any) =>
-      trx.items.map((item: any) => ({
-        ...item,
-        principle: item.principle || trx.principle || "-",
-        gudang: trx.gudang || trx.kodeGdng || "-",
-      }))
-    );
-    const unique = Array.from(
-      new Map(items.map((i) => [i.namaBarang, i])).values()
-    );
-    setDataBarangMasuk(unique);
-  };
 
   const formatDate = (date: Date) => {
     const day = String(date.getDate()).padStart(2, "0");
     const month = String(date.getMonth() + 1).padStart(2, "0");
     const year = date.getFullYear();
     return `${day}-${month}-${year}`;
+  };
+
+  const handleSelectBarang = (index: number, nama: string) => {
+    const found = dataBarangMasuk.find((b) => b.namaBarang === nama);
+    if (found) {
+      const updated = [...itemList];
+      updated[index] = {
+        ...updated[index],
+        namaBarang: found.namaBarang,
+        kode: found.kode,
+        principle: found.principle,
+        gdg: found.gdg,
+        large: "",
+        medium: "",
+        small: "",
+      };
+      setItemList(updated);
+    }
+  };
+
+  const handleChangeItem = (
+    index: number,
+    key: keyof ItemOut,
+    value: string
+  ) => {
+    const updated = [...itemList];
+    updated[index][key] = value;
+    setItemList(updated);
   };
 
   const addItem = () => {
@@ -119,7 +150,7 @@ export default function OutScreen() {
         gdg: "",
       },
     ]);
-    setOpenNamaBarang((prev) => [...prev, false]); // 🔧 fix untuk zIndex dropdown per item
+    setOpenNamaBarang((prev) => [...prev, false]);
   };
 
   const removeItem = (index: number) => {
@@ -131,43 +162,13 @@ export default function OutScreen() {
     setOpenNamaBarang(openCopy);
   };
 
-  const handleChangeItem = (
-    index: number,
-    key: keyof ItemOut,
-    value: string
-  ) => {
-    const updated = [...itemList];
-    updated[index][key] = value;
-    setItemList(updated);
-  };
-
-  const handleSelectBarang = (index: number, nama: string) => {
-    const found = dataBarangMasuk.find((b) => b.namaBarang === nama);
-    if (found) {
-      const updated = [...itemList];
-      updated[index] = {
-        ...updated[index],
-        namaBarang: found.namaBarang,
-        kode: found.kode,
-        principle: found.principle,
-        gdg: found.gudang || "-",
-      };
-      setItemList(updated);
-    }
-  };
-
   const handleSubmit = async () => {
-    if (!kodeApos || !itemList.length) {
-      Alert.alert("Lengkapi semua data wajib");
+    if (!kodeApos || itemList.length === 0) {
+      Alert.alert("Harap lengkapi semua data penting");
       return;
     }
 
-    const waktuInput = new Date(
-      tanggalTransaksi.getFullYear(),
-      tanggalTransaksi.getMonth(),
-      tanggalTransaksi.getDate()
-    ).toISOString();
-
+    const waktuInput = tanggalTransaksi.toISOString();
     const kodeGdngFinal = jenisForm === "MB" ? itemList[0]?.gdg || "-" : "-";
 
     const newEntry: TransaksiOut = {
@@ -180,28 +181,27 @@ export default function OutScreen() {
       jenisForm,
       waktuInput,
       items: itemList,
+      createdAt: serverTimestamp(),
     };
 
-    const existing = await AsyncStorage.getItem("barangKeluar");
-    const parsed = existing ? JSON.parse(existing) : [];
-    parsed.push(newEntry);
-    await AsyncStorage.setItem("barangKeluar", JSON.stringify(parsed));
-
-    Alert.alert("Barang keluar disimpan");
-    setItemList([]);
-    setOpenNamaBarang([]);
-    setKodeApos("");
-    setKategori("");
-    setCatatan("");
-    setNomorKendaraan("");
-    setNamaSopir("");
-    setTanggalTransaksi(new Date());
+    try {
+      await addDoc(collection(db, "barangKeluar"), newEntry);
+      Alert.alert("Barang keluar berhasil disimpan ke cloud");
+      setItemList([]);
+      setKodeApos("");
+      setKategori("");
+      setCatatan("");
+      setNomorKendaraan("");
+      setNamaSopir("");
+    } catch (err) {
+      console.error("Gagal simpan ke Firestore:", err);
+      Alert.alert("Gagal simpan ke server");
+    }
   };
 
   return (
     <ScrollView style={styles.container}>
       <Text style={styles.title}>Form Barang Keluar</Text>
-
       <Text style={styles.label}>Jenis Form</Text>
       <DropDownPicker
         open={openJenis}
@@ -217,8 +217,7 @@ export default function OutScreen() {
         zIndex={5000}
         listMode="SCROLLVIEW"
       />
-
-      <Text style={styles.label}>Tanggal Transaksi</Text>
+      <Text style={styles.label}>Tanggal</Text>
       <TouchableOpacity onPress={() => setShowDate(true)} style={styles.input}>
         <Text>{formatDate(tanggalTransaksi)}</Text>
       </TouchableOpacity>
@@ -233,14 +232,44 @@ export default function OutScreen() {
           }}
         />
       )}
-
       <Text style={styles.label}>No Faktur</Text>
       <TextInput
         style={styles.input}
         value={kodeApos}
         onChangeText={setKodeApos}
       />
-
+      {jenisForm === "DR" && (
+        <>
+          <Text style={styles.label}>Nomor Kendaraan</Text>
+          <DropDownPicker
+            open={openKendaraan}
+            value={nomorKendaraan}
+            items={kendaraanList}
+            setOpen={setOpenKendaraan}
+            setValue={setNomorKendaraan}
+            style={styles.dropdown}
+            zIndex={4000}
+            listMode="SCROLLVIEW"
+          />
+          <Text style={styles.label}>Nama Sopir</Text>
+          <DropDownPicker
+            open={openSopir}
+            value={namaSopir}
+            items={sopirList}
+            setOpen={setOpenSopir}
+            setValue={setNamaSopir}
+            style={styles.dropdown}
+            zIndex={3500}
+            listMode="SCROLLVIEW"
+          />
+          <Text style={styles.label}>Keterangan</Text>
+          <TextInput
+            style={styles.input}
+            value={catatan}
+            onChangeText={setCatatan}
+          />
+        </>
+      )}
       {jenisForm === "MB" && (
         <>
           <Text style={styles.label}>Gudang Tujuan</Text>
@@ -257,35 +286,6 @@ export default function OutScreen() {
           />
         </>
       )}
-
-      {jenisForm === "DR" && (
-        <>
-          <Text style={styles.label}>Nomor Kendaraan</Text>
-          <DropDownPicker
-            open={openKendaraan}
-            value={nomorKendaraan}
-            items={kendaraanList}
-            setOpen={setOpenKendaraan}
-            setValue={setNomorKendaraan}
-            style={styles.dropdown}
-            zIndex={4000}
-            listMode="SCROLLVIEW"
-          />
-          <Text style={styles.label}>Nama Sopir</Text>
-          <TextInput
-            style={styles.input}
-            value={namaSopir}
-            onChangeText={setNamaSopir}
-          />
-          <Text style={styles.label}>Keterangan</Text>
-          <TextInput
-            style={styles.input}
-            value={catatan}
-            onChangeText={setCatatan}
-          />
-        </>
-      )}
-
       {jenisForm === "RB" && (
         <>
           <Text style={styles.label}>Jenis Return</Text>
@@ -324,56 +324,36 @@ export default function OutScreen() {
             placeholder="Pilih Nama Barang"
             searchable
             style={styles.dropdown}
+            listMode="SCROLLVIEW"
             zIndex={1000 - i}
             zIndexInverse={i}
-            listMode="SCROLLVIEW"
           />
-
           <Text style={styles.label}>Kode</Text>
           <TextInput style={styles.input} value={item.kode} editable={false} />
-
           <Text style={styles.label}>Principle</Text>
           <TextInput
             style={styles.input}
             value={item.principle}
             editable={false}
           />
-
-          {jenisForm === "MB" && (
-            <>
-              <Text style={styles.label}>Gudang Asal</Text>
-              <TextInput
-                style={styles.input}
-                value={item.gdg || "-"}
-                editable={false}
-              />
-            </>
-          )}
-
           <Text style={styles.label}>Large</Text>
           <TextInput
             style={styles.input}
-            keyboardType="numeric"
             value={item.large}
             onChangeText={(t) => handleChangeItem(i, "large", t)}
           />
-
           <Text style={styles.label}>Medium</Text>
           <TextInput
             style={styles.input}
-            keyboardType="numeric"
             value={item.medium}
             onChangeText={(t) => handleChangeItem(i, "medium", t)}
           />
-
           <Text style={styles.label}>Small</Text>
           <TextInput
             style={styles.input}
-            keyboardType="numeric"
             value={item.small}
             onChangeText={(t) => handleChangeItem(i, "small", t)}
           />
-
           <TouchableOpacity
             onPress={() => removeItem(i)}
             style={styles.removeButton}
@@ -382,11 +362,9 @@ export default function OutScreen() {
           </TouchableOpacity>
         </View>
       ))}
-
       <TouchableOpacity onPress={addItem} style={styles.addButton}>
         <Text style={styles.addText}>+ Tambah Item</Text>
       </TouchableOpacity>
-
       <TouchableOpacity onPress={handleSubmit} style={styles.submitButton}>
         <Text style={styles.submitText}>Simpan</Text>
       </TouchableOpacity>
@@ -416,7 +394,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#6c757d",
     padding: 12,
     borderRadius: 8,
-    marginBottom: 10,
+    marginBottom: 20,
     alignItems: "center",
   },
   removeButton: {
@@ -427,7 +405,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   removeText: { color: "#fff", fontWeight: "bold" },
-  addText: { color: "#fff" },
+  addText: { color: "#fff", fontWeight: "bold" },
   submitButton: {
     backgroundColor: "#28a745",
     padding: 14,

@@ -1,6 +1,9 @@
+// InScreen.tsx FULL VERSION LENGKAP & SIAP COPY-PASTE
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import * as FileSystem from "expo-file-system";
+import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
@@ -13,6 +16,7 @@ import {
 } from "react-native";
 import DropDownPicker from "react-native-dropdown-picker";
 import * as XLSX from "xlsx";
+import { db } from "../../utils/firebase";
 
 interface PrincipalItem {
   principle: string;
@@ -31,6 +35,7 @@ interface ItemInput {
 }
 
 interface PurchaseForm {
+  jenisGudang: string;
   gudang: string;
   kodeGdng: string;
   kodeApos?: string;
@@ -57,6 +62,9 @@ export default function InScreen() {
   const [subJenisReturn, setSubJenisReturn] =
     useState<string>("Return Good Stock");
 
+  const [jenisGudang, setJenisGudang] = useState("");
+  const [openJenisGudang, setOpenJenisGudang] = useState(false);
+
   const [openJenis, setOpenJenis] = useState(false);
   const [openSubJenis, setOpenSubJenis] = useState(false);
   const [openSubReturn, setOpenSubReturn] = useState(false);
@@ -74,6 +82,8 @@ export default function InScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [indexEDPicker, setIndexEDPicker] = useState<number | null>(null);
+
+  const barangByPrinciple = dataExcel.filter((d) => d.principle === principle);
 
   useEffect(() => {
     loadExcelHybrid();
@@ -132,6 +142,33 @@ export default function InScreen() {
     setPrincipleList([...new Set(jsonData.map((d) => d.principle))]);
   };
 
+  const parseDate = (ddmmyyyy: string): Date => {
+    const [day, month, year] = ddmmyyyy.split("-").map(Number);
+    return new Date(year, month - 1, day);
+  };
+
+  const handleSelectBarang = (index: number, namaBarang: string) => {
+    const found = dataExcel.find(
+      (d) => d.principle === principle && d.namaBarang === namaBarang
+    );
+    if (found) {
+      const updated = [...itemList];
+      updated[index].namaBarang = found.namaBarang;
+      updated[index].kode = found.kode;
+      setItemList(updated);
+    }
+  };
+
+  const handleChangeItem = (
+    index: number,
+    key: keyof ItemInput,
+    value: string
+  ) => {
+    const updated = [...itemList];
+    updated[index][key] = value;
+    setItemList(updated);
+  };
+
   const addItem = () => {
     setItemList((prev) => [
       ...prev,
@@ -148,47 +185,62 @@ export default function InScreen() {
     setOpenNamaBarang((prev) => [...prev, false]);
   };
 
-  const removeItem = (index: number) => {
-    const updated = [...itemList];
-    updated.splice(index, 1);
-    setItemList(updated);
-    const openCopy = [...openNamaBarang];
-    openCopy.splice(index, 1);
-    setOpenNamaBarang(openCopy);
-  };
+  const handleSubmit = async () => {
+    if (!principle || !gudang || !jenisGudang || itemList.length === 0) {
+      Alert.alert("Isi semua field wajib");
+      return;
+    }
 
-  const handleChangeItem = (
-    index: number,
-    key: keyof ItemInput,
-    value: string
-  ) => {
-    const updated = [...itemList];
-    updated[index][key] = value;
-    setItemList(updated);
-  };
+    const newEntry: PurchaseForm = {
+      jenisGudang,
+      gudang,
+      kodeGdng,
+      kodeApos: jenisForm !== "Return" ? kodeApos : "",
+      kodeRetur: jenisForm === "Return" ? kodeRetur : "",
+      suratJalan: jenisForm !== "Return" ? suratJalan : "",
+      principle,
+      jenisForm:
+        jenisForm === "Pembelian"
+          ? `Pembelian - ${subJenisPembelian}`
+          : `Return - ${subJenisReturn}`,
+      waktuInput: manualTanggal
+        ? convertToISODate(manualTanggal)
+        : new Date().toISOString(),
+      items: itemList,
+    };
 
-  const handleSelectBarang = (index: number, namaBarang: string) => {
-    const found = dataExcel.find(
-      (d) => d.principle === principle && d.namaBarang === namaBarang
-    );
-    if (found) {
-      const updated = [...itemList];
-      updated[index].namaBarang = found.namaBarang;
-      updated[index].kode = found.kode;
-      setItemList(updated);
+    try {
+      const payload: Record<string, any> = {
+        ...newEntry,
+        createdAt: serverTimestamp(),
+      };
+      Object.keys(payload).forEach((key) => {
+        if (payload[key] === undefined) delete payload[key];
+      });
+
+      await addDoc(collection(db, "barangMasuk"), payload);
+      await AsyncStorage.setItem("lastKodeGdng", kodeGdng);
+
+      const next = (parseInt(kodeGdng, 10) + 1).toString().padStart(4, "0");
+      setKodeGdng(next);
+      Alert.alert("Data berhasil disimpan ke cloud");
+      setItemList([]);
+      setOpenNamaBarang([]);
+      setKodeApos("");
+      setKodeRetur("");
+      setSuratJalan("");
+      setPrinciple("");
+      setManualTanggal("");
+      setJenisGudang("");
+    } catch (error) {
+      console.error("❌ Gagal simpan ke Firestore:", error);
+      Alert.alert("Gagal menyimpan data ke server.");
     }
   };
-
-  const barangByPrinciple = dataExcel.filter((d) => d.principle === principle);
 
   const convertToISODate = (ddmmyyyy: string) => {
     const [day, month, year] = ddmmyyyy.split("-");
     return new Date(`${year}-${month}-${day}T00:00:00.000Z`).toISOString();
-  };
-
-  const parseDate = (ddmmyyyy: string): Date => {
-    const [day, month, year] = ddmmyyyy.split("-").map(Number);
-    return new Date(year, month - 1, day);
   };
 
   const onChangeDate = (event: any, selected?: Date) => {
@@ -204,50 +256,24 @@ export default function InScreen() {
     }
   };
 
-  const handleSubmit = async () => {
-    if (!principle || !gudang || itemList.length === 0) {
-      Alert.alert("Isi semua field wajib");
-      return;
-    }
-
-    const newEntry: PurchaseForm = {
-      gudang,
-      kodeGdng,
-      kodeApos: jenisForm !== "Return" ? kodeApos : undefined,
-      kodeRetur: jenisForm === "Return" ? kodeRetur : undefined,
-      suratJalan: jenisForm !== "Return" ? suratJalan : undefined,
-      principle,
-      jenisForm:
-        jenisForm === "Pembelian"
-          ? `Pembelian - ${subJenisPembelian}`
-          : `Return - ${subJenisReturn}`,
-      waktuInput: manualTanggal
-        ? convertToISODate(manualTanggal)
-        : new Date().toISOString(),
-      items: itemList,
-    };
-
-    const existing = await AsyncStorage.getItem("barangMasuk");
-    const parsed = existing ? JSON.parse(existing) : [];
-    parsed.push(newEntry);
-    await AsyncStorage.setItem("barangMasuk", JSON.stringify(parsed));
-    await AsyncStorage.setItem("lastKodeGdng", kodeGdng);
-
-    const next = (parseInt(kodeGdng, 10) + 1).toString().padStart(4, "0");
-    setKodeGdng(next);
-
-    Alert.alert("Data berhasil disimpan");
-    setItemList([]);
-    setOpenNamaBarang([]);
-    setKodeApos("");
-    setKodeRetur("");
-    setSuratJalan("");
-    setPrinciple("");
-    setManualTanggal("");
-  };
-
   return (
     <ScrollView style={styles.container}>
+      <Text style={styles.label}>Jenis Gudang</Text>
+      <DropDownPicker
+        open={openJenisGudang}
+        setOpen={setOpenJenisGudang}
+        value={jenisGudang}
+        setValue={setJenisGudang}
+        items={[
+          { label: "Gudang Utama", value: "Gudang Utama" },
+          { label: "Gudang BS", value: "Gudang BS" },
+        ]}
+        placeholder="Pilih Jenis Gudang"
+        style={styles.dropdown}
+        zIndex={10990}
+        mode="BADGE"
+        listMode="SCROLLVIEW"
+      />
       <Text style={styles.title}>Form Barang Masuk</Text>
 
       <Text style={styles.label}>Jenis Form</Text>

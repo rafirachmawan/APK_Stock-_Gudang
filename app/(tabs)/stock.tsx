@@ -1,5 +1,4 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useIsFocused } from "@react-navigation/native";
+import { collection, getDocs } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
   Modal,
@@ -10,7 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { getCurrentStokBarang } from "../../utils/stockManager";
+import { db } from "../../utils/firebase";
 
 interface StokBarang {
   kode: string;
@@ -57,72 +56,94 @@ export default function StockScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [transaksiGabungan, setTransaksiGabungan] = useState<Transaksi[]>([]);
 
-  const isFocused = useIsFocused();
-
   useEffect(() => {
-    if (isFocused) fetchStock();
-  }, [isFocused]);
+    fetchStock();
+  }, []);
 
   const fetchStock = async () => {
-    const data = await getCurrentStokBarang();
+    const [snapIn, snapOut] = await Promise.all([
+      getDocs(collection(db, "barangMasuk")),
+      getDocs(collection(db, "barangKeluar")),
+    ]);
+
+    const masuk: any[] = snapIn.docs.map((d) => d.data());
+    const keluar: any[] = snapOut.docs.map((d) => d.data());
+
+    const stokMap: Record<string, StokBarang> = {};
+
+    masuk.forEach((trx) => {
+      if (!Array.isArray(trx.items)) return;
+      trx.items.forEach((item: any) => {
+        const key = item.kode;
+        if (!stokMap[key]) {
+          stokMap[key] = {
+            kode: item.kode,
+            nama: item.namaBarang,
+            totalLarge: 0,
+            totalMedium: 0,
+            totalSmall: 0,
+            principle: item.principle || trx.principle || "-",
+          };
+        }
+        stokMap[key].totalLarge += parseInt(item.large || "0");
+        stokMap[key].totalMedium += parseInt(item.medium || "0");
+        stokMap[key].totalSmall += parseInt(item.small || "0");
+      });
+    });
+
+    keluar.forEach((trx) => {
+      if (!Array.isArray(trx.items)) return;
+      trx.items.forEach((item: any) => {
+        const key = item.kode;
+        if (!stokMap[key]) return;
+        stokMap[key].totalLarge -= parseInt(item.large || "0");
+        stokMap[key].totalMedium -= parseInt(item.medium || "0");
+        stokMap[key].totalSmall -= parseInt(item.small || "0");
+      });
+    });
+
     const grouped: Record<string, StokBarang[]> = {};
-    data.forEach((item) => {
+    Object.values(stokMap).forEach((item) => {
       if (!grouped[item.principle]) grouped[item.principle] = [];
       grouped[item.principle].push(item);
     });
-    setStockData(data);
+
+    setStockData(Object.values(stokMap));
     setGroupedPrinciple(grouped);
   };
 
   const handleSelectItem = async (item: StokBarang) => {
     setSelectedItem(item);
-    await loadTransaksi(item.kode);
-    setModalVisible(true);
-  };
-
-  const loadTransaksi = async (kodeBarang: string) => {
-    const [jsonMasuk, jsonKeluar] = await Promise.all([
-      AsyncStorage.getItem("barangMasuk"),
-      AsyncStorage.getItem("barangKeluar"),
+    const [snapIn, snapOut] = await Promise.all([
+      getDocs(collection(db, "barangMasuk")),
+      getDocs(collection(db, "barangKeluar")),
     ]);
 
-    const masuk: Transaksi[] = (
-      JSON.parse(jsonMasuk || "[]") as Transaksi[]
-    ).flatMap((trx) =>
-      trx.items.some((item) => item.kode === kodeBarang)
-        ? [
-            {
-              jenisForm: trx.jenisForm || "Pembelian",
-              waktuInput: trx.waktuInput,
-              gudang: trx.gudang,
-              kodeApos: trx.kodeApos,
-              suratJalan: trx.suratJalan,
-              principle: trx.principle,
-              kategori: trx.kategori,
-              items: trx.items.filter((item) => item.kode === kodeBarang),
-            },
-          ]
-        : []
-    );
+    const masuk: Transaksi[] = snapIn.docs
+      .map((d) => d.data() as any)
+      .filter((trx) => trx.items?.some((i: any) => i.kode === item.kode))
+      .map((trx) => ({
+        jenisForm: trx.jenisForm || "Pembelian",
+        waktuInput: trx.waktuInput,
+        gudang: trx.gudang,
+        kodeApos: trx.kodeApos,
+        suratJalan: trx.suratJalan,
+        principle: trx.principle,
+        items: trx.items.filter((i: any) => i.kode === item.kode),
+      }));
 
-    const keluar: Transaksi[] = (
-      JSON.parse(jsonKeluar || "[]") as Transaksi[]
-    ).flatMap((trx) =>
-      trx.items.some((item) => item.kode === kodeBarang)
-        ? [
-            {
-              jenisForm: trx.jenisForm || "Keluar",
-              waktuInput: trx.waktuInput,
-              gudang: trx.gudang,
-              kodeApos: trx.kodeApos,
-              nomorKendaraan: trx.nomorKendaraan,
-              namaSopir: trx.namaSopir,
-              kategori: trx.kategori,
-              items: trx.items.filter((item) => item.kode === kodeBarang),
-            },
-          ]
-        : []
-    );
+    const keluar: Transaksi[] = snapOut.docs
+      .map((d) => d.data() as any)
+      .filter((trx) => trx.items?.some((i: any) => i.kode === item.kode))
+      .map((trx) => ({
+        jenisForm: trx.jenisForm || "Keluar",
+        waktuInput: trx.waktuInput,
+        kategori: trx.kategori,
+        kodeApos: trx.kodeApos,
+        nomorKendaraan: trx.nomorKendaraan,
+        namaSopir: trx.namaSopir,
+        items: trx.items.filter((i: any) => i.kode === item.kode),
+      }));
 
     const combined = [...masuk, ...keluar].sort(
       (a, b) =>
@@ -130,22 +151,20 @@ export default function StockScreen() {
     );
 
     setTransaksiGabungan(combined);
+    setModalVisible(true);
   };
 
   const renderPrincipleList = () => {
-    const filteredPrinciples = Object.keys(groupedPrinciple).filter(
-      (principle) => principle.toLowerCase().includes(searchQuery.toLowerCase())
+    const filtered = Object.keys(groupedPrinciple).filter((key) =>
+      key.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
     return (
       <ScrollView>
-        {filteredPrinciples.map((principle) => (
+        {filtered.map((principle) => (
           <TouchableOpacity
             key={principle}
-            onPress={() => {
-              setSearchQuery(""); // reset pencarian barang
-              setSelectedPrinciple(principle);
-            }}
+            onPress={() => setSelectedPrinciple(principle)}
             style={styles.card}
           >
             <Text style={styles.nama}>{principle}</Text>
@@ -157,69 +176,31 @@ export default function StockScreen() {
 
   const renderBarangList = () => {
     const list = groupedPrinciple[selectedPrinciple!] || [];
-    const filteredList = list.filter((item) =>
-      item.nama.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-
     return (
       <ScrollView>
         <Text style={styles.sectionTitle}>Barang dari {selectedPrinciple}</Text>
-        <TextInput
-          placeholder="Cari nama barang..."
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          style={styles.searchInput}
-        />
-        {filteredList.map((item) => (
+        {list.map((item) => (
           <TouchableOpacity
             key={item.kode}
             onPress={() => handleSelectItem(item)}
             style={styles.card}
           >
             <Text style={styles.nama}>{item.nama}</Text>
-            <Text style={styles.detail}>Kode: {item.kode}</Text>
-            <Text style={styles.detail}>
+            <Text>Kode: {item.kode}</Text>
+            <Text>
               Stok: L:{item.totalLarge} M:{item.totalMedium} S:{item.totalSmall}
             </Text>
           </TouchableOpacity>
         ))}
         <TouchableOpacity
-          onPress={() => {
-            setSelectedPrinciple(null);
-            setSearchQuery("");
-          }}
+          onPress={() => setSelectedPrinciple(null)}
           style={styles.closeButton}
         >
-          <Text style={{ color: "#fff", fontWeight: "bold" }}>← Kembali</Text>
+          <Text style={{ color: "#fff" }}>← Kembali</Text>
         </TouchableOpacity>
       </ScrollView>
     );
   };
-
-  const renderTransaksi = () =>
-    transaksiGabungan.map((trx, i) => (
-      <View key={i} style={styles.transaksiBox}>
-        <Text style={styles.trxTitle}>
-          [{trx.jenisForm}] {new Date(trx.waktuInput).toLocaleString()}
-        </Text>
-        <Text>Gudang: {trx.gudang || "-"}</Text>
-        <Text>Principle: {trx.principle || "-"}</Text>
-        <Text>Kode Apos: {trx.kodeApos || "-"}</Text>
-        <Text>Surat Jalan: {trx.suratJalan || "-"}</Text>
-        <Text>Kategori: {trx.kategori || "-"}</Text>
-        <Text>Nomor Kendaraan: {trx.nomorKendaraan || "-"}</Text>
-        <Text>Nama Sopir: {trx.namaSopir || "-"}</Text>
-        {trx.items.map((item, j) => (
-          <View key={j} style={styles.itemBox}>
-            <Text>
-              Large: {item.large} | Medium: {item.medium} | Small: {item.small}
-            </Text>
-            <Text>ED: {item.ed || "-"}</Text>
-            <Text>Catatan: {item.catatan || "-"}</Text>
-          </View>
-        ))}
-      </View>
-    ));
 
   return (
     <View style={styles.container}>
@@ -236,13 +217,37 @@ export default function StockScreen() {
 
       <Modal visible={modalVisible} animationType="slide">
         <View style={styles.modalContainer}>
-          <Text style={styles.modalTitle}>Riwayat: {selectedItem?.nama}</Text>
-          <ScrollView>{renderTransaksi()}</ScrollView>
+          <Text style={styles.modalTitle}>
+            Riwayat: {selectedItem?.nama || "-"}
+          </Text>
+          <ScrollView>
+            {transaksiGabungan.map((trx, idx) => (
+              <View key={idx} style={styles.card}>
+                <Text style={styles.nama}>
+                  [{trx.jenisForm}] {trx.waktuInput}
+                </Text>
+                <Text>Gudang: {trx.gudang || trx.kategori}</Text>
+                <Text>Surat Jalan: {trx.suratJalan}</Text>
+                <Text>Faktur: {trx.kodeApos}</Text>
+                <Text>Supir: {trx.namaSopir}</Text>
+                <Text>Kendaraan: {trx.nomorKendaraan}</Text>
+                {trx.items.map((item, j) => (
+                  <View key={j} style={styles.itemBox}>
+                    <Text>
+                      L:{item.large} M:{item.medium} S:{item.small}
+                    </Text>
+                    <Text>ED: {item.ed}</Text>
+                    <Text>Catatan: {item.catatan}</Text>
+                  </View>
+                ))}
+              </View>
+            ))}
+          </ScrollView>
           <TouchableOpacity
             onPress={() => setModalVisible(false)}
             style={styles.closeButton}
           >
-            <Text style={{ color: "#fff", fontWeight: "bold" }}>Tutup</Text>
+            <Text style={{ color: "#fff" }}>Tutup</Text>
           </TouchableOpacity>
         </View>
       </Modal>
@@ -266,7 +271,6 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   nama: { fontSize: 16, fontWeight: "bold" },
-  detail: { fontSize: 14, marginTop: 4 },
   searchInput: {
     borderWidth: 1,
     borderColor: "#ccc",
@@ -278,13 +282,6 @@ const styles = StyleSheet.create({
   },
   modalContainer: { flex: 1, backgroundColor: "#fff", padding: 16 },
   modalTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 12 },
-  transaksiBox: {
-    backgroundColor: "#f9f9f9",
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 12,
-  },
-  trxTitle: { fontWeight: "bold", marginBottom: 6 },
   itemBox: {
     backgroundColor: "#fff",
     padding: 8,

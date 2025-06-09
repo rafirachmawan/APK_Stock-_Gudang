@@ -1,28 +1,18 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { useFocusEffect } from "@react-navigation/native";
-import * as FileSystem from "expo-file-system";
-import * as Sharing from "expo-sharing";
-import React, { useState } from "react";
+import { collection, doc, onSnapshot, updateDoc } from "firebase/firestore";
+import React, { useCallback, useState } from "react";
 import {
   Alert,
   Modal,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  UIManager,
   View,
 } from "react-native";
-import * as XLSX from "xlsx";
-
-if (
-  Platform.OS === "android" &&
-  UIManager.setLayoutAnimationEnabledExperimental
-) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
+import { db } from "../../utils/firebase";
 
 interface ItemInput {
   namaBarang: string;
@@ -35,16 +25,14 @@ interface ItemInput {
 }
 
 interface PurchaseForm {
+  id?: string;
   gudang: string;
   kodeGdng: string;
   kodeApos: string;
   suratJalan: string;
   principle: string;
-  jenisForm?: "Pembelian" | "Return" | string;
+  jenisForm?: string;
   waktuInput: string;
-  kategori?: string;
-  nomorKendaraan?: string;
-  namaSopir?: string;
   items: ItemInput[];
 }
 
@@ -58,249 +46,147 @@ export default function StockDetailScreen() {
   const [expandedJenis, setExpandedJenis] = useState<Record<string, boolean>>(
     {}
   );
-  const [editModal, setEditModal] = useState(false);
   const [selectedTrx, setSelectedTrx] = useState<PurchaseForm | null>(null);
-  const [selectedItemIndex, setSelectedItemIndex] = useState<number>(-1);
-  const [editItem, setEditItem] = useState<ItemInput>({
-    namaBarang: "",
-    kode: "",
-    large: "",
-    medium: "",
-    small: "",
-    ed: "",
-    catatan: "",
-  });
-  const [editSuratJalan, setEditSuratJalan] = useState("");
-  const [editKodeApos, setEditKodeApos] = useState("");
-  const [editWaktuInput, setEditWaktuInput] = useState("");
+  const [modalVisible, setModalVisible] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [editedTrx, setEditedTrx] = useState<PurchaseForm | null>(null);
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   useFocusEffect(
-    React.useCallback(() => {
-      loadData();
+    useCallback(() => {
+      const unsub = onSnapshot(collection(db, "barangMasuk"), (snapshot) => {
+        try {
+          const all: PurchaseForm[] = snapshot.docs.map(
+            (doc) => ({ id: doc.id, ...doc.data() } as PurchaseForm)
+          );
+
+          const grouped: Record<string, Record<string, PurchaseForm[]>> = {};
+          all.forEach((trx) => {
+            const date = new Date(trx.waktuInput).toLocaleDateString("id-ID");
+            const jenis = trx.jenisForm || "Pembelian";
+            if (!grouped[date]) grouped[date] = {};
+            if (!grouped[date][jenis]) grouped[date][jenis] = [];
+            grouped[date][jenis].push(trx);
+          });
+
+          setData(grouped);
+        } catch (error) {
+          Alert.alert("Gagal memuat data");
+          console.error("Snapshot error:", error);
+        }
+      });
+      return () => unsub();
     }, [])
   );
 
-  const loadData = async () => {
-    try {
-      const json = await AsyncStorage.getItem("barangMasuk");
-      const all: PurchaseForm[] = json ? JSON.parse(json) : [];
-
-      const grouped: Record<string, Record<string, PurchaseForm[]>> = {};
-      all.forEach((trx) => {
-        const date = new Date(trx.waktuInput).toLocaleDateString("id-ID");
-        const jenis = trx.jenisForm || "Pembelian";
-        if (!grouped[date]) grouped[date] = {};
-        if (!grouped[date][jenis]) grouped[date][jenis] = [];
-        grouped[date][jenis].push(trx);
-      });
-
-      setData(grouped);
-    } catch (err) {
-      Alert.alert("Gagal memuat data");
-    }
-  };
-
-  const removeItem = async (trx: PurchaseForm, index: number) => {
-    const json = await AsyncStorage.getItem("barangMasuk");
-    const all: PurchaseForm[] = json ? JSON.parse(json) : [];
-
-    const updated = all.map((t) => {
-      if (t.kodeApos === trx.kodeApos && t.waktuInput === trx.waktuInput) {
-        const items = [...t.items];
-        items.splice(index, 1);
-        return { ...t, items };
-      }
-      return t;
-    });
-
-    await AsyncStorage.setItem("barangMasuk", JSON.stringify(updated));
-    loadData();
-  };
-
-  const removeAll = async () => {
-    Alert.alert("Konfirmasi", "Hapus semua data?", [
-      { text: "Batal", style: "cancel" },
-      {
-        text: "Hapus",
-        style: "destructive",
-        onPress: async () => {
-          await AsyncStorage.removeItem("barangMasuk");
-          loadData();
-        },
-      },
-    ]);
-  };
-
-  const openEditModal = (trx: PurchaseForm, index: number) => {
-    const item = trx.items[index];
-    setEditItem(item);
-    setEditSuratJalan(trx.suratJalan);
-    setEditKodeApos(trx.kodeApos);
-    setEditWaktuInput(trx.waktuInput);
+  const openDetailModal = (trx: PurchaseForm) => {
     setSelectedTrx(trx);
-    setSelectedItemIndex(index);
-    setEditModal(true);
+    setEditedTrx({ ...trx });
+    setEditMode(false);
+    setModalVisible(true);
   };
 
-  const saveEdit = async () => {
-    if (!selectedTrx) return;
+  const handleChangeItem = (
+    index: number,
+    field: keyof ItemInput,
+    value: string
+  ) => {
+    if (!editedTrx) return;
+    const updatedItems = [...editedTrx.items];
+    updatedItems[index] = { ...updatedItems[index], [field]: value };
+    setEditedTrx({ ...editedTrx, items: updatedItems });
+  };
 
+  const handleSave = async () => {
+    if (!editedTrx || !editedTrx.id) return;
     try {
-      const json = await AsyncStorage.getItem("barangMasuk");
-      const all: PurchaseForm[] = json ? JSON.parse(json) : [];
-
-      const updated = all.map((trx) => {
-        if (
-          trx.kodeApos === selectedTrx.kodeApos &&
-          trx.waktuInput === selectedTrx.waktuInput
-        ) {
-          const updatedItems = [...trx.items];
-          updatedItems[selectedItemIndex] = editItem;
-
-          return {
-            ...trx,
-            items: updatedItems,
-            suratJalan: editSuratJalan,
-            kodeApos: editKodeApos,
-            waktuInput: editWaktuInput,
-          };
-        }
-        return trx;
+      await updateDoc(doc(db, "barangMasuk", editedTrx.id), {
+        gudang: editedTrx.gudang,
+        kodeGdng: editedTrx.kodeGdng,
+        kodeApos: editedTrx.kodeApos,
+        suratJalan: editedTrx.suratJalan,
+        waktuInput: editedTrx.waktuInput,
+        items: editedTrx.items,
       });
-
-      await AsyncStorage.setItem("barangMasuk", JSON.stringify(updated));
-      setEditModal(false);
-      loadData();
+      Alert.alert("Berhasil", "Data berhasil diperbarui");
+      setModalVisible(false);
     } catch (err) {
       Alert.alert("Gagal menyimpan perubahan");
+      console.error(err);
     }
   };
 
-  const toggleTanggal = (tgl: string) => {
-    setExpandedTanggal((prev) => ({ ...prev, [tgl]: !prev[tgl] }));
-  };
-
-  const toggleJenis = (key: string) => {
-    setExpandedJenis((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
-
-  const renderItem = (trx: PurchaseForm) => (
-    <View style={styles.card}>
-      <Text style={styles.bold}>Surat Jalan: {trx.suratJalan}</Text>
-      <Text style={styles.bold}>Kode Apos: {trx.kodeApos}</Text>
-      <Text style={styles.bold}>Waktu: {trx.waktuInput}</Text>
-      {trx.items.map((item, index) => (
-        <TouchableOpacity
-          key={index}
-          onPress={() => openEditModal(trx, index)}
-          style={[styles.card, { backgroundColor: "#e9ecef" }]}
-        >
-          <View
-            style={{ flexDirection: "row", justifyContent: "space-between" }}
-          >
-            <Text style={styles.bold}>{item.namaBarang}</Text>
-            <TouchableOpacity onPress={() => removeItem(trx, index)}>
-              <Text style={{ color: "red", marginLeft: 10 }}>Hapus</Text>
-            </TouchableOpacity>
-          </View>
-          <Text>
-            Large: {item.large} | Medium: {item.medium} | Small: {item.small}
-          </Text>
-          <Text>ED: {item.ed || "-"}</Text>
-          <Text>Catatan: {item.catatan || "-"}</Text>
-          <Text>Gudang: {trx.gudang}</Text>
-          <Text>Principle: {trx.principle}</Text>
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
-
-  const exportExcel = (tanggal?: string, jenis?: string) => {
-    let exportData: any[] = [];
-
-    const tanggalKeys = tanggal ? [tanggal] : Object.keys(data);
-    tanggalKeys.forEach((tgl) => {
-      const jenisKeys = jenis ? [jenis] : Object.keys(data[tgl] || {});
-      jenisKeys.forEach((jns) => {
-        data[tgl][jns]?.forEach((trx) => {
-          trx.items.forEach((item) => {
-            exportData.push({
-              Tanggal: tgl,
-              JenisForm: trx.jenisForm || "Pembelian",
-              Waktu: trx.waktuInput,
-              Gudang: trx.gudang,
-              Principle: trx.principle,
-              KodeBarang: item.kode,
-              NamaBarang: item.namaBarang,
-              Large: item.large,
-              Medium: item.medium,
-              Small: item.small,
-              ED: item.ed || "-",
-              Catatan: item.catatan || "",
-              KodeApos: trx.kodeApos,
-              SuratJalan: trx.suratJalan,
-            });
-          });
-        });
-      });
-    });
-
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "RiwayatMasuk");
-
-    const uri = FileSystem.cacheDirectory + `RiwayatMasuk.xlsx`;
-    const buffer = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
-
-    FileSystem.writeAsStringAsync(uri, buffer, {
-      encoding: FileSystem.EncodingType.Base64,
-    }).then(() => {
-      Sharing.shareAsync(uri);
-    });
+  const onChangeDate = (event: any, selected?: Date) => {
+    setShowDatePicker(false);
+    if (selected && editedTrx) {
+      setSelectedDate(selected);
+      const iso = selected.toISOString();
+      setEditedTrx({ ...editedTrx, waktuInput: iso });
+    }
   };
 
   return (
     <>
       <ScrollView style={styles.container}>
         <Text style={styles.title}>Riwayat Barang Masuk</Text>
-        {Object.entries(data).map(([tanggal, jenisMap]) => (
+
+        {Object.entries(data || {}).map(([tanggal, jenisMap]) => (
           <View key={tanggal} style={styles.section}>
             <TouchableOpacity
-              onPress={() => toggleTanggal(tanggal)}
+              onPress={() =>
+                setExpandedTanggal((prev) => ({
+                  ...prev,
+                  [tanggal]: !prev[tanggal],
+                }))
+              }
               style={styles.expandBtn}
             >
               <Text style={styles.expandBtnText}>
                 {expandedTanggal[tanggal] ? "▼" : "▶"} {tanggal}
               </Text>
             </TouchableOpacity>
+
             {expandedTanggal[tanggal] &&
-              Object.entries(jenisMap).map(([jenis, list]) => {
+              Object.entries(jenisMap || {}).map(([jenis, list]) => {
                 const jenisKey = `${tanggal}-${jenis}`;
                 return (
                   <View key={jenisKey} style={{ marginLeft: 16 }}>
                     <TouchableOpacity
-                      onPress={() => toggleJenis(jenisKey)}
+                      onPress={() =>
+                        setExpandedJenis((prev) => ({
+                          ...prev,
+                          [jenisKey]: !prev[jenisKey],
+                        }))
+                      }
                       style={styles.jenisBtn}
                     >
                       <Text style={styles.expandBtnText}>
                         {expandedJenis[jenisKey] ? "▼" : "▶"} {jenis}
                       </Text>
                     </TouchableOpacity>
-                    {expandedJenis[jenisKey] && (
-                      <>
-                        {list.map((trx, i) => (
-                          <View key={i}>{renderItem(trx)}</View>
-                        ))}
+
+                    {expandedJenis[jenisKey] &&
+                      list.map((trx, i) => (
                         <TouchableOpacity
-                          onPress={() => exportExcel(tanggal, jenis)}
-                          style={styles.exportButton}
+                          key={i}
+                          style={styles.card}
+                          onPress={() => openDetailModal(trx)}
                         >
-                          <Text style={styles.exportText}>
-                            Export {tanggal} - {jenis}
+                          <Text style={styles.bold}>
+                            Surat Jalan: {trx.suratJalan}
+                          </Text>
+                          <Text style={styles.bold}>
+                            Kode Apos: {trx.kodeApos}
+                          </Text>
+                          <Text style={styles.bold}>
+                            Waktu: {trx.waktuInput}
+                          </Text>
+                          <Text style={{ fontStyle: "italic" }}>
+                            Klik untuk lihat detail barang
                           </Text>
                         </TouchableOpacity>
-                      </>
-                    )}
+                      ))}
                   </View>
                 );
               })}
@@ -308,111 +194,109 @@ export default function StockDetailScreen() {
         ))}
       </ScrollView>
 
-      <View style={{ padding: 16 }}>
-        <TouchableOpacity
-          onPress={() => exportExcel()}
-          style={[styles.exportButton, { backgroundColor: "#006400" }]}
-        >
-          <Text style={styles.exportText}>Export Semua</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={removeAll}
-          style={[styles.exportButton, { backgroundColor: "#dc3545" }]}
-        >
-          <Text style={styles.exportText}>Hapus Semua Data</Text>
-        </TouchableOpacity>
-      </View>
+      <Modal visible={modalVisible} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            {editedTrx && (
+              <ScrollView>
+                <Text style={styles.modalTitle}>Detail Transaksi</Text>
 
-      <Modal visible={editModal} transparent animationType="slide">
-        <View style={styles.modalContainer}>
-          <ScrollView
-            style={styles.modalContent}
-            contentContainerStyle={{ paddingBottom: 20 }}
-          >
-            <Text style={styles.modalTitle}>Edit: {editItem.namaBarang}</Text>
+                <Text>Kode Gudang</Text>
+                <TextInput
+                  style={styles.input}
+                  value={editedTrx.kodeGdng}
+                  onChangeText={(t) =>
+                    setEditedTrx({ ...editedTrx, kodeGdng: t })
+                  }
+                />
 
-            <Text>Large</Text>
-            <TextInput
-              style={styles.input}
-              value={editItem.large}
-              onChangeText={(t) => setEditItem({ ...editItem, large: t })}
-              keyboardType="numeric"
-            />
+                <Text>Kode Apos</Text>
+                <TextInput
+                  style={styles.input}
+                  value={editedTrx.kodeApos}
+                  onChangeText={(t) =>
+                    setEditedTrx({ ...editedTrx, kodeApos: t })
+                  }
+                />
 
-            <Text>Medium</Text>
-            <TextInput
-              style={styles.input}
-              value={editItem.medium}
-              onChangeText={(t) => setEditItem({ ...editItem, medium: t })}
-              keyboardType="numeric"
-            />
+                <Text>Surat Jalan</Text>
+                <TextInput
+                  style={styles.input}
+                  value={editedTrx.suratJalan}
+                  onChangeText={(t) =>
+                    setEditedTrx({ ...editedTrx, suratJalan: t })
+                  }
+                />
 
-            <Text>Small</Text>
-            <TextInput
-              style={styles.input}
-              value={editItem.small}
-              onChangeText={(t) => setEditItem({ ...editItem, small: t })}
-              keyboardType="numeric"
-            />
+                <Text>Waktu Input</Text>
+                <TouchableOpacity
+                  onPress={() => setShowDatePicker(true)}
+                  style={styles.input}
+                >
+                  <Text>
+                    {new Date(editedTrx.waktuInput).toLocaleDateString("id-ID")}
+                  </Text>
+                </TouchableOpacity>
 
-            <Text>ED</Text>
-            <TextInput
-              style={styles.input}
-              value={editItem.ed}
-              onChangeText={(t) => setEditItem({ ...editItem, ed: t })}
-            />
+                {showDatePicker && (
+                  <DateTimePicker
+                    value={selectedDate}
+                    mode="date"
+                    display="default"
+                    onChange={onChangeDate}
+                  />
+                )}
 
-            <Text>Catatan</Text>
-            <TextInput
-              style={styles.input}
-              value={editItem.catatan}
-              onChangeText={(t) => setEditItem({ ...editItem, catatan: t })}
-            />
+                <Text style={{ marginTop: 12, fontWeight: "bold" }}>
+                  Barang:
+                </Text>
+                {(editedTrx.items || []).map((item, idx) => (
+                  <View key={idx} style={styles.itemBox}>
+                    <Text style={styles.bold}>{item.namaBarang}</Text>
+                    <Text>Kode: {item.kode}</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={item.large}
+                      onChangeText={(t) => handleChangeItem(idx, "large", t)}
+                      placeholder="Large"
+                    />
+                    <TextInput
+                      style={styles.input}
+                      value={item.medium}
+                      onChangeText={(t) => handleChangeItem(idx, "medium", t)}
+                      placeholder="Medium"
+                    />
+                    <TextInput
+                      style={styles.input}
+                      value={item.small}
+                      onChangeText={(t) => handleChangeItem(idx, "small", t)}
+                      placeholder="Small"
+                    />
+                    <TextInput
+                      style={styles.input}
+                      value={item.catatan || ""}
+                      onChangeText={(t) => handleChangeItem(idx, "catatan", t)}
+                      placeholder="Catatan"
+                    />
+                  </View>
+                ))}
+              </ScrollView>
+            )}
 
-            <Text>Surat Jalan</Text>
-            <TextInput
-              style={styles.input}
-              value={editSuratJalan}
-              onChangeText={setEditSuratJalan}
-            />
-
-            <Text>Kode Apos</Text>
-            <TextInput
-              style={styles.input}
-              value={editKodeApos}
-              onChangeText={setEditKodeApos}
-            />
-
-            <Text>Waktu Input</Text>
-            <TextInput
-              style={styles.input}
-              value={editWaktuInput}
-              onChangeText={setEditWaktuInput}
-            />
-
-            <View
-              style={{ flexDirection: "row", justifyContent: "space-between" }}
+            <TouchableOpacity
+              onPress={handleSave}
+              style={[styles.closeBtn, { backgroundColor: "green" }]}
             >
-              <TouchableOpacity
-                onPress={() => setEditModal(false)}
-                style={[
-                  styles.exportButton,
-                  { backgroundColor: "#999", flex: 1, marginRight: 4 },
-                ]}
-              >
-                <Text style={styles.exportText}>Batal</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={saveEdit}
-                style={[
-                  styles.exportButton,
-                  { backgroundColor: "#006400", flex: 1, marginLeft: 4 },
-                ]}
-              >
-                <Text style={styles.exportText}>Simpan</Text>
-              </TouchableOpacity>
-            </View>
-          </ScrollView>
+              <Text style={styles.closeText}>Simpan</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => setModalVisible(false)}
+              style={styles.closeBtn}
+            >
+              <Text style={styles.closeText}>Tutup</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </Modal>
     </>
@@ -442,37 +326,39 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   bold: { fontWeight: "bold", fontSize: 15 },
-  exportButton: {
-    backgroundColor: "#006400",
-    padding: 10,
-    borderRadius: 8,
-    marginTop: 10,
-    alignItems: "center",
-  },
-  exportText: { color: "#fff", fontWeight: "bold", textAlign: "center" },
-  modalContainer: {
+  modalOverlay: {
     flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.5)",
   },
   modalContent: {
     backgroundColor: "white",
-    padding: 20,
     borderRadius: 10,
+    padding: 20,
     width: "90%",
     maxHeight: "90%",
   },
-  modalTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-    marginBottom: 10,
+  modalTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 10 },
+  itemBox: {
+    backgroundColor: "#eee",
+    marginVertical: 6,
+    padding: 10,
+    borderRadius: 6,
   },
+  closeBtn: {
+    backgroundColor: "#dc3545",
+    marginTop: 16,
+    padding: 12,
+    borderRadius: 6,
+    alignItems: "center",
+  },
+  closeText: { color: "white", fontWeight: "bold" },
   input: {
     borderWidth: 1,
     borderColor: "#ccc",
     borderRadius: 6,
     padding: 8,
-    marginBottom: 10,
+    marginVertical: 6,
   },
 });
