@@ -41,12 +41,14 @@ export const getCurrentStock = async (): Promise<Barang[]> => {
 
     const stockMap = new Map<string, Barang>();
 
+    // 🔵 PROSES BARANG MASUK
     dataMasuk.forEach((form: any) => {
       if (!form.items || !Array.isArray(form.items)) return;
 
+      const gudang = form.gudang || form.kategori || "-";
+
       form.items.forEach((item: any) => {
-        const kode = item.kode;
-        const key = kode;
+        const key = `${item.kode}-${gudang}`;
 
         const large = parseInt(item.large) || 0;
         const medium = parseInt(item.medium) || 0;
@@ -54,7 +56,7 @@ export const getCurrentStock = async (): Promise<Barang[]> => {
 
         if (!stockMap.has(key)) {
           stockMap.set(key, {
-            kode,
+            kode: item.kode,
             nama: item.namaBarang,
             stokLarge: large,
             stokMedium: medium,
@@ -62,8 +64,8 @@ export const getCurrentStock = async (): Promise<Barang[]> => {
             ed: item.ed || "-",
             catatan: item.catatan || form.catatan || "",
             waktuInput: form.waktuInput,
-            principle: form.principle,
-            kategori: form.gudang || form.kategori || "",
+            principle: form.principle || "-",
+            kategori: gudang,
             nomorKendaraan: form.nomorKendaraan || "",
             namaSopir: form.namaSopir || "",
             jenisForm: form.jenisForm || "Pembelian",
@@ -74,6 +76,7 @@ export const getCurrentStock = async (): Promise<Barang[]> => {
           existing.stokMedium += medium;
           existing.stokSmall += small;
 
+          // Update ED jika lebih baru
           if (item.ed) {
             const currentED = new Date(existing.ed || "1900-01-01");
             const newED = new Date(item.ed);
@@ -85,12 +88,15 @@ export const getCurrentStock = async (): Promise<Barang[]> => {
       });
     });
 
+    // 🔴 PROSES BARANG KELUAR
     dataKeluar.forEach((trx: any) => {
       if (!trx.items || !Array.isArray(trx.items)) return;
 
+      const gudang = trx.jenisGudang || trx.kategori || "-";
+
       trx.items.forEach((item: any) => {
-        const kode = item.kode;
-        const existing = stockMap.get(kode);
+        const key = `${item.kode}-${gudang}`;
+        const existing = stockMap.get(key);
 
         if (existing) {
           existing.stokLarge -= parseInt(item.large) || 0;

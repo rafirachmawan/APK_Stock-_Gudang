@@ -190,8 +190,29 @@ export default function OutScreen() {
     };
 
     try {
+      // Simpan transaksi barang keluar
       await addDoc(collection(db, "barangKeluar"), newEntry);
-      Alert.alert("Barang keluar berhasil disimpan ke cloud");
+
+      // Jika mutasi antar gudang, otomatis tambahkan ke barangMasuk
+      if (jenisForm === "MB" && tujuanGudang) {
+        const barangMasukBaru = {
+          jenisForm: "Mutasi Masuk",
+          kodeApos,
+          principle: itemList[0]?.principle || "-",
+          waktuInput,
+          gudang: tujuanGudang,
+          kodeGdng: tujuanGudang + "-" + new Date().getTime(), // ID unik
+          catatan: "Hasil mutasi dari " + jenisGudang,
+          items: itemList.map((item) => ({
+            ...item,
+            gdg: tujuanGudang,
+          })),
+          createdAt: serverTimestamp(),
+        };
+        await addDoc(collection(db, "barangMasuk"), barangMasukBaru);
+      }
+
+      Alert.alert("Transaksi berhasil disimpan ke cloud");
       setItemList([]);
       setKodeApos("");
       setKategori("");
@@ -284,23 +305,6 @@ export default function OutScreen() {
             style={styles.dropdown}
             zIndex={4800}
             listMode="SCROLLVIEW"
-          />
-          <Text style={styles.label}>Keterangan</Text>
-          <TextInput
-            style={styles.input}
-            value={catatan}
-            onChangeText={setCatatan}
-          />
-        </>
-      )}
-
-      {jenisForm === "MB" && (
-        <>
-          <Text style={styles.label}>Gudang Tujuan</Text>
-          <TextInput
-            style={styles.input}
-            value={kategori}
-            onChangeText={setKategori}
           />
           <Text style={styles.label}>Keterangan</Text>
           <TextInput
