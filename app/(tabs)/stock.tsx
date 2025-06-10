@@ -1,5 +1,3 @@
-// StockScreen.tsx dengan fitur realtime refresh setelah inputan selesai
-
 import { collection, getDocs, onSnapshot } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
@@ -11,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import DropDownPicker from "react-native-dropdown-picker";
 import { db } from "../../utils/firebase";
 
 interface StokBarang {
@@ -58,9 +57,15 @@ export default function StockScreen() {
   const [selectedItem, setSelectedItem] = useState<StokBarang | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [transaksiGabungan, setTransaksiGabungan] = useState<Transaksi[]>([]);
+
   const [selectedJenisGudang, setSelectedJenisGudang] = useState<string | null>(
     null
   );
+  const [jenisGudangOpen, setJenisGudangOpen] = useState(false);
+  const [jenisGudangItems, setJenisGudangItems] = useState([
+    { label: "Gudang Utama", value: "Gudang Utama" },
+    { label: "Gudang BS", value: "Gudang BS" },
+  ]);
 
   useEffect(() => {
     const unsubscribeIn = onSnapshot(collection(db, "barangMasuk"), fetchStock);
@@ -227,42 +232,20 @@ export default function StockScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>Stok Barang</Text>
 
-      {/* Filter Jenis Gudang */}
       <Text style={{ fontWeight: "bold", marginBottom: 4 }}>
         Pilih Jenis Gudang
       </Text>
-      <View
-        style={{
-          borderWidth: 1,
-          borderColor: "#ccc",
-          borderRadius: 8,
-          marginBottom: 12,
-        }}
-      >
-        <ScrollView horizontal>
-          {["Gudang Utama", "Gudang BS"].map((jenis) => (
-            <TouchableOpacity
-              key={jenis}
-              onPress={() => setSelectedJenisGudang(jenis)}
-              style={{
-                padding: 8,
-                backgroundColor:
-                  selectedJenisGudang === jenis ? "#007bff" : "#eee",
-                margin: 4,
-                borderRadius: 6,
-              }}
-            >
-              <Text
-                style={{
-                  color: selectedJenisGudang === jenis ? "#fff" : "#000",
-                }}
-              >
-                {jenis}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
+      <DropDownPicker
+        open={jenisGudangOpen}
+        value={selectedJenisGudang}
+        items={jenisGudangItems}
+        setOpen={setJenisGudangOpen}
+        setValue={setSelectedJenisGudang}
+        setItems={setJenisGudangItems}
+        placeholder="Pilih Jenis Gudang"
+        style={{ marginBottom: 12 }}
+        dropDownContainerStyle={{ marginBottom: 12 }}
+      />
 
       {!selectedPrinciple && (
         <TextInput

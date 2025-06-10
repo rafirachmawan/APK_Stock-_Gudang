@@ -1,4 +1,3 @@
-// OutScreen.tsx - Dengan Jenis Gudang di atas, dan filter item berdasarkan gudang
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useFocusEffect } from "@react-navigation/native";
 import {
@@ -41,6 +40,7 @@ interface TransaksiOut {
   namaSopir: string;
   waktuInput: string;
   jenisForm: "DR" | "MB" | "RB";
+  tujuanGudang?: string;
   items: ItemOut[];
   createdAt?: any;
 }
@@ -50,6 +50,8 @@ export default function OutScreen() {
   const [openJenisGudang, setOpenJenisGudang] = useState(false);
   const [jenisForm, setJenisForm] = useState<"DR" | "MB" | "RB">("DR");
   const [openJenis, setOpenJenis] = useState(false);
+  const [tujuanGudang, setTujuanGudang] = useState("");
+  const [openTujuanGudang, setOpenTujuanGudang] = useState(false);
   const [kodeApos, setKodeApos] = useState("");
   const [kategori, setKategori] = useState("");
   const [catatan, setCatatan] = useState("");
@@ -137,6 +139,16 @@ export default function OutScreen() {
     setItemList(updated);
   };
 
+  const removeItem = (index: number) => {
+    const updated = [...itemList];
+    updated.splice(index, 1);
+    setItemList(updated);
+
+    const updatedOpen = [...openNamaBarang];
+    updatedOpen.splice(index, 1);
+    setOpenNamaBarang(updatedOpen);
+  };
+
   const addItem = () => {
     setItemList((prev) => [
       ...prev,
@@ -174,6 +186,7 @@ export default function OutScreen() {
       waktuInput,
       items: itemList,
       createdAt: serverTimestamp(),
+      ...(jenisForm === "MB" && { tujuanGudang }),
     };
 
     try {
@@ -185,6 +198,7 @@ export default function OutScreen() {
       setCatatan("");
       setNomorKendaraan("");
       setNamaSopir("");
+      setTujuanGudang("");
     } catch (err) {
       console.error("Gagal simpan ke Firestore:", err);
       Alert.alert("Gagal simpan ke server");
@@ -227,6 +241,7 @@ export default function OutScreen() {
         zIndex={5000}
         listMode="SCROLLVIEW"
       />
+
       <Text style={styles.label}>Tanggal</Text>
       <TouchableOpacity onPress={() => setShowDate(true)} style={styles.input}>
         <Text>{formatDate(tanggalTransaksi)}</Text>
@@ -242,34 +257,32 @@ export default function OutScreen() {
           }}
         />
       )}
+
       <Text style={styles.label}>No Faktur</Text>
       <TextInput
         style={styles.input}
         value={kodeApos}
         onChangeText={setKodeApos}
       />
-      {jenisForm === "DR" && (
+
+      {jenisForm === "MB" && (
         <>
-          <Text style={styles.label}>Nomor Kendaraan</Text>
+          <Text style={styles.label}>Gudang Tujuan</Text>
           <DropDownPicker
-            open={openKendaraan}
-            value={nomorKendaraan}
-            items={kendaraanList}
-            setOpen={setOpenKendaraan}
-            setValue={setNomorKendaraan}
+            open={openTujuanGudang}
+            value={tujuanGudang}
+            items={[
+              { label: "Gudang A", value: "Gudang A" },
+              { label: "Gudang B", value: "Gudang B" },
+              { label: "Gudang C", value: "Gudang C" },
+              { label: "Gudang D", value: "Gudang D" },
+              { label: "Gudang E", value: "Gudang E" },
+            ]}
+            setOpen={setOpenTujuanGudang}
+            setValue={setTujuanGudang}
+            placeholder="Pilih Gudang Tujuan"
             style={styles.dropdown}
-            zIndex={4000}
-            listMode="SCROLLVIEW"
-          />
-          <Text style={styles.label}>Nama Sopir</Text>
-          <DropDownPicker
-            open={openSopir}
-            value={namaSopir}
-            items={sopirList}
-            setOpen={setOpenSopir}
-            setValue={setNamaSopir}
-            style={styles.dropdown}
-            zIndex={3500}
+            zIndex={4800}
             listMode="SCROLLVIEW"
           />
           <Text style={styles.label}>Keterangan</Text>
@@ -280,6 +293,7 @@ export default function OutScreen() {
           />
         </>
       )}
+
       {jenisForm === "MB" && (
         <>
           <Text style={styles.label}>Gudang Tujuan</Text>
@@ -296,6 +310,7 @@ export default function OutScreen() {
           />
         </>
       )}
+
       {jenisForm === "RB" && (
         <>
           <Text style={styles.label}>Jenis Return</Text>
@@ -332,16 +347,21 @@ export default function OutScreen() {
                 Alert.alert("Barang tidak tersedia di gudang ini");
               }
             }}
-            items={barangFiltered.map((b) => ({
-              label: b.namaBarang,
-              value: b.namaBarang,
-            }))}
+            items={
+              jenisGudang
+                ? barangFiltered.map((b) => ({
+                    label: b.namaBarang,
+                    value: b.namaBarang,
+                  }))
+                : []
+            }
             placeholder="Pilih Nama Barang"
             searchable
             style={styles.dropdown}
             listMode="SCROLLVIEW"
             zIndex={1000 - i}
             zIndexInverse={i}
+            disabled={!jenisGudang}
           />
 
           <Text style={styles.label}>Kode</Text>
@@ -378,9 +398,11 @@ export default function OutScreen() {
           </TouchableOpacity>
         </View>
       ))}
+
       <TouchableOpacity onPress={addItem} style={styles.addButton}>
         <Text style={styles.addText}>+ Tambah Item</Text>
       </TouchableOpacity>
+
       <TouchableOpacity onPress={handleSubmit} style={styles.submitButton}>
         <Text style={styles.submitText}>Simpan</Text>
       </TouchableOpacity>
