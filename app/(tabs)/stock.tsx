@@ -90,9 +90,18 @@ export default function StockScreen() {
           const key = item.kode;
           if (!map.has(key)) return;
           const data = map.get(key);
-          data.totalLarge -= parseInt(item.large || "0");
-          data.totalMedium -= parseInt(item.medium || "0");
-          data.totalSmall -= parseInt(item.small || "0");
+          data.totalLarge = Math.max(
+            0,
+            data.totalLarge - parseInt(item.large || "0")
+          );
+          data.totalMedium = Math.max(
+            0,
+            data.totalMedium - parseInt(item.medium || "0")
+          );
+          data.totalSmall = Math.max(
+            0,
+            data.totalSmall - parseInt(item.small || "0")
+          );
         });
       });
 
