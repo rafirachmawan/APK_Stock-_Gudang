@@ -186,6 +186,7 @@ export default function OutScreen() {
       waktuInput,
       items: itemList,
       createdAt: serverTimestamp(),
+      gudangAsal: jenisGudang,
       ...(jenisForm === "MB" && { tujuanGudang }),
     };
 

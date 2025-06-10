@@ -11,11 +11,12 @@ interface Item {
   medium: string;
   small: string;
   principle: string;
-  gdg?: string;
 }
 
 interface Transaksi {
-  gudang: string;
+  gudang?: string; // untuk transaksi masuk
+  gudangAsal?: string; // untuk mutasi keluar
+  gudangTujuan?: string; // untuk mutasi masuk
   principle: string;
   items: Item[];
 }
@@ -58,6 +59,7 @@ export default function StockScreen() {
 
     const map = new Map();
 
+    // Tambah stok dari barangMasuk (trx.gudang)
     barangMasuk
       .filter((trx) => trx.gudang === gudangDipilih)
       .forEach((trx) => {
@@ -80,8 +82,9 @@ export default function StockScreen() {
         });
       });
 
+    // Kurangi stok dari barangKeluar asal (trx.gudangAsal)
     barangKeluar
-      .filter((trx) => trx.gudang === gudangDipilih)
+      .filter((trx) => trx.gudangAsal === gudangDipilih)
       .forEach((trx) => {
         trx.items.forEach((item) => {
           const key = item.kode;
@@ -93,6 +96,30 @@ export default function StockScreen() {
         });
       });
 
+    // Tambah stok ke gudang tujuan (trx.gudangTujuan)
+    barangKeluar
+      .filter((trx) => trx.gudangTujuan === gudangDipilih)
+      .forEach((trx) => {
+        trx.items.forEach((item) => {
+          const key = item.kode;
+          if (!map.has(key)) {
+            map.set(key, {
+              kode: item.kode,
+              nama: item.namaBarang,
+              principle: item.principle,
+              totalLarge: 0,
+              totalMedium: 0,
+              totalSmall: 0,
+            });
+          }
+          const data = map.get(key);
+          data.totalLarge += parseInt(item.large || "0");
+          data.totalMedium += parseInt(item.medium || "0");
+          data.totalSmall += parseInt(item.small || "0");
+        });
+      });
+
+    // Filter berdasarkan pencarian
     const final = Array.from(map.values()).filter((item: any) => {
       const match =
         item.nama.toLowerCase().includes(searchText.toLowerCase()) ||
