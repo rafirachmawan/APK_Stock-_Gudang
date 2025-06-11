@@ -178,67 +178,74 @@ export default function StockDetailScreen() {
       <ScrollView style={styles.container}>
         <Text style={styles.title}>Riwayat Barang Masuk</Text>
 
-        {Object.entries(data || {}).map(([tanggal, jenisMap]) => (
-          <View key={tanggal} style={styles.section}>
-            <TouchableOpacity
-              onPress={() =>
-                setExpandedTanggal((prev) => ({
-                  ...prev,
-                  [tanggal]: !prev[tanggal],
-                }))
-              }
-              style={styles.expandBtn}
-            >
-              <Text style={styles.expandBtnText}>
-                {expandedTanggal[tanggal] ? "▼" : "▶"} {tanggal}
-              </Text>
-            </TouchableOpacity>
+        {Object.entries(data || {})
+          .sort((a, b) => {
+            // Convert tanggal dari format lokal ke Date untuk dibandingkan
+            const dateA = new Date(a[0].split("/").reverse().join("-"));
+            const dateB = new Date(b[0].split("/").reverse().join("-"));
+            return dateB.getTime() - dateA.getTime(); // Urut dari terbaru ke terlama
+          })
+          .map(([tanggal, jenisMap]) => (
+            <View key={tanggal} style={styles.section}>
+              <TouchableOpacity
+                onPress={() =>
+                  setExpandedTanggal((prev) => ({
+                    ...prev,
+                    [tanggal]: !prev[tanggal],
+                  }))
+                }
+                style={styles.expandBtn}
+              >
+                <Text style={styles.expandBtnText}>
+                  {expandedTanggal[tanggal] ? "▼" : "▶"} {tanggal}
+                </Text>
+              </TouchableOpacity>
 
-            {expandedTanggal[tanggal] &&
-              Object.entries(jenisMap || {}).map(([jenis, list]) => {
-                const jenisKey = `${tanggal}-${jenis}`;
-                return (
-                  <View key={jenisKey} style={{ marginLeft: 16 }}>
-                    <TouchableOpacity
-                      onPress={() =>
-                        setExpandedJenis((prev) => ({
-                          ...prev,
-                          [jenisKey]: !prev[jenisKey],
-                        }))
-                      }
-                      style={styles.jenisBtn}
-                    >
-                      <Text style={styles.expandBtnText}>
-                        {expandedJenis[jenisKey] ? "▼" : "▶"} {jenis}
-                      </Text>
-                    </TouchableOpacity>
+              {expandedTanggal[tanggal] &&
+                Object.entries(jenisMap || {}).map(([jenis, list]) => {
+                  const jenisKey = `${tanggal}-${jenis}`;
+                  return (
+                    <View key={jenisKey} style={{ marginLeft: 16 }}>
+                      <TouchableOpacity
+                        onPress={() =>
+                          setExpandedJenis((prev) => ({
+                            ...prev,
+                            [jenisKey]: !prev[jenisKey],
+                          }))
+                        }
+                        style={styles.jenisBtn}
+                      >
+                        <Text style={styles.expandBtnText}>
+                          {expandedJenis[jenisKey] ? "▼" : "▶"} {jenis}
+                        </Text>
+                      </TouchableOpacity>
 
-                    {expandedJenis[jenisKey] &&
-                      list.map((trx, i) => (
-                        <TouchableOpacity
-                          key={i}
-                          style={styles.card}
-                          onPress={() => openDetailModal(trx)}
-                        >
-                          <Text style={styles.bold}>
-                            Surat Jalan: {trx.suratJalan}
-                          </Text>
-                          <Text style={styles.bold}>
-                            Kode Apos: {trx.kodeApos}
-                          </Text>
-                          <Text style={styles.bold}>
-                            Waktu: {trx.waktuInput}
-                          </Text>
-                          <Text style={{ fontStyle: "italic" }}>
-                            Klik untuk lihat detail barang
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                  </View>
-                );
-              })}
-          </View>
-        ))}
+                      {expandedJenis[jenisKey] &&
+                        list.map((trx, i) => (
+                          <TouchableOpacity
+                            key={i}
+                            style={styles.card}
+                            onPress={() => openDetailModal(trx)}
+                          >
+                            <Text style={styles.bold}>
+                              Surat Jalan: {trx.suratJalan}
+                            </Text>
+                            <Text style={styles.bold}>
+                              Kode Apos: {trx.kodeApos}
+                            </Text>
+                            <Text style={styles.bold}>
+                              Waktu: {trx.waktuInput}
+                            </Text>
+                            <Text style={{ fontStyle: "italic" }}>
+                              Klik untuk lihat detail barang
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                    </View>
+                  );
+                })}
+            </View>
+          ))}
         <TouchableOpacity
           onPress={exportToExcel}
           style={{

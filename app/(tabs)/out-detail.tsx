@@ -162,70 +162,76 @@ export default function OutDetailScreen() {
       <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
         <Text style={styles.title}>Riwayat Barang Keluar</Text>
 
-        {Object.entries(groupedData).map(([tanggal, jenisGroup]) => (
-          <View key={tanggal}>
-            <TouchableOpacity
-              onPress={() =>
-                toggleExpand(tanggal, setExpandedDates, expandedDates)
-              }
-              style={styles.expandBtn}
-            >
-              <Text style={styles.expandText}>
-                {expandedDates[tanggal] ? "▼" : "▶"} {tanggal}
-              </Text>
-            </TouchableOpacity>
+        {Object.entries(groupedData)
+          .sort((a, b) => {
+            const dateA = new Date(a[0].split("/").reverse().join("-"));
+            const dateB = new Date(b[0].split("/").reverse().join("-"));
+            return dateB.getTime() - dateA.getTime(); // Urutkan dari terbaru ke lama
+          })
+          .map(([tanggal, jenisGroup]) => (
+            <View key={tanggal}>
+              <TouchableOpacity
+                onPress={() =>
+                  toggleExpand(tanggal, setExpandedDates, expandedDates)
+                }
+                style={styles.expandBtn}
+              >
+                <Text style={styles.expandText}>
+                  {expandedDates[tanggal] ? "▼" : "▶"} {tanggal}
+                </Text>
+              </TouchableOpacity>
 
-            {expandedDates[tanggal] &&
-              Object.entries(jenisGroup).map(([jenis, list]) => {
-                const key = `${tanggal}-${jenis}`;
-                return (
-                  <View key={key} style={{ marginLeft: 12 }}>
-                    <TouchableOpacity
-                      onPress={() =>
-                        toggleExpand(key, setExpandedJenis, expandedJenis)
-                      }
-                      style={styles.jenisBtn}
-                    >
-                      <Text style={styles.expandText}>
-                        {expandedJenis[key] ? "▼" : "▶"} {jenis}
-                      </Text>
-                    </TouchableOpacity>
+              {expandedDates[tanggal] &&
+                Object.entries(jenisGroup).map(([jenis, list]) => {
+                  const key = `${tanggal}-${jenis}`;
+                  return (
+                    <View key={key} style={{ marginLeft: 12 }}>
+                      <TouchableOpacity
+                        onPress={() =>
+                          toggleExpand(key, setExpandedJenis, expandedJenis)
+                        }
+                        style={styles.jenisBtn}
+                      >
+                        <Text style={styles.expandText}>
+                          {expandedJenis[key] ? "▼" : "▶"} {jenis}
+                        </Text>
+                      </TouchableOpacity>
 
-                    {expandedJenis[key] &&
-                      list.map((trx, i) => (
-                        <View key={i} style={styles.card}>
-                          <Text style={styles.bold}>
-                            Kode Apos: {trx.kodeApos}
-                          </Text>
-                          <Text>
-                            Sopir: {trx.namaSopir} | Kendaraan:{" "}
-                            {trx.nomorKendaraan}
-                          </Text>
-                          <Text>
-                            Gudang: {trx.kodeGdng} | JenisGudang:{" "}
-                            {trx.jenisGudang} | Kategori: {trx.kategori}
-                          </Text>
-                          <Text>Catatan Global: {trx.catatan}</Text>
-                          {trx.items.map((item, index) => (
-                            <View key={index} style={styles.itemBox}>
-                              <Text>
-                                {item.namaBarang} ({item.kode})
-                              </Text>
-                              <Text>
-                                Large: {item.large}, Medium: {item.medium},
-                                Small: {item.small}
-                              </Text>
-                              <Text>ED: {item.ed || "-"}</Text>
-                              <Text>Catatan: {item.catatan || "-"}</Text>
-                            </View>
-                          ))}
-                        </View>
-                      ))}
-                  </View>
-                );
-              })}
-          </View>
-        ))}
+                      {expandedJenis[key] &&
+                        list.map((trx, i) => (
+                          <View key={i} style={styles.card}>
+                            <Text style={styles.bold}>
+                              Kode Apos: {trx.kodeApos}
+                            </Text>
+                            <Text>
+                              Sopir: {trx.namaSopir} | Kendaraan:{" "}
+                              {trx.nomorKendaraan}
+                            </Text>
+                            <Text>
+                              Gudang: {trx.kodeGdng} | JenisGudang:{" "}
+                              {trx.jenisGudang} | Kategori: {trx.kategori}
+                            </Text>
+                            <Text>Catatan Global: {trx.catatan}</Text>
+                            {trx.items.map((item, index) => (
+                              <View key={index} style={styles.itemBox}>
+                                <Text>
+                                  {item.namaBarang} ({item.kode})
+                                </Text>
+                                <Text>
+                                  Large: {item.large}, Medium: {item.medium},
+                                  Small: {item.small}
+                                </Text>
+                                <Text>ED: {item.ed || "-"}</Text>
+                                <Text>Catatan: {item.catatan || "-"}</Text>
+                              </View>
+                            ))}
+                          </View>
+                        ))}
+                    </View>
+                  );
+                })}
+            </View>
+          ))}
 
         <TouchableOpacity
           onPress={exportAll}
