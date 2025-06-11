@@ -1,10 +1,11 @@
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useFocusEffect } from "@react-navigation/native";
 import {
-  addDoc,
   collection,
+  doc,
   onSnapshot,
   serverTimestamp,
+  setDoc,
 } from "firebase/firestore";
 import React, { useCallback, useState } from "react";
 import {
@@ -172,7 +173,10 @@ export default function OutScreen() {
     }
 
     const waktuInput = tanggalTransaksi.toISOString();
+    const tanggalFormatted = formatDate(tanggalTransaksi); // pakai format dd-mm-yyyy
     const kodeGdngFinal = jenisForm === "MB" ? itemList[0]?.gdg || "-" : "-";
+
+    const docId = `${kodeApos}-${tanggalFormatted}`;
 
     const newEntry: TransaksiOut = {
       jenisGudang,
@@ -191,10 +195,10 @@ export default function OutScreen() {
     };
 
     try {
-      // Simpan transaksi barang keluar
-      await addDoc(collection(db, "barangKeluar"), newEntry);
+      // ✅ Simpan ke Firestore dengan ID khusus (No Faktur + Tanggal)
+      await setDoc(doc(db, "barangKeluar", docId), newEntry);
 
-      // Jika mutasi antar gudang, otomatis tambahkan ke barangMasuk
+      // 🔁 Jika Mutasi (MB), tambahkan juga ke barangMasuk dengan ID yang sama
       if (jenisForm === "MB" && tujuanGudang) {
         const barangMasukBaru = {
           jenisForm: "Mutasi Masuk",
@@ -202,18 +206,20 @@ export default function OutScreen() {
           principle: itemList[0]?.principle || "-",
           waktuInput,
           gudang: tujuanGudang,
-          kodeGdng: tujuanGudang + "-" + new Date().getTime(), // ID unik
-          catatan: "Hasil mutasi dari " + jenisGudang,
+          kodeGdng: docId,
+          catatan: `Hasil mutasi dari ${jenisGudang}`,
           items: itemList.map((item) => ({
             ...item,
             gdg: tujuanGudang,
           })),
           createdAt: serverTimestamp(),
         };
-        await addDoc(collection(db, "barangMasuk"), barangMasukBaru);
+        await setDoc(doc(db, "barangMasuk", docId), barangMasukBaru);
       }
 
-      Alert.alert("Transaksi berhasil disimpan ke cloud");
+      Alert.alert("✅ Transaksi berhasil disimpan ke cloud");
+
+      // Reset form
       setItemList([]);
       setKodeApos("");
       setKategori("");
@@ -222,11 +228,10 @@ export default function OutScreen() {
       setNamaSopir("");
       setTujuanGudang("");
     } catch (err) {
-      console.error("Gagal simpan ke Firestore:", err);
+      console.error("❌ Gagal simpan ke Firestore:", err);
       Alert.alert("Gagal simpan ke server");
     }
   };
-
   return (
     <ScrollView style={styles.container}>
       <Text style={styles.label}>Jenis Gudang</Text>
@@ -273,9 +278,11 @@ export default function OutScreen() {
           value={tanggalTransaksi}
           mode="date"
           display={Platform.OS === "ios" ? "spinner" : "default"}
-          onChange={(e, selectedDate) => {
-            setShowDate(false);
-            if (selectedDate) setTanggalTransaksi(selectedDate);
+          onChange={(event, selectedDate) => {
+            if (Platform.OS === "android") setShowDate(false);
+            if (event.type === "set" && selectedDate) {
+              setTanggalTransaksi(selectedDate);
+            }
           }}
         />
       )}

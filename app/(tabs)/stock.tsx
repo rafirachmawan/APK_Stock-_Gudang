@@ -1,6 +1,16 @@
 import { collection, onSnapshot } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
-import { ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableWithoutFeedback,
+  View,
+} from "react-native";
 import DropDownPicker from "react-native-dropdown-picker";
 import { db } from "../../utils/firebase";
 
@@ -14,9 +24,9 @@ interface Item {
 }
 
 interface Transaksi {
-  gudang?: string; // untuk transaksi masuk
-  gudangAsal?: string; // untuk mutasi keluar
-  gudangTujuan?: string; // untuk mutasi masuk
+  gudang?: string;
+  gudangAsal?: string;
+  gudangTujuan?: string;
   principle: string;
   items: Item[];
 }
@@ -59,7 +69,6 @@ export default function StockScreen() {
 
     const map = new Map();
 
-    // Tambah stok dari barangMasuk (trx.gudang)
     barangMasuk
       .filter((trx) => trx.gudang === gudangDipilih)
       .forEach((trx) => {
@@ -82,7 +91,6 @@ export default function StockScreen() {
         });
       });
 
-    // Kurangi stok dari barangKeluar asal (trx.gudangAsal)
     barangKeluar
       .filter((trx) => trx.gudangAsal === gudangDipilih)
       .forEach((trx) => {
@@ -105,7 +113,6 @@ export default function StockScreen() {
         });
       });
 
-    // Tambah stok ke gudang tujuan (trx.gudangTujuan)
     barangKeluar
       .filter((trx) => trx.gudangTujuan === gudangDipilih)
       .forEach((trx) => {
@@ -128,7 +135,6 @@ export default function StockScreen() {
         });
       });
 
-    // Filter berdasarkan pencarian
     const final = Array.from(map.values()).filter((item: any) => {
       const match =
         item.nama.toLowerCase().includes(searchText.toLowerCase()) ||
@@ -140,45 +146,57 @@ export default function StockScreen() {
   }, [barangMasuk, barangKeluar, searchText, gudangDipilih]);
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>📦 STOK BARANG</Text>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <ScrollView
+          contentContainerStyle={styles.container}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Text style={styles.title}>📦 STOK BARANG</Text>
 
-      <DropDownPicker
-        open={gudangOpen}
-        value={gudangDipilih}
-        items={gudangItems}
-        setOpen={setGudangOpen}
-        setValue={setGudangDipilih}
-        setItems={setGudangItems}
-        placeholder="Pilih Gudang"
-        style={styles.dropdown}
-        dropDownContainerStyle={{ zIndex: 999 }}
-      />
+          <View style={{ zIndex: 1000 }}>
+            <DropDownPicker
+              open={gudangOpen}
+              value={gudangDipilih}
+              items={gudangItems}
+              setOpen={setGudangOpen}
+              setValue={setGudangDipilih}
+              setItems={setGudangItems}
+              placeholder="Pilih Gudang"
+              style={styles.dropdown}
+              dropDownContainerStyle={{ zIndex: 1000 }}
+            />
+          </View>
 
-      <TextInput
-        placeholder="Cari nama/kode barang..."
-        value={searchText}
-        onChangeText={setSearchText}
-        style={styles.search}
-      />
+          <TextInput
+            placeholder="Cari nama/kode barang..."
+            value={searchText}
+            onChangeText={setSearchText}
+            style={styles.search}
+          />
 
-      {stok.map((item, index) => (
-        <View key={index} style={styles.card}>
-          <Text style={styles.name}>{item.nama}</Text>
-          <Text>Kode: {item.kode}</Text>
-          <Text>Principle: {item.principle}</Text>
-          <Text>Large: {item.totalLarge}</Text>
-          <Text>Medium: {item.totalMedium}</Text>
-          <Text>Small: {item.totalSmall}</Text>
-        </View>
-      ))}
+          {stok.map((item, index) => (
+            <View key={index} style={styles.card}>
+              <Text style={styles.name}>{item.nama}</Text>
+              <Text>Kode: {item.kode}</Text>
+              <Text>Principle: {item.principle}</Text>
+              <Text>Large: {item.totalLarge}</Text>
+              <Text>Medium: {item.totalMedium}</Text>
+              <Text>Small: {item.totalSmall}</Text>
+            </View>
+          ))}
 
-      {stok.length === 0 && gudangDipilih && (
-        <Text style={{ marginTop: 20, color: "gray" }}>
-          Tidak ada data stok untuk gudang ini.
-        </Text>
-      )}
-    </ScrollView>
+          {stok.length === 0 && gudangDipilih && (
+            <Text style={{ marginTop: 20, color: "gray" }}>
+              Tidak ada data stok untuk gudang ini.
+            </Text>
+          )}
+        </ScrollView>
+      </TouchableWithoutFeedback>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -196,7 +214,6 @@ const styles = StyleSheet.create({
   },
   dropdown: {
     marginBottom: 12,
-    zIndex: 1000,
   },
   search: {
     borderWidth: 1,

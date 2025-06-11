@@ -1,9 +1,10 @@
-// InScreen.tsx - Versi Lengkap FINAL Fix Scroll + Hapus Item + Gudang
+// ✅ InScreen.tsx Final Versi: Hapus No Faktur Supplier + Dokumen Firebase pakai ID dinamis
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import * as FileSystem from "expo-file-system";
-import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { doc, serverTimestamp, setDoc } from "firebase/firestore";
+
 import React, { useEffect, useState } from "react";
 import {
   Alert,
@@ -223,10 +224,25 @@ export default function InScreen() {
       setSelectedDate(d);
     }
   };
-
   const handleSubmit = async () => {
     if (!principle || !gudang || !jenisGudang || itemList.length === 0) {
       Alert.alert("Isi semua field wajib");
+      return;
+    }
+
+    if (!kodeApos) {
+      Alert.alert(
+        "⚠️ No Faktur belum diisi",
+        "Silakan isi No Faktur terlebih dahulu"
+      );
+      return;
+    }
+
+    if (!manualTanggal) {
+      Alert.alert(
+        "⚠️ Tanggal belum dipilih",
+        "Silakan pilih tanggal input terlebih dahulu"
+      );
       return;
     }
 
@@ -236,15 +252,12 @@ export default function InScreen() {
       kodeGdng,
       kodeApos: jenisForm !== "Return" ? kodeApos : "",
       kodeRetur: jenisForm === "Return" ? kodeRetur : "",
-      suratJalan: jenisForm !== "Return" ? suratJalan : "",
       principle,
       jenisForm:
         jenisForm === "Pembelian"
           ? `Pembelian - ${subJenisPembelian}`
           : `Return - ${subJenisReturn}`,
-      waktuInput: manualTanggal
-        ? convertToISODate(manualTanggal)
-        : new Date().toISOString(),
+      waktuInput: convertToISODate(manualTanggal),
       items: itemList,
     };
 
@@ -257,17 +270,22 @@ export default function InScreen() {
         if (payload[key] === undefined) delete payload[key];
       });
 
-      await addDoc(collection(db, "barangMasuk"), payload);
+      // 🔥 ID dokumen diambil dari kodeApos + tanggal input
+      const docId = `${kodeApos}-${manualTanggal}`;
+
+      console.log("📦 ID Dokumen:", docId); // debug
+      await setDoc(doc(db, "barangMasuk", docId), payload);
       await AsyncStorage.setItem("lastKodeGdng", kodeGdng);
 
       const next = (parseInt(kodeGdng, 10) + 1).toString().padStart(4, "0");
       setKodeGdng(next);
       Alert.alert("✅ Data berhasil disimpan ke cloud");
+
+      // Reset form
       setItemList([]);
       setOpenNamaBarang([]);
       setKodeApos("");
       setKodeRetur("");
-      setSuratJalan("");
       setPrinciple("");
       setManualTanggal("");
       setJenisGudang("");
@@ -434,12 +452,6 @@ export default function InScreen() {
               style={styles.input}
               value={kodeApos}
               onChangeText={setKodeApos}
-            />
-            <Text style={styles.label}>No Faktur Supplier (Surat Jalan)</Text>
-            <TextInput
-              style={styles.input}
-              value={suratJalan}
-              onChangeText={setSuratJalan}
             />
           </>
         )}
