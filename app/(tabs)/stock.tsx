@@ -1,3 +1,5 @@
+import * as FileSystem from "expo-file-system";
+import * as Sharing from "expo-sharing";
 import { collection, onSnapshot } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
@@ -8,10 +10,12 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  TouchableOpacity,
   TouchableWithoutFeedback,
   View,
 } from "react-native";
 import DropDownPicker from "react-native-dropdown-picker";
+import * as XLSX from "xlsx";
 import { db } from "../../utils/firebase";
 
 interface Item {
@@ -145,9 +149,38 @@ export default function StockScreen() {
     setStok(final);
   }, [barangMasuk, barangKeluar, searchText, gudangDipilih]);
 
+  const handleExport = async () => {
+    const data = stok.map((item) => ({
+      Nama: item.nama,
+      Kode: item.kode,
+      Principle: item.principle,
+      Large: item.totalLarge,
+      Medium: item.totalMedium,
+      Small: item.totalSmall,
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "StokGudang");
+
+    const wbout = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
+    const uri = FileSystem.cacheDirectory + "StokGudang_Export.xlsx";
+
+    await FileSystem.writeAsStringAsync(uri, wbout, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+
+    await Sharing.shareAsync(uri, {
+      mimeType:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      dialogTitle: "Export Data Stok",
+      UTI: "com.microsoft.excel.xlsx",
+    });
+  };
+
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1 }}
+      style={{ flex: 1, backgroundColor: "#fff" }}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
@@ -157,7 +190,7 @@ export default function StockScreen() {
         >
           <Text style={styles.title}>📦 STOK BARANG</Text>
 
-          <View style={{ zIndex: 1000 }}>
+          <View style={{ zIndex: 1000, marginBottom: 12 }}>
             <DropDownPicker
               open={gudangOpen}
               value={gudangDipilih}
@@ -167,7 +200,14 @@ export default function StockScreen() {
               setItems={setGudangItems}
               placeholder="Pilih Gudang"
               style={styles.dropdown}
-              dropDownContainerStyle={{ zIndex: 1000 }}
+              dropDownContainerStyle={{
+                borderWidth: 1,
+                borderColor: "#ccc",
+              }}
+              zIndex={1000}
+              zIndexInverse={900}
+              mode="BADGE"
+              listMode="SCROLLVIEW"
             />
           </View>
 
@@ -194,6 +234,15 @@ export default function StockScreen() {
               Tidak ada data stok untuk gudang ini.
             </Text>
           )}
+
+          {stok.length > 0 && (
+            <TouchableOpacity
+              onPress={handleExport}
+              style={styles.exportButton}
+            >
+              <Text style={styles.exportText}>📤 Export ke Excel</Text>
+            </TouchableOpacity>
+          )}
         </ScrollView>
       </TouchableWithoutFeedback>
     </KeyboardAvoidingView>
@@ -203,7 +252,7 @@ export default function StockScreen() {
 const styles = StyleSheet.create({
   container: {
     padding: 16,
-    paddingBottom: 80,
+    paddingBottom: 100,
     backgroundColor: "white",
   },
   title: {
@@ -213,7 +262,9 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   dropdown: {
-    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 8,
   },
   search: {
     borderWidth: 1,
@@ -231,5 +282,16 @@ const styles = StyleSheet.create({
   name: {
     fontWeight: "bold",
     fontSize: 16,
+  },
+  exportButton: {
+    backgroundColor: "#007bff",
+    padding: 14,
+    borderRadius: 8,
+    alignItems: "center",
+    marginTop: 20,
+  },
+  exportText: {
+    color: "#fff",
+    fontWeight: "bold",
   },
 });

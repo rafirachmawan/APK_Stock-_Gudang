@@ -10,12 +10,15 @@ import {
 import React, { useCallback, useState } from "react";
 import {
   Alert,
+  Keyboard,
+  KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from "react-native";
 import DropDownPicker from "react-native-dropdown-picker";
@@ -233,192 +236,225 @@ export default function OutScreen() {
     }
   };
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.label}>Jenis Gudang</Text>
-      <DropDownPicker
-        open={openJenisGudang}
-        value={jenisGudang}
-        items={[
-          { label: "Gudang A", value: "Gudang A" },
-          { label: "Gudang B", value: "Gudang B" },
-          { label: "Gudang C", value: "Gudang C" },
-          { label: "Gudang D", value: "Gudang D" },
-          { label: "Gudang E", value: "Gudang E" },
-        ]}
-        setOpen={setOpenJenisGudang}
-        setValue={setJenisGudang}
-        placeholder="Pilih Jenis Gudang"
-        style={styles.dropdown}
-        zIndex={6000}
-        listMode="SCROLLVIEW"
-      />
-
-      <Text style={styles.label}>Jenis Form</Text>
-      <DropDownPicker
-        open={openJenis}
-        value={jenisForm}
-        items={[
-          { label: "Pengiriman (DR)", value: "DR" },
-          { label: "Mutasi Stock (MB)", value: "MB" },
-          { label: "Return Pembelian (RB)", value: "RB" },
-        ]}
-        setOpen={setOpenJenis}
-        setValue={setJenisForm}
-        style={styles.dropdown}
-        zIndex={5000}
-        listMode="SCROLLVIEW"
-      />
-
-      <Text style={styles.label}>Tanggal</Text>
-      <TouchableOpacity onPress={() => setShowDate(true)} style={styles.input}>
-        <Text>{formatDate(tanggalTransaksi)}</Text>
-      </TouchableOpacity>
-      {showDate && (
-        <DateTimePicker
-          value={tanggalTransaksi}
-          mode="date"
-          display={Platform.OS === "ios" ? "spinner" : "default"}
-          onChange={(event, selectedDate) => {
-            if (Platform.OS === "android") setShowDate(false);
-            if (event.type === "set" && selectedDate) {
-              setTanggalTransaksi(selectedDate);
-            }
-          }}
-        />
-      )}
-
-      <Text style={styles.label}>No Faktur</Text>
-      <TextInput
-        style={styles.input}
-        value={kodeApos}
-        onChangeText={setKodeApos}
-      />
-
-      {jenisForm === "MB" && (
-        <>
-          <Text style={styles.label}>Gudang Tujuan</Text>
-          <DropDownPicker
-            open={openTujuanGudang}
-            value={tujuanGudang}
-            items={[
-              { label: "Gudang A", value: "Gudang A" },
-              { label: "Gudang B", value: "Gudang B" },
-              { label: "Gudang C", value: "Gudang C" },
-              { label: "Gudang D", value: "Gudang D" },
-              { label: "Gudang E", value: "Gudang E" },
-            ]}
-            setOpen={setOpenTujuanGudang}
-            setValue={setTujuanGudang}
-            placeholder="Pilih Gudang Tujuan"
-            style={styles.dropdown}
-            zIndex={4800}
-            listMode="SCROLLVIEW"
-          />
-          <Text style={styles.label}>Keterangan</Text>
-          <TextInput
-            style={styles.input}
-            value={catatan}
-            onChangeText={setCatatan}
-          />
-        </>
-      )}
-
-      {jenisForm === "RB" && (
-        <>
-          <Text style={styles.label}>Jenis Return</Text>
-          <DropDownPicker
-            open={openJenisReturn}
-            value={kategori}
-            items={jenisReturnList}
-            setOpen={setOpenJenisReturn}
-            setValue={setKategori}
-            style={styles.dropdown}
-            zIndex={3000}
-            listMode="SCROLLVIEW"
-          />
-        </>
-      )}
-
-      {itemList.map((item, i) => (
-        <View key={i} style={styles.itemBox}>
-          <Text style={styles.label}>Nama Barang</Text>
-          <DropDownPicker
-            open={openNamaBarang[i] || false}
-            setOpen={(val) => {
-              const copy = [...openNamaBarang];
-              copy[i] = val;
-              setOpenNamaBarang(copy);
-            }}
-            value={item.namaBarang}
-            setValue={(cb) => {
-              const val = cb(item.namaBarang);
-              const exists = barangFiltered.some((b) => b.namaBarang === val);
-              if (exists) {
-                handleSelectBarang(i, val);
-              } else {
-                Alert.alert("Barang tidak tersedia di gudang ini");
-              }
-            }}
-            items={
-              jenisGudang
-                ? barangFiltered.map((b) => ({
-                    label: b.namaBarang,
-                    value: b.namaBarang,
-                  }))
-                : []
-            }
-            placeholder="Pilih Nama Barang"
-            searchable
-            style={styles.dropdown}
-            listMode="SCROLLVIEW"
-            zIndex={1000 - i}
-            zIndexInverse={i}
-            disabled={!jenisGudang}
-          />
-
-          <Text style={styles.label}>Kode</Text>
-          <TextInput style={styles.input} value={item.kode} editable={false} />
-          <Text style={styles.label}>Principle</Text>
-          <TextInput
-            style={styles.input}
-            value={item.principle}
-            editable={false}
-          />
-          <Text style={styles.label}>Large</Text>
-          <TextInput
-            style={styles.input}
-            value={item.large}
-            onChangeText={(t) => handleChangeItem(i, "large", t)}
-          />
-          <Text style={styles.label}>Medium</Text>
-          <TextInput
-            style={styles.input}
-            value={item.medium}
-            onChangeText={(t) => handleChangeItem(i, "medium", t)}
-          />
-          <Text style={styles.label}>Small</Text>
-          <TextInput
-            style={styles.input}
-            value={item.small}
-            onChangeText={(t) => handleChangeItem(i, "small", t)}
-          />
-          <TouchableOpacity
-            onPress={() => removeItem(i)}
-            style={styles.removeButton}
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View style={{ flex: 1 }}>
+          <ScrollView
+            style={styles.container}
+            keyboardShouldPersistTaps="handled"
           >
-            <Text style={styles.removeText}>Hapus Item</Text>
-          </TouchableOpacity>
+            <ScrollView
+              style={styles.container}
+              keyboardShouldPersistTaps="handled"
+            ></ScrollView>
+            <ScrollView style={styles.container}>
+              <Text style={styles.label}>Jenis Gudang</Text>
+              <DropDownPicker
+                open={openJenisGudang}
+                value={jenisGudang}
+                items={[
+                  { label: "Gudang A", value: "Gudang A" },
+                  { label: "Gudang B", value: "Gudang B" },
+                  { label: "Gudang C", value: "Gudang C" },
+                  { label: "Gudang D", value: "Gudang D" },
+                  { label: "Gudang E", value: "Gudang E" },
+                ]}
+                setOpen={setOpenJenisGudang}
+                setValue={setJenisGudang}
+                placeholder="Pilih Jenis Gudang"
+                style={styles.dropdown}
+                zIndex={6000}
+                listMode="SCROLLVIEW"
+              />
+
+              <Text style={styles.label}>Jenis Form</Text>
+              <DropDownPicker
+                open={openJenis}
+                value={jenisForm}
+                items={[
+                  { label: "Pengiriman (DR)", value: "DR" },
+                  { label: "Mutasi Stock (MB)", value: "MB" },
+                  { label: "Return Pembelian (RB)", value: "RB" },
+                ]}
+                setOpen={setOpenJenis}
+                setValue={setJenisForm}
+                style={styles.dropdown}
+                zIndex={5000}
+                listMode="SCROLLVIEW"
+              />
+
+              <Text style={styles.label}>Tanggal</Text>
+              <TouchableOpacity
+                onPress={() => setShowDate(true)}
+                style={styles.input}
+              >
+                <Text>{formatDate(tanggalTransaksi)}</Text>
+              </TouchableOpacity>
+              {showDate && (
+                <DateTimePicker
+                  value={tanggalTransaksi}
+                  mode="date"
+                  display="default"
+                  onChange={(event, selectedDate) => {
+                    if (Platform.OS === "android") {
+                      setShowDate(false);
+                    }
+
+                    if (selectedDate) {
+                      setTanggalTransaksi(selectedDate);
+                    }
+                  }}
+                />
+              )}
+
+              <Text style={styles.label}>No Faktur</Text>
+              <TextInput
+                style={styles.input}
+                value={kodeApos}
+                onChangeText={setKodeApos}
+              />
+
+              {jenisForm === "MB" && (
+                <>
+                  <Text style={styles.label}>Gudang Tujuan</Text>
+                  <DropDownPicker
+                    open={openTujuanGudang}
+                    value={tujuanGudang}
+                    items={[
+                      { label: "Gudang A", value: "Gudang A" },
+                      { label: "Gudang B", value: "Gudang B" },
+                      { label: "Gudang C", value: "Gudang C" },
+                      { label: "Gudang D", value: "Gudang D" },
+                      { label: "Gudang E", value: "Gudang E" },
+                    ]}
+                    setOpen={setOpenTujuanGudang}
+                    setValue={setTujuanGudang}
+                    placeholder="Pilih Gudang Tujuan"
+                    style={styles.dropdown}
+                    zIndex={4800}
+                    listMode="SCROLLVIEW"
+                  />
+                  <Text style={styles.label}>Keterangan</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={catatan}
+                    onChangeText={setCatatan}
+                  />
+                </>
+              )}
+
+              {jenisForm === "RB" && (
+                <>
+                  <Text style={styles.label}>Jenis Return</Text>
+                  <DropDownPicker
+                    open={openJenisReturn}
+                    value={kategori}
+                    items={jenisReturnList}
+                    setOpen={setOpenJenisReturn}
+                    setValue={setKategori}
+                    style={styles.dropdown}
+                    zIndex={3000}
+                    listMode="SCROLLVIEW"
+                  />
+                </>
+              )}
+
+              {itemList.map((item, i) => (
+                <View key={i} style={styles.itemBox}>
+                  <Text style={styles.label}>Nama Barang</Text>
+                  <DropDownPicker
+                    open={openNamaBarang[i] || false}
+                    setOpen={(val) => {
+                      const copy = [...openNamaBarang];
+                      copy[i] = val;
+                      setOpenNamaBarang(copy);
+                    }}
+                    value={item.namaBarang}
+                    setValue={(cb) => {
+                      const val = cb(item.namaBarang);
+                      const exists = barangFiltered.some(
+                        (b) => b.namaBarang === val
+                      );
+                      if (exists) {
+                        handleSelectBarang(i, val);
+                      } else {
+                        Alert.alert("Barang tidak tersedia di gudang ini");
+                      }
+                    }}
+                    items={
+                      jenisGudang
+                        ? barangFiltered.map((b) => ({
+                            label: b.namaBarang,
+                            value: b.namaBarang,
+                          }))
+                        : []
+                    }
+                    placeholder="Pilih Nama Barang"
+                    searchable
+                    style={styles.dropdown}
+                    listMode="SCROLLVIEW"
+                    zIndex={1000 - i}
+                    zIndexInverse={i}
+                    disabled={!jenisGudang}
+                  />
+
+                  <Text style={styles.label}>Kode</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={item.kode}
+                    editable={false}
+                  />
+                  <Text style={styles.label}>Principle</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={item.principle}
+                    editable={false}
+                  />
+                  <Text style={styles.label}>Large</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={item.large}
+                    onChangeText={(t) => handleChangeItem(i, "large", t)}
+                  />
+                  <Text style={styles.label}>Medium</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={item.medium}
+                    onChangeText={(t) => handleChangeItem(i, "medium", t)}
+                  />
+                  <Text style={styles.label}>Small</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={item.small}
+                    onChangeText={(t) => handleChangeItem(i, "small", t)}
+                  />
+                  <TouchableOpacity
+                    onPress={() => removeItem(i)}
+                    style={styles.removeButton}
+                  >
+                    <Text style={styles.removeText}>Hapus Item</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+
+              <TouchableOpacity onPress={addItem} style={styles.addButton}>
+                <Text style={styles.addText}>+ Tambah Item</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={handleSubmit}
+                style={styles.submitButton}
+              >
+                <Text style={styles.submitText}>Simpan</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </ScrollView>
         </View>
-      ))}
-
-      <TouchableOpacity onPress={addItem} style={styles.addButton}>
-        <Text style={styles.addText}>+ Tambah Item</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity onPress={handleSubmit} style={styles.submitButton}>
-        <Text style={styles.submitText}>Simpan</Text>
-      </TouchableOpacity>
-    </ScrollView>
+      </TouchableWithoutFeedback>
+    </KeyboardAvoidingView>
   );
 }
 

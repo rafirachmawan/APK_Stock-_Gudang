@@ -1,17 +1,24 @@
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useFocusEffect } from "@react-navigation/native";
+import * as FileSystem from "expo-file-system";
+import * as Sharing from "expo-sharing";
 import { collection, doc, onSnapshot, updateDoc } from "firebase/firestore";
 import React, { useCallback, useState } from "react";
 import {
   Alert,
+  Keyboard,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from "react-native";
+import * as XLSX from "xlsx";
 import { db } from "../../utils/firebase";
 
 interface ItemInput {
@@ -48,7 +55,6 @@ export default function StockDetailScreen() {
   );
   const [selectedTrx, setSelectedTrx] = useState<PurchaseForm | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
-  const [editMode, setEditMode] = useState(false);
   const [editedTrx, setEditedTrx] = useState<PurchaseForm | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -83,7 +89,6 @@ export default function StockDetailScreen() {
   const openDetailModal = (trx: PurchaseForm) => {
     setSelectedTrx(trx);
     setEditedTrx({ ...trx });
-    setEditMode(false);
     setModalVisible(true);
   };
 
@@ -124,6 +129,48 @@ export default function StockDetailScreen() {
       const iso = selected.toISOString();
       setEditedTrx({ ...editedTrx, waktuInput: iso });
     }
+  };
+
+  const exportToExcel = () => {
+    const exportData: any[] = [];
+
+    Object.entries(data).forEach(([tanggal, jenisMap]) => {
+      Object.entries(jenisMap).forEach(([jenis, trxList]) => {
+        trxList.forEach((trx) => {
+          trx.items.forEach((item) => {
+            exportData.push({
+              Tanggal: tanggal,
+              JenisForm: jenis,
+              Gudang: trx.gudang,
+              KodeGudang: trx.kodeGdng,
+              KodeApos: trx.kodeApos,
+              SuratJalan: trx.suratJalan,
+              Principle: trx.principle,
+              NamaBarang: item.namaBarang,
+              KodeBarang: item.kode,
+              Large: item.large,
+              Medium: item.medium,
+              Small: item.small,
+              Catatan: item.catatan || "-",
+              ED: item.ed || "-",
+            });
+          });
+        });
+      });
+    });
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "BarangMasuk");
+
+    const uri = FileSystem.cacheDirectory + "BarangMasuk.xlsx";
+    const buffer = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
+
+    FileSystem.writeAsStringAsync(uri, buffer, {
+      encoding: FileSystem.EncodingType.Base64,
+    }).then(() => {
+      Sharing.shareAsync(uri);
+    });
   };
 
   return (
@@ -192,112 +239,135 @@ export default function StockDetailScreen() {
               })}
           </View>
         ))}
+        <TouchableOpacity
+          onPress={exportToExcel}
+          style={{
+            backgroundColor: "#28a745",
+            padding: 10,
+            borderRadius: 8,
+            marginTop: 16,
+            alignItems: "center",
+          }}
+        >
+          <Text style={{ color: "#fff", fontWeight: "bold" }}>
+            Export Semua
+          </Text>
+        </TouchableOpacity>
       </ScrollView>
 
       <Modal visible={modalVisible} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            {editedTrx && (
-              <ScrollView>
-                <Text style={styles.modalTitle}>Detail Transaksi</Text>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.modalOverlay}
+        >
+          <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
+            <View style={styles.modalContent}>
+              {editedTrx && (
+                <ScrollView>
+                  <Text style={styles.modalTitle}>Detail Transaksi</Text>
 
-                <Text>Kode Gudang</Text>
-                <TextInput
-                  style={styles.input}
-                  value={editedTrx.kodeGdng}
-                  onChangeText={(t) =>
-                    setEditedTrx({ ...editedTrx, kodeGdng: t })
-                  }
-                />
-
-                <Text>Kode Apos</Text>
-                <TextInput
-                  style={styles.input}
-                  value={editedTrx.kodeApos}
-                  onChangeText={(t) =>
-                    setEditedTrx({ ...editedTrx, kodeApos: t })
-                  }
-                />
-
-                <Text>Surat Jalan</Text>
-                <TextInput
-                  style={styles.input}
-                  value={editedTrx.suratJalan}
-                  onChangeText={(t) =>
-                    setEditedTrx({ ...editedTrx, suratJalan: t })
-                  }
-                />
-
-                <Text>Waktu Input</Text>
-                <TouchableOpacity
-                  onPress={() => setShowDatePicker(true)}
-                  style={styles.input}
-                >
-                  <Text>
-                    {new Date(editedTrx.waktuInput).toLocaleDateString("id-ID")}
-                  </Text>
-                </TouchableOpacity>
-
-                {showDatePicker && (
-                  <DateTimePicker
-                    value={selectedDate}
-                    mode="date"
-                    display="default"
-                    onChange={onChangeDate}
+                  <Text>Kode Gudang</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={editedTrx.kodeGdng}
+                    onChangeText={(t) =>
+                      setEditedTrx({ ...editedTrx, kodeGdng: t })
+                    }
                   />
-                )}
 
-                <Text style={{ marginTop: 12, fontWeight: "bold" }}>
-                  Barang:
-                </Text>
-                {(editedTrx.items || []).map((item, idx) => (
-                  <View key={idx} style={styles.itemBox}>
-                    <Text style={styles.bold}>{item.namaBarang}</Text>
-                    <Text>Kode: {item.kode}</Text>
-                    <TextInput
-                      style={styles.input}
-                      value={item.large}
-                      onChangeText={(t) => handleChangeItem(idx, "large", t)}
-                      placeholder="Large"
-                    />
-                    <TextInput
-                      style={styles.input}
-                      value={item.medium}
-                      onChangeText={(t) => handleChangeItem(idx, "medium", t)}
-                      placeholder="Medium"
-                    />
-                    <TextInput
-                      style={styles.input}
-                      value={item.small}
-                      onChangeText={(t) => handleChangeItem(idx, "small", t)}
-                      placeholder="Small"
-                    />
-                    <TextInput
-                      style={styles.input}
-                      value={item.catatan || ""}
-                      onChangeText={(t) => handleChangeItem(idx, "catatan", t)}
-                      placeholder="Catatan"
-                    />
-                  </View>
-                ))}
-              </ScrollView>
-            )}
+                  <Text>Kode Apos</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={editedTrx.kodeApos}
+                    onChangeText={(t) =>
+                      setEditedTrx({ ...editedTrx, kodeApos: t })
+                    }
+                  />
 
-            <TouchableOpacity
-              onPress={handleSave}
-              style={[styles.closeBtn, { backgroundColor: "green" }]}
-            >
-              <Text style={styles.closeText}>Simpan</Text>
-            </TouchableOpacity>
+                  <Text>Surat Jalan</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={editedTrx.suratJalan}
+                    onChangeText={(t) =>
+                      setEditedTrx({ ...editedTrx, suratJalan: t })
+                    }
+                  />
 
-            <TouchableOpacity
-              onPress={() => setModalVisible(false)}
-              style={styles.closeBtn}
-            >
-              <Text style={styles.closeText}>Tutup</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+                  <Text>Waktu Input</Text>
+                  <TouchableOpacity
+                    onPress={() => setShowDatePicker(true)}
+                    style={styles.input}
+                  >
+                    <Text>
+                      {new Date(editedTrx.waktuInput).toLocaleDateString(
+                        "id-ID"
+                      )}
+                    </Text>
+                  </TouchableOpacity>
+
+                  {showDatePicker && (
+                    <DateTimePicker
+                      value={selectedDate}
+                      mode="date"
+                      display="default"
+                      onChange={onChangeDate}
+                    />
+                  )}
+
+                  <Text style={{ marginTop: 12, fontWeight: "bold" }}>
+                    Barang:
+                  </Text>
+                  {(editedTrx.items || []).map((item, idx) => (
+                    <View key={idx} style={styles.itemBox}>
+                      <Text style={styles.bold}>{item.namaBarang}</Text>
+                      <Text>Kode: {item.kode}</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={item.large}
+                        onChangeText={(t) => handleChangeItem(idx, "large", t)}
+                        placeholder="Large"
+                      />
+                      <TextInput
+                        style={styles.input}
+                        value={item.medium}
+                        onChangeText={(t) => handleChangeItem(idx, "medium", t)}
+                        placeholder="Medium"
+                      />
+                      <TextInput
+                        style={styles.input}
+                        value={item.small}
+                        onChangeText={(t) => handleChangeItem(idx, "small", t)}
+                        placeholder="Small"
+                      />
+                      <TextInput
+                        style={styles.input}
+                        value={item.catatan || ""}
+                        onChangeText={(t) =>
+                          handleChangeItem(idx, "catatan", t)
+                        }
+                        placeholder="Catatan"
+                      />
+                    </View>
+                  ))}
+                </ScrollView>
+              )}
+
+              <TouchableOpacity
+                onPress={handleSave}
+                style={[styles.closeBtn, { backgroundColor: "green" }]}
+              >
+                <Text style={styles.closeText}>Simpan</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => setModalVisible(false)}
+                style={styles.closeBtn}
+              >
+                <Text style={styles.closeText}>Tutup</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
       </Modal>
     </>
   );
