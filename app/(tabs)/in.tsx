@@ -232,7 +232,10 @@ export default function InScreen() {
       return;
     }
 
-    if (!kodeApos) {
+    if (
+      (jenisForm === "Pembelian" && !kodeApos) ||
+      (jenisForm === "Return" && !kodeRetur)
+    ) {
       Alert.alert(
         "⚠️ No Faktur belum diisi",
         "Silakan isi No Faktur terlebih dahulu"

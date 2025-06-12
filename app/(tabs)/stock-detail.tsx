@@ -1,8 +1,14 @@
+// Final Version of StockDetailScreen.tsx with Sorting, Search, Delete, and Full Edit UI
+
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useFocusEffect } from "@react-navigation/native";
-import * as FileSystem from "expo-file-system";
-import * as Sharing from "expo-sharing";
-import { collection, doc, onSnapshot, updateDoc } from "firebase/firestore";
+import {
+  collection,
+  deleteDoc,
+  doc,
+  onSnapshot,
+  updateDoc,
+} from "firebase/firestore";
 import React, { useCallback, useState } from "react";
 import {
   Alert,
@@ -18,7 +24,6 @@ import {
   TouchableWithoutFeedback,
   View,
 } from "react-native";
-import * as XLSX from "xlsx";
 import { db } from "../../utils/firebase";
 
 interface ItemInput {
@@ -35,61 +40,65 @@ interface PurchaseForm {
   id?: string;
   gudang: string;
   kodeGdng: string;
-  kodeApos: string;
-  suratJalan: string;
+  kodeApos?: string;
+  kodeRetur?: string;
   principle: string;
   jenisForm?: string;
+  jenisGudang?: string;
   waktuInput: string;
   items: ItemInput[];
 }
 
 export default function StockDetailScreen() {
-  const [data, setData] = useState<
-    Record<string, Record<string, PurchaseForm[]>>
-  >({});
-  const [expandedTanggal, setExpandedTanggal] = useState<
-    Record<string, boolean>
-  >({});
-  const [expandedJenis, setExpandedJenis] = useState<Record<string, boolean>>(
-    {}
-  );
-  const [selectedTrx, setSelectedTrx] = useState<PurchaseForm | null>(null);
+  const [allData, setAllData] = useState<PurchaseForm[]>([]);
+  const [searchText, setSearchText] = useState("");
   const [modalVisible, setModalVisible] = useState(false);
   const [editedTrx, setEditedTrx] = useState<PurchaseForm | null>(null);
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [selectedDate, setSelectedDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
       const unsub = onSnapshot(collection(db, "barangMasuk"), (snapshot) => {
-        try {
-          const all: PurchaseForm[] = snapshot.docs.map(
-            (doc) => ({ id: doc.id, ...doc.data() } as PurchaseForm)
-          );
-
-          const grouped: Record<string, Record<string, PurchaseForm[]>> = {};
-          all.forEach((trx) => {
-            const date = new Date(trx.waktuInput).toLocaleDateString("id-ID");
-            const jenis = trx.jenisForm || "Pembelian";
-            if (!grouped[date]) grouped[date] = {};
-            if (!grouped[date][jenis]) grouped[date][jenis] = [];
-            grouped[date][jenis].push(trx);
-          });
-
-          setData(grouped);
-        } catch (error) {
-          Alert.alert("Gagal memuat data");
-          console.error("Snapshot error:", error);
-        }
+        const all: PurchaseForm[] = snapshot.docs.map(
+          (doc) => ({ id: doc.id, ...doc.data() } as PurchaseForm)
+        );
+        setAllData(all);
       });
       return () => unsub();
     }, [])
   );
 
-  const openDetailModal = (trx: PurchaseForm) => {
-    setSelectedTrx(trx);
-    setEditedTrx({ ...trx });
-    setModalVisible(true);
+  const filteredData = allData.filter((trx) => {
+    const tgl = new Date(trx.waktuInput).toLocaleDateString("id-ID");
+    const noFaktur = trx.kodeApos || trx.kodeRetur || "";
+    return (
+      tgl.includes(searchText) ||
+      noFaktur.toLowerCase().includes(searchText.toLowerCase())
+    );
+  });
+
+  const grouped = filteredData.reduce((acc, trx) => {
+    const date = new Date(trx.waktuInput).toLocaleDateString("id-ID");
+    const jenis = trx.jenisForm || "Pembelian";
+    if (!acc[date]) acc[date] = {};
+    if (!acc[date][jenis]) acc[date][jenis] = [];
+    acc[date][jenis].push(trx);
+    return acc;
+  }, {} as Record<string, Record<string, PurchaseForm[]>>);
+
+  const handleDelete = async (trx: PurchaseForm) => {
+    if (!trx.id) return;
+    Alert.alert("Hapus Transaksi", "Yakin ingin menghapus data ini?", [
+      { text: "Batal", style: "cancel" },
+      {
+        text: "Hapus",
+        style: "destructive",
+        onPress: async () => {
+          await deleteDoc(doc(db, "barangMasuk", trx.id!));
+        },
+      },
+    ]);
   };
 
   const handleChangeItem = (
@@ -108,9 +117,12 @@ export default function StockDetailScreen() {
     try {
       await updateDoc(doc(db, "barangMasuk", editedTrx.id), {
         gudang: editedTrx.gudang,
+        jenisGudang: editedTrx.jenisGudang,
+        jenisForm: editedTrx.jenisForm,
+        principle: editedTrx.principle,
         kodeGdng: editedTrx.kodeGdng,
         kodeApos: editedTrx.kodeApos,
-        suratJalan: editedTrx.suratJalan,
+        kodeRetur: editedTrx.kodeRetur,
         waktuInput: editedTrx.waktuInput,
         items: editedTrx.items,
       });
@@ -118,7 +130,6 @@ export default function StockDetailScreen() {
       setModalVisible(false);
     } catch (err) {
       Alert.alert("Gagal menyimpan perubahan");
-      console.error(err);
     }
   };
 
@@ -131,147 +142,158 @@ export default function StockDetailScreen() {
     }
   };
 
-  const exportToExcel = () => {
-    const exportData: any[] = [];
-
-    Object.entries(data).forEach(([tanggal, jenisMap]) => {
-      Object.entries(jenisMap).forEach(([jenis, trxList]) => {
-        trxList.forEach((trx) => {
-          trx.items.forEach((item) => {
-            exportData.push({
-              Tanggal: tanggal,
-              JenisForm: jenis,
-              Gudang: trx.gudang,
-              KodeGudang: trx.kodeGdng,
-              KodeApos: trx.kodeApos,
-              SuratJalan: trx.suratJalan,
-              Principle: trx.principle,
-              NamaBarang: item.namaBarang,
-              KodeBarang: item.kode,
-              Large: item.large,
-              Medium: item.medium,
-              Small: item.small,
-              Catatan: item.catatan || "-",
-              ED: item.ed || "-",
-            });
-          });
-        });
-      });
-    });
-
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "BarangMasuk");
-
-    const uri = FileSystem.cacheDirectory + "BarangMasuk.xlsx";
-    const buffer = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
-
-    FileSystem.writeAsStringAsync(uri, buffer, {
-      encoding: FileSystem.EncodingType.Base64,
-    }).then(() => {
-      Sharing.shareAsync(uri);
-    });
-  };
-
   return (
-    <>
-      <ScrollView style={styles.container}>
-        <Text style={styles.title}>Riwayat Barang Masuk</Text>
+    <ScrollView style={{ flex: 1, padding: 16, backgroundColor: "#fff" }}>
+      <Text style={{ fontSize: 20, fontWeight: "bold", marginBottom: 12 }}>
+        Riwayat Barang Masuk
+      </Text>
 
-        {Object.entries(data || {})
-          .sort((a, b) => {
-            // Convert tanggal dari format lokal ke Date untuk dibandingkan
-            const dateA = new Date(a[0].split("/").reverse().join("-"));
-            const dateB = new Date(b[0].split("/").reverse().join("-"));
-            return dateB.getTime() - dateA.getTime(); // Urut dari terbaru ke terlama
-          })
-          .map(([tanggal, jenisMap]) => (
-            <View key={tanggal} style={styles.section}>
-              <TouchableOpacity
-                onPress={() =>
-                  setExpandedTanggal((prev) => ({
-                    ...prev,
-                    [tanggal]: !prev[tanggal],
-                  }))
-                }
-                style={styles.expandBtn}
-              >
-                <Text style={styles.expandBtnText}>
-                  {expandedTanggal[tanggal] ? "▼" : "▶"} {tanggal}
+      <TextInput
+        placeholder="Cari No Faktur atau Tanggal (dd/mm/yyyy)"
+        style={{
+          borderWidth: 1,
+          borderColor: "#ccc",
+          padding: 10,
+          borderRadius: 8,
+          marginBottom: 12,
+        }}
+        value={searchText}
+        onChangeText={setSearchText}
+      />
+
+      {Object.entries(grouped)
+        .sort((a, b) => {
+          const dateA = new Date(a[0].split("/").reverse().join("-"));
+          const dateB = new Date(b[0].split("/").reverse().join("-"));
+          return dateB.getTime() - dateA.getTime();
+        })
+        .map(([tanggal, jenisMap]) => (
+          <View key={tanggal} style={{ marginBottom: 20 }}>
+            <Text style={{ fontSize: 16, fontWeight: "bold", marginBottom: 4 }}>
+              {tanggal}
+            </Text>
+            {Object.entries(jenisMap).map(([jenis, trxList]) => (
+              <View key={jenis}>
+                <Text
+                  style={{ fontSize: 15, fontWeight: "bold", color: "#555" }}
+                >
+                  {jenis}
                 </Text>
-              </TouchableOpacity>
-
-              {expandedTanggal[tanggal] &&
-                Object.entries(jenisMap || {}).map(([jenis, list]) => {
-                  const jenisKey = `${tanggal}-${jenis}`;
-                  return (
-                    <View key={jenisKey} style={{ marginLeft: 16 }}>
+                {trxList.map((trx) => (
+                  <View
+                    key={trx.id}
+                    style={{
+                      backgroundColor: "#f8f9fa",
+                      padding: 12,
+                      borderRadius: 8,
+                      marginTop: 8,
+                    }}
+                  >
+                    <Text style={{ fontWeight: "bold" }}>
+                      No Faktur: {trx.kodeApos || trx.kodeRetur || "-"}
+                    </Text>
+                    <Text>Waktu: {trx.waktuInput}</Text>
+                    <View
+                      style={{ flexDirection: "row", gap: 10, marginTop: 8 }}
+                    >
                       <TouchableOpacity
-                        onPress={() =>
-                          setExpandedJenis((prev) => ({
-                            ...prev,
-                            [jenisKey]: !prev[jenisKey],
-                          }))
-                        }
-                        style={styles.jenisBtn}
+                        style={{
+                          padding: 8,
+                          borderRadius: 6,
+                          flex: 1,
+                          backgroundColor: "green",
+                          alignItems: "center",
+                        }}
+                        onPress={() => {
+                          setEditedTrx(trx);
+                          setModalVisible(true);
+                        }}
                       >
-                        <Text style={styles.expandBtnText}>
-                          {expandedJenis[jenisKey] ? "▼" : "▶"} {jenis}
+                        <Text style={{ color: "white", fontWeight: "bold" }}>
+                          Edit
                         </Text>
                       </TouchableOpacity>
-
-                      {expandedJenis[jenisKey] &&
-                        list.map((trx, i) => (
-                          <TouchableOpacity
-                            key={i}
-                            style={styles.card}
-                            onPress={() => openDetailModal(trx)}
-                          >
-                            <Text style={styles.bold}>
-                              Surat Jalan: {trx.suratJalan}
-                            </Text>
-                            <Text style={styles.bold}>
-                              Kode Apos: {trx.kodeApos}
-                            </Text>
-                            <Text style={styles.bold}>
-                              Waktu: {trx.waktuInput}
-                            </Text>
-                            <Text style={{ fontStyle: "italic" }}>
-                              Klik untuk lihat detail barang
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
+                      <TouchableOpacity
+                        style={{
+                          padding: 8,
+                          borderRadius: 6,
+                          flex: 1,
+                          backgroundColor: "#dc3545",
+                          alignItems: "center",
+                        }}
+                        onPress={() => handleDelete(trx)}
+                      >
+                        <Text style={{ color: "white", fontWeight: "bold" }}>
+                          Hapus
+                        </Text>
+                      </TouchableOpacity>
                     </View>
-                  );
-                })}
-            </View>
-          ))}
-        <TouchableOpacity
-          onPress={exportToExcel}
-          style={{
-            backgroundColor: "#28a745",
-            padding: 10,
-            borderRadius: 8,
-            marginTop: 16,
-            alignItems: "center",
-          }}
-        >
-          <Text style={{ color: "#fff", fontWeight: "bold" }}>
-            Export Semua
-          </Text>
-        </TouchableOpacity>
-      </ScrollView>
+                  </View>
+                ))}
+              </View>
+            ))}
+          </View>
+        ))}
 
       <Modal visible={modalVisible} transparent animationType="slide">
         <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={styles.modalOverlay}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            justifyContent: "center",
+            alignItems: "center",
+          }}
         >
-          <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
-            <View style={styles.modalContent}>
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View
+              style={{
+                backgroundColor: "white",
+                borderRadius: 10,
+                padding: 20,
+                width: "90%",
+                maxHeight: "90%",
+              }}
+            >
               {editedTrx && (
                 <ScrollView>
-                  <Text style={styles.modalTitle}>Detail Transaksi</Text>
+                  <Text
+                    style={{
+                      fontSize: 18,
+                      fontWeight: "bold",
+                      marginBottom: 10,
+                    }}
+                  >
+                    Edit Transaksi
+                  </Text>
+
+                  <Text>Jenis Gudang</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={editedTrx.jenisGudang || ""}
+                    editable={false}
+                  />
+
+                  <Text>Jenis Form</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={editedTrx.jenisForm || ""}
+                    editable={false}
+                  />
+
+                  <Text>Gudang</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={editedTrx.gudang}
+                    editable={false}
+                  />
+
+                  <Text>Principle</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={editedTrx.principle}
+                    editable={false}
+                  />
 
                   <Text>Kode Gudang</Text>
                   <TextInput
@@ -282,25 +304,20 @@ export default function StockDetailScreen() {
                     }
                   />
 
-                  <Text>Kode Apos</Text>
+                  <Text>No Faktur</Text>
                   <TextInput
                     style={styles.input}
-                    value={editedTrx.kodeApos}
-                    onChangeText={(t) =>
-                      setEditedTrx({ ...editedTrx, kodeApos: t })
-                    }
+                    value={editedTrx.kodeApos || editedTrx.kodeRetur || ""}
+                    onChangeText={(t) => {
+                      if (editedTrx.jenisForm?.startsWith("Return")) {
+                        setEditedTrx({ ...editedTrx, kodeRetur: t });
+                      } else {
+                        setEditedTrx({ ...editedTrx, kodeApos: t });
+                      }
+                    }}
                   />
 
-                  <Text>Surat Jalan</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={editedTrx.suratJalan}
-                    onChangeText={(t) =>
-                      setEditedTrx({ ...editedTrx, suratJalan: t })
-                    }
-                  />
-
-                  <Text>Waktu Input</Text>
+                  <Text>Tanggal</Text>
                   <TouchableOpacity
                     onPress={() => setShowDatePicker(true)}
                     style={styles.input}
@@ -311,7 +328,6 @@ export default function StockDetailScreen() {
                       )}
                     </Text>
                   </TouchableOpacity>
-
                   {showDatePicker && (
                     <DateTimePicker
                       value={selectedDate}
@@ -321,121 +337,89 @@ export default function StockDetailScreen() {
                     />
                   )}
 
-                  <Text style={{ marginTop: 12, fontWeight: "bold" }}>
-                    Barang:
-                  </Text>
-                  {(editedTrx.items || []).map((item, idx) => (
-                    <View key={idx} style={styles.itemBox}>
-                      <Text style={styles.bold}>{item.namaBarang}</Text>
-                      <Text>Kode: {item.kode}</Text>
+                  {editedTrx.items.map((item, i) => (
+                    <View
+                      key={i}
+                      style={{
+                        backgroundColor: "#eee",
+                        padding: 10,
+                        borderRadius: 6,
+                        marginBottom: 10,
+                      }}
+                    >
+                      <Text style={{ fontWeight: "bold" }}>
+                        {item.namaBarang}
+                      </Text>
                       <TextInput
                         style={styles.input}
                         value={item.large}
-                        onChangeText={(t) => handleChangeItem(idx, "large", t)}
+                        onChangeText={(t) => handleChangeItem(i, "large", t)}
                         placeholder="Large"
                       />
                       <TextInput
                         style={styles.input}
                         value={item.medium}
-                        onChangeText={(t) => handleChangeItem(idx, "medium", t)}
+                        onChangeText={(t) => handleChangeItem(i, "medium", t)}
                         placeholder="Medium"
                       />
                       <TextInput
                         style={styles.input}
                         value={item.small}
-                        onChangeText={(t) => handleChangeItem(idx, "small", t)}
+                        onChangeText={(t) => handleChangeItem(i, "small", t)}
                         placeholder="Small"
                       />
                       <TextInput
                         style={styles.input}
                         value={item.catatan || ""}
-                        onChangeText={(t) =>
-                          handleChangeItem(idx, "catatan", t)
-                        }
+                        onChangeText={(t) => handleChangeItem(i, "catatan", t)}
                         placeholder="Catatan"
                       />
                     </View>
                   ))}
+
+                  <TouchableOpacity
+                    onPress={handleSave}
+                    style={{
+                      padding: 10,
+                      borderRadius: 6,
+                      backgroundColor: "green",
+                      alignItems: "center",
+                    }}
+                  >
+                    <Text style={{ color: "white", fontWeight: "bold" }}>
+                      Simpan
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => setModalVisible(false)}
+                    style={{
+                      padding: 10,
+                      borderRadius: 6,
+                      backgroundColor: "#6c757d",
+                      alignItems: "center",
+                      marginTop: 10,
+                    }}
+                  >
+                    <Text style={{ color: "white", fontWeight: "bold" }}>
+                      Tutup
+                    </Text>
+                  </TouchableOpacity>
                 </ScrollView>
               )}
-
-              <TouchableOpacity
-                onPress={handleSave}
-                style={[styles.closeBtn, { backgroundColor: "green" }]}
-              >
-                <Text style={styles.closeText}>Simpan</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => setModalVisible(false)}
-                style={styles.closeBtn}
-              >
-                <Text style={styles.closeText}>Tutup</Text>
-              </TouchableOpacity>
             </View>
           </TouchableWithoutFeedback>
         </KeyboardAvoidingView>
       </Modal>
-    </>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, backgroundColor: "#fff" },
-  title: { fontSize: 18, fontWeight: "bold", marginBottom: 16 },
-  section: { marginBottom: 16 },
-  expandBtn: {
-    backgroundColor: "#007bff",
-    padding: 10,
-    borderRadius: 6,
-  },
-  jenisBtn: {
-    backgroundColor: "#17a2b8",
-    padding: 8,
-    marginVertical: 6,
-    borderRadius: 6,
-  },
-  expandBtnText: { color: "#fff", fontWeight: "bold" },
-  card: {
-    backgroundColor: "#f2f2f2",
-    padding: 12,
-    marginVertical: 6,
-    borderRadius: 8,
-  },
-  bold: { fontWeight: "bold", fontSize: 15 },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  modalContent: {
-    backgroundColor: "white",
-    borderRadius: 10,
-    padding: 20,
-    width: "90%",
-    maxHeight: "90%",
-  },
-  modalTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 10 },
-  itemBox: {
-    backgroundColor: "#eee",
-    marginVertical: 6,
-    padding: 10,
-    borderRadius: 6,
-  },
-  closeBtn: {
-    backgroundColor: "#dc3545",
-    marginTop: 16,
-    padding: 12,
-    borderRadius: 6,
-    alignItems: "center",
-  },
-  closeText: { color: "white", fontWeight: "bold" },
   input: {
     borderWidth: 1,
     borderColor: "#ccc",
     borderRadius: 6,
-    padding: 8,
-    marginVertical: 6,
+    padding: 10,
+    marginBottom: 10,
   },
 });
