@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as FileSystem from "expo-file-system";
 import { initializeApp } from "firebase/app";
 import {
   collection,
@@ -8,6 +9,7 @@ import {
   getFirestore,
   setDoc,
 } from "firebase/firestore";
+import * as XLSX from "xlsx";
 import { Barang } from "./stockManager";
 
 const firebaseConfig = {
@@ -216,12 +218,82 @@ export const syncUpload = async () => {
   }
 };
 
-// ------------------ RESET ------------------
+// ------------------ RESET SEMUA DATA ------------------
 export const resetSemuaHistory = async (): Promise<void> => {
   try {
+    // 1. Hapus semua dokumen dari Firestore
+    const collections = ["barangMasuk", "barangKeluar", "hasilGenerate"];
+    for (const col of collections) {
+      const snap = await getDocs(collection(db, col));
+      const deletePromises = snap.docs.map((docSnap) =>
+        deleteDoc(doc(db, col, docSnap.id))
+      );
+      await Promise.all(deletePromises);
+    }
+
+    // 2. Hapus semua data lokal (AsyncStorage)
     await AsyncStorage.clear();
-    console.log("✅ Semua histori berhasil dihapus dari lokal");
+
+    console.log(
+      "✅ Semua data berhasil dihapus dari Firestore dan AsyncStorage."
+    );
   } catch (error) {
-    console.error("❌ Gagal menghapus histori:", error);
+    console.error("❌ Gagal menghapus semua data:", error);
+    throw error;
+  }
+};
+
+// IMPORT STOK AWAL EXCEL KE FIRESTORE + ASYNCSTORAGE
+export const importStockAwalExcel = async (excelUri: string) => {
+  try {
+    const b64 = await FileSystem.readAsStringAsync(excelUri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    const workbook = XLSX.read(b64, { type: "base64" });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const raw: any[] = XLSX.utils.sheet_to_json(sheet, { range: 4 }); // mulai dari baris ke-5
+
+    const now = new Date();
+    const defaultDateStr = "12-06-2025"; // default dari baris 2 di file
+    const [day, month, year] = defaultDateStr.split("-");
+    const waktuInput = new Date(
+      `${year}-${month}-${day}T00:00:00Z`
+    ).toISOString();
+
+    const items = raw.map((row) => ({
+      namaBarang: row["Nama"] || "",
+      kode: row["Kode"] || "",
+      large: String(row["Large"] ?? "0"),
+      medium: String(row["Med"] ?? "0"),
+      small: String(row["Small"] ?? "0"),
+      ed: "",
+      catatan: "import excel",
+    }));
+
+    const newEntry = {
+      kodeGdng: "0000",
+      kodeApos: "STOKAWAL",
+      waktuInput,
+      gudang: "Gudang GS",
+      principle: "-",
+      items,
+      createdAt: new Date().toISOString(),
+    };
+
+    const docId = `STOKAWAL-${defaultDateStr}`;
+    await setDoc(doc(db, "barangMasuk", docId), newEntry);
+
+    // Simpan juga ke AsyncStorage
+    const existing = await AsyncStorage.getItem("barangMasuk");
+    const parsed = existing ? JSON.parse(existing) : [];
+    await AsyncStorage.setItem(
+      "barangMasuk",
+      JSON.stringify([...parsed, newEntry])
+    );
+
+    console.log("✅ Import stok awal berhasil.");
+  } catch (err) {
+    console.error("❌ Gagal import stok awal:", err);
+    throw err;
   }
 };

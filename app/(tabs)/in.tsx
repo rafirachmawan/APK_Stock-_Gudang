@@ -232,13 +232,18 @@ export default function InScreen() {
       return;
     }
 
-    if (
-      (jenisForm === "Pembelian" && !kodeApos) ||
-      (jenisForm === "Return" && !kodeRetur)
-    ) {
+    if (jenisForm === "Pembelian" && !kodeApos) {
       Alert.alert(
         "⚠️ No Faktur belum diisi",
         "Silakan isi No Faktur terlebih dahulu"
+      );
+      return;
+    }
+
+    if (jenisForm === "Return" && !kodeRetur) {
+      Alert.alert(
+        "⚠️ No Faktur Return belum diisi",
+        "Silakan isi No Faktur Return terlebih dahulu"
       );
       return;
     }
@@ -261,7 +266,10 @@ export default function InScreen() {
       jenisForm:
         jenisForm === "Pembelian"
           ? `Pembelian - ${subJenisPembelian}`
-          : `Return - ${subJenisReturn}`,
+          : jenisForm === "Return"
+          ? `Return - ${subJenisReturn}`
+          : "Stock Awal",
+
       waktuInput: convertToISODate(manualTanggal),
       items: itemList,
     };
@@ -276,7 +284,10 @@ export default function InScreen() {
       });
 
       // 🔥 ID dokumen diambil dari kodeApos + tanggal input
-      const docId = `${kodeApos}-${manualTanggal}`;
+      const docId =
+        jenisForm === "Stock Awal"
+          ? `STOKAWAL-${manualTanggal}`
+          : `${kodeApos || kodeRetur}-${manualTanggal}`;
 
       console.log("📦 ID Dokumen:", docId); // debug
       await setDoc(doc(db, "barangMasuk", docId), payload);
@@ -309,7 +320,7 @@ export default function InScreen() {
         <View style={{ flex: 1, backgroundColor: "#fff" }}>
           <ScrollView
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
+            contentContainerStyle={{ padding: 16, paddingBottom: 500 }}
           >
             <ScrollView
               style={styles.container}
@@ -349,6 +360,7 @@ export default function InScreen() {
                 items={[
                   { label: "Pembelian", value: "Pembelian" },
                   { label: "Return", value: "Return" },
+                  { label: "Stock Awal", value: "Stock Awal" },
                 ]}
                 style={styles.dropdown}
                 zIndex={11000}
@@ -377,41 +389,25 @@ export default function InScreen() {
                 </>
               )}
 
-              {jenisForm === "Return" && (
+              {jenisForm === "Return" ? (
                 <>
-                  <Text style={styles.label}>Jenis Return</Text>
-                  <DropDownPicker
-                    open={openSubReturn}
-                    setOpen={setOpenSubReturn}
-                    value={subJenisReturn}
-                    setValue={setSubJenisReturn}
-                    items={[
-                      {
-                        label: "Return Good Stock",
-                        value: "Return Good Stock",
-                      },
-                      { label: "Return Bad Stock", value: "Return Bad Stock" },
-                      {
-                        label: "Return Batal Kirim",
-                        value: "Return Batal Kirim",
-                      },
-                      {
-                        label: "Return Coret Faktur",
-                        value: "Return Coret Faktur",
-                      },
-                      {
-                        label: "Return Salah Input",
-                        value: "Return Salah Input",
-                      },
-                    ]}
-                    style={styles.dropdown}
-                    zIndex={1095}
-                    zIndexInverse={1094}
-                    mode="BADGE"
-                    listMode="SCROLLVIEW"
+                  <Text style={styles.label}>No Faktur</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={kodeRetur}
+                    onChangeText={setKodeRetur}
                   />
                 </>
-              )}
+              ) : jenisForm === "Pembelian" ? (
+                <>
+                  <Text style={styles.label}>No Faktur</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={kodeApos}
+                    onChangeText={setKodeApos}
+                  />
+                </>
+              ) : null}
 
               <Text style={styles.label}>Principle</Text>
               <DropDownPicker

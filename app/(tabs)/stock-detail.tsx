@@ -2,6 +2,8 @@
 
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useFocusEffect } from "@react-navigation/native";
+import * as FileSystem from "expo-file-system";
+import * as Sharing from "expo-sharing";
 import {
   collection,
   deleteDoc,
@@ -24,6 +26,7 @@ import {
   TouchableWithoutFeedback,
   View,
 } from "react-native";
+import * as XLSX from "xlsx";
 import { db } from "../../utils/firebase";
 
 interface ItemInput {
@@ -142,8 +145,47 @@ export default function StockDetailScreen() {
     }
   };
 
+  //
+
+  const exportToExcel = () => {
+    const exportData: any[] = [];
+    allData.forEach((trx) => {
+      trx.items.forEach((item) => {
+        exportData.push({
+          Tanggal: new Date(trx.waktuInput).toLocaleDateString("id-ID"),
+          JenisGudang: trx.jenisGudang || "-",
+          JenisForm: trx.jenisForm || "-",
+          Gudang: trx.gudang,
+          Principle: trx.principle,
+          KodeGudang: trx.kodeGdng,
+          NoFaktur: trx.kodeApos || trx.kodeRetur || "-",
+          NamaBarang: item.namaBarang,
+          KodeBarang: item.kode,
+          Large: item.large,
+          Medium: item.medium,
+          Small: item.small,
+          Catatan: item.catatan || "-",
+          ED: item.ed || "-",
+        });
+      });
+    });
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "BarangMasuk");
+    const uri = FileSystem.cacheDirectory + "BarangMasuk.xlsx";
+    const buffer = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
+
+    FileSystem.writeAsStringAsync(uri, buffer, {
+      encoding: FileSystem.EncodingType.Base64,
+    }).then(() => Sharing.shareAsync(uri));
+  };
+
   return (
-    <ScrollView style={{ flex: 1, padding: 16, backgroundColor: "#fff" }}>
+    <ScrollView
+      style={{ flex: 1, padding: 16, backgroundColor: "#fff" }}
+      contentContainerStyle={{ paddingBottom: 100 }}
+    >
       <Text style={{ fontSize: 20, fontWeight: "bold", marginBottom: 12 }}>
         Riwayat Barang Masuk
       </Text>
@@ -410,6 +452,18 @@ export default function StockDetailScreen() {
           </TouchableWithoutFeedback>
         </KeyboardAvoidingView>
       </Modal>
+      <TouchableOpacity
+        onPress={exportToExcel}
+        style={{
+          marginTop: 20,
+          backgroundColor: "#28a745",
+          padding: 14,
+          borderRadius: 8,
+          alignItems: "center",
+        }}
+      >
+        <Text style={{ color: "white", fontWeight: "bold" }}>Export Semua</Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 }
