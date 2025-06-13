@@ -165,7 +165,7 @@ export default function StockDetailScreen() {
           Medium: item.medium,
           Small: item.small,
           Catatan: item.catatan || "-",
-          ED: item.ed || "-",
+          ED: item.ed || "-", // ✅ Tambahkan ED di Excel
         });
       });
     });
@@ -378,6 +378,7 @@ export default function StockDetailScreen() {
                       onChange={onChangeDate}
                     />
                   )}
+                  {/*  */}
 
                   {editedTrx.items.map((item, i) => (
                     <View
@@ -415,6 +416,12 @@ export default function StockDetailScreen() {
                         value={item.catatan || ""}
                         onChangeText={(t) => handleChangeItem(i, "catatan", t)}
                         placeholder="Catatan"
+                      />
+                      <TextInput
+                        style={styles.input}
+                        value={item.ed || ""}
+                        onChangeText={(t) => handleChangeItem(i, "ed", t)}
+                        placeholder="ED (dd-mm-yyyy)"
                       />
                     </View>
                   ))}

@@ -180,6 +180,12 @@ export default function OutDetailScreen() {
                   <Text style={styles.bold}>No Faktur: {trx.kodeApos}</Text>
                   <Text>Gudang: {trx.jenisGudang}</Text>
                   <Text>Catatan: {trx.catatan}</Text>
+                  {trx.items.map((item, index) => (
+                    <Text key={index}>
+                      • {item.namaBarang} – ED: {item.ed || "-"}
+                    </Text>
+                  ))}
+
                   <TouchableOpacity
                     style={styles.editBtn}
                     onPress={() => {
@@ -272,8 +278,15 @@ export default function OutDetailScreen() {
                         onChangeText={(t) => handleChangeItem(i, "catatan", t)}
                         placeholder="Catatan"
                       />
+                      <TextInput
+                        style={styles.input}
+                        value={item.ed || ""}
+                        onChangeText={(t) => handleChangeItem(i, "ed", t)}
+                        placeholder="ED (dd-mm-yyyy)"
+                      />
                     </View>
                   ))}
+
                   <TouchableOpacity onPress={handleSave} style={styles.editBtn}>
                     <Text style={{ color: "white", fontWeight: "bold" }}>
                       Simpan

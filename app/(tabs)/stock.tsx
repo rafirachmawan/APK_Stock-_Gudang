@@ -83,7 +83,7 @@ export default function StockScreen() {
             map.set(key, {
               kode: item.kode,
               nama: item.namaBarang,
-              principle: item.principle,
+              principle: item.principle || trx.principle || "-", // ✅ fix here
               totalLarge: 0,
               totalMedium: 0,
               totalSmall: 0,
@@ -117,7 +117,6 @@ export default function StockScreen() {
           );
         });
       });
-
     barangKeluar
       .filter((trx) => trx.gudangTujuan === gudangDipilih)
       .forEach((trx) => {
@@ -127,7 +126,7 @@ export default function StockScreen() {
             map.set(key, {
               kode: item.kode,
               nama: item.namaBarang,
-              principle: item.principle,
+              principle: item.principle || trx.principle || "-", // ✅ fix here too
               totalLarge: 0,
               totalMedium: 0,
               totalSmall: 0,

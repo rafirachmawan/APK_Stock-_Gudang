@@ -32,6 +32,7 @@ interface ItemOut {
   small: string;
   principle: string;
   gdg?: string;
+  ed?: string; // ✅ tambahkan ini
 }
 
 interface TransaksiOut {
@@ -97,8 +98,16 @@ export default function OutScreen() {
   const barangFiltered = dataBarangMasuk.filter((b) => b.gdg === jenisGudang);
 
   const handleSelectBarang = (index: number, nama: string) => {
-    const found = barangFiltered.find((b) => b.namaBarang === nama);
-    if (found) {
+    const foundItems = barangFiltered.filter((b) => b.namaBarang === nama);
+    if (foundItems.length > 0) {
+      // Ambil ED paling pendek
+      const sorted = foundItems.sort((a, b) => {
+        const edA = new Date(a.ed || "9999-12-31");
+        const edB = new Date(b.ed || "9999-12-31");
+        return edA.getTime() - edB.getTime();
+      });
+      const found = sorted[0];
+
       const updated = [...itemList];
       updated[index] = {
         ...updated[index],
@@ -106,6 +115,7 @@ export default function OutScreen() {
         kode: found.kode,
         principle: found.principle,
         gdg: found.gdg,
+        ed: found.ed || "", // ✅ ini akan jadi ED paling pendek
         large: "",
         medium: "",
         small: "",
@@ -235,7 +245,8 @@ export default function OutScreen() {
               { label: "Gudang B", value: "Gudang B" },
               { label: "Gudang C", value: "Gudang C" },
               { label: "Gudang D", value: "Gudang D" },
-              { label: "Gudang E", value: "Gudang E" },
+              { label: "Gudang E (Good Stock)", value: "Gudang E" },
+              { label: "Gudang E (Bad Stock)", value: "Gudang E (Bad Stock)" },
             ]}
             style={styles.dropdown}
             zIndex={6000}
@@ -301,12 +312,17 @@ export default function OutScreen() {
                   { label: "Gudang B", value: "Gudang B" },
                   { label: "Gudang C", value: "Gudang C" },
                   { label: "Gudang D", value: "Gudang D" },
-                  { label: "Gudang E", value: "Gudang E" },
+                  { label: "Gudang E (Good Stock)", value: "Gudang E" },
+                  {
+                    label: "Gudang E (Bad Stock)",
+                    value: "Gudang E (Bad Stock)",
+                  },
                 ]}
                 style={styles.dropdown}
                 zIndex={4800}
                 listMode="SCROLLVIEW"
               />
+
               <Text style={styles.label}>Keterangan</Text>
               <TextInput
                 style={styles.input}
@@ -387,6 +403,15 @@ export default function OutScreen() {
                 value={item.small}
                 onChangeText={(t) => handleChangeItem(i, "small", t)}
               />
+              {/*  */}
+              <Text style={styles.label}>ED (dd-mm-yyyy)</Text>
+              <TextInput
+                style={styles.input}
+                value={item.ed || ""}
+                onChangeText={(t) => handleChangeItem(i, "ed", t)}
+                placeholder="ED (dd-mm-yyyy)"
+              />
+
               <TouchableOpacity
                 onPress={() => removeItem(i)}
                 style={styles.removeButton}
