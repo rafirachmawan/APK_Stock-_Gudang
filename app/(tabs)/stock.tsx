@@ -48,7 +48,8 @@ export default function StockScreen() {
     { label: "Gudang B", value: "Gudang B" },
     { label: "Gudang C", value: "Gudang C" },
     { label: "Gudang D", value: "Gudang D" },
-    { label: "Gudang E", value: "Gudang E" },
+    { label: "Gudang E (Good Stock)", value: "Gudang E" },
+    { label: "Gudang E (Bad Stock)", value: "Gudang E (Bad Stock)" },
   ]);
 
   useEffect(() => {
@@ -184,13 +185,9 @@ export default function StockScreen() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <ScrollView
-          contentContainerStyle={styles.container}
-          keyboardShouldPersistTaps="handled"
-        >
-          <Text style={styles.title}>📦 STOK BARANG</Text>
-
-          <View style={{ zIndex: 1000, marginBottom: 12 }}>
+        <View style={{ flex: 1 }}>
+          {/* DropDownPicker ditempatkan di luar ScrollView */}
+          <View style={{ zIndex: 5000, margin: 16 }}>
             <DropDownPicker
               open={gudangOpen}
               value={gudangDipilih}
@@ -203,47 +200,57 @@ export default function StockScreen() {
               dropDownContainerStyle={{
                 borderWidth: 1,
                 borderColor: "#ccc",
+                maxHeight: 300,
               }}
-              zIndex={1000}
-              zIndexInverse={900}
+              zIndex={5000}
+              zIndexInverse={1000}
               mode="BADGE"
               listMode="SCROLLVIEW"
+              dropDownDirection="AUTO"
+              searchable={true}
             />
           </View>
 
-          <TextInput
-            placeholder="Cari nama/kode barang..."
-            value={searchText}
-            onChangeText={setSearchText}
-            style={styles.search}
-          />
+          <ScrollView
+            contentContainerStyle={styles.container}
+            keyboardShouldPersistTaps="handled"
+          >
+            <Text style={styles.title}>📦 STOK BARANG</Text>
 
-          {stok.map((item, index) => (
-            <View key={index} style={styles.card}>
-              <Text style={styles.name}>{item.nama}</Text>
-              <Text>Kode: {item.kode}</Text>
-              <Text>Principle: {item.principle}</Text>
-              <Text>Large: {item.totalLarge}</Text>
-              <Text>Medium: {item.totalMedium}</Text>
-              <Text>Small: {item.totalSmall}</Text>
-            </View>
-          ))}
+            <TextInput
+              placeholder="Cari nama/kode barang..."
+              value={searchText}
+              onChangeText={setSearchText}
+              style={styles.search}
+            />
 
-          {stok.length === 0 && gudangDipilih && (
-            <Text style={{ marginTop: 20, color: "gray" }}>
-              Tidak ada data stok untuk gudang ini.
-            </Text>
-          )}
+            {stok.map((item, index) => (
+              <View key={index} style={styles.card}>
+                <Text style={styles.name}>{item.nama}</Text>
+                <Text>Kode: {item.kode}</Text>
+                <Text>Principle: {item.principle}</Text>
+                <Text>Large: {item.totalLarge}</Text>
+                <Text>Medium: {item.totalMedium}</Text>
+                <Text>Small: {item.totalSmall}</Text>
+              </View>
+            ))}
 
-          {stok.length > 0 && (
-            <TouchableOpacity
-              onPress={handleExport}
-              style={styles.exportButton}
-            >
-              <Text style={styles.exportText}>📤 Export ke Excel</Text>
-            </TouchableOpacity>
-          )}
-        </ScrollView>
+            {stok.length === 0 && gudangDipilih && (
+              <Text style={{ marginTop: 20, color: "gray" }}>
+                Tidak ada data stok untuk gudang ini.
+              </Text>
+            )}
+
+            {stok.length > 0 && (
+              <TouchableOpacity
+                onPress={handleExport}
+                style={styles.exportButton}
+              >
+                <Text style={styles.exportText}>📤 Export ke Excel</Text>
+              </TouchableOpacity>
+            )}
+          </ScrollView>
+        </View>
       </TouchableWithoutFeedback>
     </KeyboardAvoidingView>
   );
@@ -251,7 +258,7 @@ export default function StockScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    padding: 16,
+    paddingHorizontal: 16,
     paddingBottom: 100,
     backgroundColor: "white",
   },
