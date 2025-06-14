@@ -336,12 +336,13 @@ export default function InScreen() {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : undefined}
-      style={{ flex: 1 }}
+      style={{ flex: 1, backgroundColor: "#fff" }}
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <ScrollView
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ padding: 16, paddingBottom: 300 }}
+          style={{ backgroundColor: "#fff" }}
         >
           <Text style={styles.label}>Jenis Gudang</Text>
           <DropDownPicker

@@ -29,9 +29,9 @@ interface Item {
 
 interface Transaksi {
   gudang?: string;
-  gudangAsal?: string;
   gudangTujuan?: string;
   principle: string;
+  jenisGudang?: string;
   items: Item[];
 }
 
@@ -74,6 +74,7 @@ export default function StockScreen() {
 
     const map = new Map();
 
+    // Barang Masuk ke Gudang Dipilih
     barangMasuk
       .filter((trx) => trx.gudang === gudangDipilih)
       .forEach((trx) => {
@@ -83,7 +84,7 @@ export default function StockScreen() {
             map.set(key, {
               kode: item.kode,
               nama: item.namaBarang,
-              principle: item.principle || trx.principle || "-", // ✅ fix here
+              principle: item.principle || trx.principle || "-",
               totalLarge: 0,
               totalMedium: 0,
               totalSmall: 0,
@@ -96,8 +97,9 @@ export default function StockScreen() {
         });
       });
 
+    // Barang Keluar dari Gudang Dipilih
     barangKeluar
-      .filter((trx) => trx.gudangAsal === gudangDipilih)
+      .filter((trx) => trx.jenisGudang === gudangDipilih)
       .forEach((trx) => {
         trx.items.forEach((item) => {
           const key = item.kode;
@@ -117,6 +119,8 @@ export default function StockScreen() {
           );
         });
       });
+
+    // Barang Masuk karena Mutasi Masuk
     barangKeluar
       .filter((trx) => trx.gudangTujuan === gudangDipilih)
       .forEach((trx) => {
@@ -126,7 +130,7 @@ export default function StockScreen() {
             map.set(key, {
               kode: item.kode,
               nama: item.namaBarang,
-              principle: item.principle || trx.principle || "-", // ✅ fix here too
+              principle: item.principle || trx.principle || "-",
               totalLarge: 0,
               totalMedium: 0,
               totalSmall: 0,
@@ -185,7 +189,6 @@ export default function StockScreen() {
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={{ flex: 1 }}>
-          {/* DropDownPicker ditempatkan di luar ScrollView */}
           <View style={{ zIndex: 5000, margin: 16 }}>
             <DropDownPicker
               open={gudangOpen}
