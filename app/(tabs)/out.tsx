@@ -187,6 +187,42 @@ export default function OutScreen() {
       ...(jenisForm === "MB" && { tujuanGudang }),
     };
 
+    //
+    // Validasi pengurangan stok
+    for (const item of itemList) {
+      const barangSama = dataBarangMasuk.filter(
+        (b) => b.kode === item.kode && b.gdg === jenisGudang
+      );
+
+      let stokLarge = 0,
+        stokMedium = 0,
+        stokSmall = 0;
+
+      for (const b of barangSama) {
+        stokLarge += parseInt(b.large || "0");
+        stokMedium += parseInt(b.medium || "0");
+        stokSmall += parseInt(b.small || "0");
+      }
+
+      const outLarge = parseInt(item.large || "0");
+      const outMedium = parseInt(item.medium || "0");
+      const outSmall = parseInt(item.small || "0");
+
+      if (
+        outLarge > stokLarge ||
+        outMedium > stokMedium ||
+        outSmall > stokSmall
+      ) {
+        Alert.alert(
+          "Stok tidak cukup",
+          `Stok tidak mencukupi untuk ${item.namaBarang}\n` +
+            `Stok tersedia - Large: ${stokLarge}, Medium: ${stokMedium}, Small: ${stokSmall}\n` +
+            `Permintaan - Large: ${outLarge}, Medium: ${outMedium}, Small: ${outSmall}`
+        );
+        return; // Batalkan submit
+      }
+    }
+
     try {
       await setDoc(doc(db, "barangKeluar", docId), newEntry);
       if (jenisForm === "MB" && tujuanGudang) {

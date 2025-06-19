@@ -189,7 +189,8 @@ export default function StockScreen() {
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={{ flex: 1 }}>
-          <View style={{ zIndex: 5000, margin: 16 }}>
+          {/* DropDownPicker tetap di luar ScrollView */}
+          <View style={{ zIndex: 1000, padding: 16 }}>
             <DropDownPicker
               open={gudangOpen}
               value={gudangDipilih}
@@ -204,8 +205,8 @@ export default function StockScreen() {
                 borderColor: "#ccc",
                 maxHeight: 300,
               }}
-              zIndex={5000}
-              zIndexInverse={1000}
+              zIndex={1000}
+              zIndexInverse={300}
               mode="BADGE"
               listMode="SCROLLVIEW"
               dropDownDirection="AUTO"
@@ -213,44 +214,47 @@ export default function StockScreen() {
             />
           </View>
 
+          {/* Konten Scrollable */}
           <ScrollView
-            contentContainerStyle={styles.container}
+            contentContainerStyle={styles.scrollContainer}
             keyboardShouldPersistTaps="handled"
           >
-            <Text style={styles.title}>📦 STOK BARANG</Text>
+            <View style={styles.content}>
+              <Text style={styles.title}>📦 STOK BARANG</Text>
 
-            <TextInput
-              placeholder="Cari nama/kode barang..."
-              value={searchText}
-              onChangeText={setSearchText}
-              style={styles.search}
-            />
+              <TextInput
+                placeholder="Cari nama/kode barang..."
+                value={searchText}
+                onChangeText={setSearchText}
+                style={styles.search}
+              />
 
-            {stok.map((item, index) => (
-              <View key={index} style={styles.card}>
-                <Text style={styles.name}>{item.nama}</Text>
-                <Text>Kode: {item.kode}</Text>
-                <Text>Principle: {item.principle}</Text>
-                <Text>Large: {item.totalLarge}</Text>
-                <Text>Medium: {item.totalMedium}</Text>
-                <Text>Small: {item.totalSmall}</Text>
-              </View>
-            ))}
+              {stok.map((item, index) => (
+                <View key={index} style={styles.card}>
+                  <Text style={styles.name}>{item.nama}</Text>
+                  <Text>Kode: {item.kode}</Text>
+                  <Text>Principle: {item.principle}</Text>
+                  <Text>Large: {item.totalLarge}</Text>
+                  <Text>Medium: {item.totalMedium}</Text>
+                  <Text>Small: {item.totalSmall}</Text>
+                </View>
+              ))}
 
-            {stok.length === 0 && gudangDipilih && (
-              <Text style={{ marginTop: 20, color: "gray" }}>
-                Tidak ada data stok untuk gudang ini.
-              </Text>
-            )}
+              {stok.length === 0 && gudangDipilih && (
+                <Text style={{ marginTop: 20, color: "gray" }}>
+                  Tidak ada data stok untuk gudang ini.
+                </Text>
+              )}
 
-            {stok.length > 0 && (
-              <TouchableOpacity
-                onPress={handleExport}
-                style={styles.exportButton}
-              >
-                <Text style={styles.exportText}>📤 Export ke Excel</Text>
-              </TouchableOpacity>
-            )}
+              {stok.length > 0 && (
+                <TouchableOpacity
+                  onPress={handleExport}
+                  style={styles.exportButton}
+                >
+                  <Text style={styles.exportText}>📤 Export ke Excel</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </ScrollView>
         </View>
       </TouchableWithoutFeedback>
@@ -259,6 +263,16 @@ export default function StockScreen() {
 }
 
 const styles = StyleSheet.create({
+  scrollContainer: {
+    flexGrow: 1,
+    paddingBottom: 100,
+    backgroundColor: "#fff",
+  },
+  content: {
+    paddingHorizontal: 16,
+    marginTop: 8,
+  },
+
   container: {
     paddingHorizontal: 16,
     paddingBottom: 100,
