@@ -48,7 +48,7 @@ export default function StockScreen() {
     { label: "Gudang B", value: "Gudang B" },
     { label: "Gudang C", value: "Gudang C" },
     { label: "Gudang D", value: "Gudang D" },
-    { label: "Gudang E (Good Stock)", value: "Gudang E" },
+    // { label: "Gudang E (Good Stock)", value: "Gudang E" },
     { label: "Gudang E (Bad Stock)", value: "Gudang E (Bad Stock)" },
   ]);
 

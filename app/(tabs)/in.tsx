@@ -161,7 +161,7 @@ export default function InScreen() {
     { label: "Gudang B", value: "Gudang B" },
     { label: "Gudang C", value: "Gudang C" },
     { label: "Gudang D", value: "Gudang D" },
-    { label: "Gudang E (Good Stock)", value: "Gudang E (Good Stock)" },
+    // { label: "Gudang E (Good Stock)", value: "Gudang E (Good Stock)" },
   ];
 
   if (jenisGudang === "Gudang BS") {
