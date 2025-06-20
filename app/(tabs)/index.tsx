@@ -1,7 +1,8 @@
-// HomeScreen.tsx
+// ✅ HomeScreen.tsx — Tambah Fitur Cek Update OTA
 
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Updates from "expo-updates"; // ✅ Tambahkan ini
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -148,6 +149,23 @@ export default function HomeScreen() {
     }, 500);
   };
 
+  // ✅ Fitur Cek Update OTA
+  const checkForUpdates = async () => {
+    try {
+      const update = await Updates.checkForUpdateAsync();
+      if (update.isAvailable) {
+        await Updates.fetchUpdateAsync();
+        Alert.alert("🔄 Update Tersedia", "Aplikasi akan diperbarui.", [
+          { text: "OK", onPress: () => Updates.reloadAsync() },
+        ]);
+      } else {
+        Alert.alert("✅ Tidak ada update", "Versi terbaru sudah digunakan.");
+      }
+    } catch (error) {
+      Alert.alert("❌ Gagal cek update", error?.message || "Unknown error");
+    }
+  };
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#fff" }}>
       <ScrollView contentContainerStyle={styles.container}>
@@ -215,6 +233,13 @@ export default function HomeScreen() {
               >
                 <Text style={styles.syncText}>🗑️ Reset Semua Data</Text>
               </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.syncButton, { backgroundColor: "#10b981" }]}
+                onPress={checkForUpdates}
+              >
+                <Text style={styles.syncText}>🔄 Cek Update Aplikasi</Text>
+              </TouchableOpacity>
             </>
           )}
           {lastSync && (
@@ -222,7 +247,6 @@ export default function HomeScreen() {
           )}
         </View>
 
-        {/* 🔓 Tombol Logout */}
         <TouchableOpacity
           style={[
             styles.syncButton,

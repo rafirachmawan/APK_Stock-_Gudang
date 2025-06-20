@@ -40,14 +40,20 @@
     "experiments": {
       "typedRoutes": true
     },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "assetBundlePatterns": ["**/*"],
     "extra": {
       "router": {},
       "eas": {
         "projectId": "aef7a493-0c82-4b7e-8173-6200068f2fb0"
       }
+    },
+    "owner": "rafirachmawan",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/aef7a493-0c82-4b7e-8173-6200068f2fb0",
+      "fallbackToCacheTimeout": 0
     }
   }
 }

@@ -187,9 +187,17 @@ export default function StockScreen() {
       style={{ flex: 1, backgroundColor: "#fff" }}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <View style={{ flex: 1 }}>
-          {/* DropDownPicker tetap di luar ScrollView */}
+      <TouchableWithoutFeedback
+        onPress={Keyboard.dismiss}
+        accessible={false}
+        // keyboardShouldPersistTaps="handled"
+      >
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.scrollContainer}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
           <View style={{ zIndex: 1000, padding: 16 }}>
             <DropDownPicker
               open={gudangOpen}
@@ -214,49 +222,43 @@ export default function StockScreen() {
             />
           </View>
 
-          {/* Konten Scrollable */}
-          <ScrollView
-            contentContainerStyle={styles.scrollContainer}
-            keyboardShouldPersistTaps="handled"
-          >
-            <View style={styles.content}>
-              <Text style={styles.title}>📦 STOK BARANG</Text>
+          <View style={styles.content}>
+            <Text style={styles.title}>📦 STOK BARANG</Text>
 
-              <TextInput
-                placeholder="Cari nama/kode barang..."
-                value={searchText}
-                onChangeText={setSearchText}
-                style={styles.search}
-              />
+            <TextInput
+              placeholder="Cari nama/kode barang..."
+              value={searchText}
+              onChangeText={setSearchText}
+              style={styles.search}
+            />
 
-              {stok.map((item, index) => (
-                <View key={index} style={styles.card}>
-                  <Text style={styles.name}>{item.nama}</Text>
-                  <Text>Kode: {item.kode}</Text>
-                  <Text>Principle: {item.principle}</Text>
-                  <Text>Large: {item.totalLarge}</Text>
-                  <Text>Medium: {item.totalMedium}</Text>
-                  <Text>Small: {item.totalSmall}</Text>
-                </View>
-              ))}
+            {stok.map((item, index) => (
+              <View key={index} style={styles.card}>
+                <Text style={styles.name}>{item.nama}</Text>
+                <Text>Kode: {item.kode}</Text>
+                <Text>Principle: {item.principle}</Text>
+                <Text>Large: {item.totalLarge}</Text>
+                <Text>Medium: {item.totalMedium}</Text>
+                <Text>Small: {item.totalSmall}</Text>
+              </View>
+            ))}
 
-              {stok.length === 0 && gudangDipilih && (
-                <Text style={{ marginTop: 20, color: "gray" }}>
-                  Tidak ada data stok untuk gudang ini.
-                </Text>
-              )}
+            {stok.length === 0 && gudangDipilih && (
+              <Text style={{ marginTop: 20, color: "gray" }}>
+                Tidak ada data stok untuk gudang ini.
+              </Text>
+            )}
 
-              {stok.length > 0 && (
-                <TouchableOpacity
-                  onPress={handleExport}
-                  style={styles.exportButton}
-                >
-                  <Text style={styles.exportText}>📤 Export ke Excel</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          </ScrollView>
-        </View>
+            {stok.length > 0 && (
+              <TouchableOpacity
+                onPress={handleExport}
+                style={styles.exportButton}
+              >
+                <Text style={styles.exportText}>📤 Export ke Excel</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </ScrollView>
       </TouchableWithoutFeedback>
     </KeyboardAvoidingView>
   );
@@ -271,12 +273,6 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 16,
     marginTop: 8,
-  },
-
-  container: {
-    paddingHorizontal: 16,
-    paddingBottom: 100,
-    backgroundColor: "white",
   },
   title: {
     fontSize: 20,
