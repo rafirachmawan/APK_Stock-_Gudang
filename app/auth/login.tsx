@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   StyleSheet,
@@ -15,6 +15,16 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
+
+  useEffect(() => {
+    const cekLogin = async () => {
+      const isLoggedIn = await AsyncStorage.getItem("userLoggedIn");
+      if (isLoggedIn === "true") {
+        router.replace("/"); // langsung ke halaman utama kalau sudah login
+      }
+    };
+    cekLogin();
+  }, []);
 
   const handleLogin = async () => {
     if (!username || !password) {

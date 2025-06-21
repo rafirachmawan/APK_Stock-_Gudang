@@ -135,7 +135,7 @@ export default function InScreen() {
 
   const loadExcelFromURL = async () => {
     const EXCEL_URL =
-      "https://docs.google.com/spreadsheets/d/1c9E19bcynRxJg_47GFu0GWE6LbldI5L8_YFSxxCsFwI/export?format=xlsx";
+      "https://docs.google.com/spreadsheets/d/1O2D9nLXWBbjpqZKBeypt_lJXqIzczmFUQp37vcTAvsA/export?format=xlsx";
     const downloadResumable = FileSystem.createDownloadResumable(
       EXCEL_URL,
       FileSystem.cacheDirectory + "list-online.xlsx"
