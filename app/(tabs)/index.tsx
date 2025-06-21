@@ -204,7 +204,7 @@ export default function HomeScreen() {
             <ActivityIndicator size="large" color="#3b82f6" />
           ) : (
             <>
-              <TouchableOpacity
+              {/* <TouchableOpacity
                 style={styles.syncButton}
                 onPress={() => {
                   setAuthAction("upload");
@@ -222,7 +222,7 @@ export default function HomeScreen() {
                 }}
               >
                 <Text style={styles.syncText}>⬇️ Download dari Cloud</Text>
-              </TouchableOpacity>
+              </TouchableOpacity> */}
 
               <TouchableOpacity
                 style={[styles.syncButton, { backgroundColor: "#dc2626" }]}
