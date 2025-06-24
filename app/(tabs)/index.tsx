@@ -1,8 +1,8 @@
-// ✅ HomeScreen.tsx — Tambah Fitur Cek Update OTA
+// ✅ HomeScreen.tsx — Versi Realtime dengan Pie Chart Stok per Gudang
 
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as Updates from "expo-updates"; // ✅ Tambahkan ini
+import * as Updates from "expo-updates";
+import { collection, DocumentData, onSnapshot } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -16,16 +16,16 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { PieChart } from "react-native-chart-kit";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
+  db,
   resetSemuaHistory,
   syncDownload,
   syncUpload,
 } from "../../utils/firebase";
-import { Barang } from "../../utils/stockManager";
 
 const screenWidth = Dimensions.get("window").width;
-const cardWidth = screenWidth < 400 ? screenWidth - 60 : 160;
 
 const CREDENTIALS = {
   username: "admin",
@@ -33,14 +33,13 @@ const CREDENTIALS = {
 };
 
 export default function HomeScreen() {
+  const [barangMasuk, setBarangMasuk] = useState<DocumentData[]>([]);
+  const [gudangStats, setGudangStats] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(false);
-  const [barang, setBarang] = useState<Barang[]>([]);
   const [lastSync, setLastSync] = useState<string | null>(null);
 
   const [authVisible, setAuthVisible] = useState(false);
-  const [authAction, setAuthAction] = useState<
-    "upload" | "download" | "reset" | null
-  >(null);
+  const [authAction, setAuthAction] = useState<string | null>(null);
   const [inputUsername, setInputUsername] = useState("");
   const [inputPassword, setInputPassword] = useState("");
 
@@ -49,25 +48,26 @@ export default function HomeScreen() {
     return `${now.toLocaleDateString()} ${now.toLocaleTimeString()}`;
   };
 
-  const loadData = async () => {
-    try {
-      const inJson = await AsyncStorage.getItem("barangMasuk");
-      const outJson = await AsyncStorage.getItem("barangKeluar");
-      const dataIn: Barang[] = inJson ? JSON.parse(inJson) : [];
-      const dataOut: Barang[] = outJson ? JSON.parse(outJson) : [];
-      setBarang([...dataIn, ...dataOut]);
-    } catch (e) {
-      console.error("Gagal memuat data dari AsyncStorage", e);
-    }
-  };
-
   useEffect(() => {
-    loadData();
-  }, []);
+    const unsub = onSnapshot(collection(db, "barangMasuk"), (snapshot) => {
+      const data: DocumentData[] = snapshot.docs.map((doc) => doc.data());
+      setBarangMasuk(data);
 
-  const totalPrinciple = [...new Set(barang.map((item) => item.principle))]
-    .length;
-  const totalBrand = [...new Set(barang.map((item) => item.nama))].length;
+      const gudangJumlah: Record<string, number> = {};
+      data.forEach((trx: any) => {
+        const gudang = trx.gudang || "Unknown";
+        const total = (trx.items || []).reduce((sum: number, item: any) => {
+          const l = parseInt(item.large || "0");
+          const m = parseInt(item.medium || "0");
+          const s = parseInt(item.small || "0");
+          return sum + l + m + s;
+        }, 0);
+        gudangJumlah[gudang] = (gudangJumlah[gudang] || 0) + total;
+      });
+      setGudangStats(gudangJumlah);
+    });
+    return () => unsub();
+  }, []);
 
   const handleUpload = async () => {
     Alert.alert(
@@ -82,10 +82,9 @@ export default function HomeScreen() {
             try {
               setLoading(true);
               await syncUpload();
-              await loadData();
               setLastSync(`Upload: ${formatWaktu()}`);
               Alert.alert("✅ Berhasil", "Data berhasil diunggah ke Firebase");
-            } catch (error) {
+            } catch (error: any) {
               Alert.alert("❌ Gagal", "Upload gagal: " + error);
             } finally {
               setLoading(false);
@@ -100,10 +99,9 @@ export default function HomeScreen() {
     try {
       setLoading(true);
       await syncDownload();
-      await loadData();
       setLastSync(`Download: ${formatWaktu()}`);
       Alert.alert("✅ Berhasil", "Data berhasil diunduh dari Firebase");
-    } catch (error) {
+    } catch (error: any) {
       Alert.alert("❌ Gagal", "Gagal mengunduh data: " + error);
     } finally {
       setLoading(false);
@@ -118,7 +116,6 @@ export default function HomeScreen() {
         style: "destructive",
         onPress: async () => {
           await resetSemuaHistory();
-          await loadData();
           Alert.alert("✅ Reset", "Data berhasil dihapus");
         },
       },
@@ -149,7 +146,6 @@ export default function HomeScreen() {
     }, 500);
   };
 
-  // ✅ Fitur Cek Update OTA
   const checkForUpdates = async () => {
     try {
       const update = await Updates.checkForUpdateAsync();
@@ -161,7 +157,7 @@ export default function HomeScreen() {
       } else {
         Alert.alert("✅ Tidak ada update", "Versi terbaru sudah digunakan.");
       }
-    } catch (error) {
+    } catch (error: any) {
       Alert.alert("❌ Gagal cek update", error?.message || "Unknown error");
     }
   };
@@ -171,32 +167,39 @@ export default function HomeScreen() {
       <ScrollView contentContainerStyle={styles.container}>
         <Text style={styles.title}>📊 Dashboard Stock Gudang</Text>
 
-        <View style={styles.contentBox}>
-          <Text style={styles.subtitle}>Selamat datang!</Text>
-          <Text style={styles.normalText}>
-            Gunakan menu di kiri atas untuk mengelola barang, upload, dan
-            download database.
+        <View style={{ marginVertical: 20, alignItems: "center" }}>
+          <Text style={{ fontWeight: "bold", fontSize: 16, marginBottom: 10 }}>
+            Astro Distribusi
           </Text>
-        </View>
 
-        <View style={styles.cardsContainer}>
-          <View style={[styles.card, { width: cardWidth }]}>
-            <MaterialCommunityIcons
-              name="account-group"
-              size={32}
-              color="#16a34a"
+          {Object.keys(gudangStats).length > 0 ? (
+            <PieChart
+              data={Object.entries(gudangStats).map(([label, value], i) => ({
+                name: label,
+                population: value,
+                color: ["#4ade80", "#60a5fa", "#facc15", "#f87171", "#a78bfa"][
+                  i % 5
+                ],
+                legendFontColor: "#333",
+                legendFontSize: 12,
+              }))}
+              width={screenWidth - 40}
+              height={220}
+              chartConfig={{
+                backgroundColor: "#fff",
+                backgroundGradientFrom: "#f3f4f6",
+                backgroundGradientTo: "#fff",
+                color: () => "#000",
+                labelColor: () => "#000",
+              }}
+              accessor="population"
+              backgroundColor="transparent"
+              paddingLeft="15"
+              absolute
             />
-            <Text style={styles.cardTitle}>Total Principle</Text>
-            <Text style={styles.cardCount}>{totalPrinciple}</Text>
-            <Text style={styles.cardHint}>Merek utama</Text>
-          </View>
-
-          <View style={[styles.card, { width: cardWidth }]}>
-            <MaterialCommunityIcons name="tag" size={32} color="#d97706" />
-            <Text style={styles.cardTitle}>Total Brand</Text>
-            <Text style={styles.cardCount}>{totalBrand}</Text>
-            <Text style={styles.cardHint}>Jenis barang unik</Text>
-          </View>
+          ) : (
+            <Text style={{ color: "#6b7280" }}>Data stok belum tersedia</Text>
+          )}
         </View>
 
         <View style={styles.syncContainer}>
@@ -204,26 +207,6 @@ export default function HomeScreen() {
             <ActivityIndicator size="large" color="#3b82f6" />
           ) : (
             <>
-              {/* <TouchableOpacity
-                style={styles.syncButton}
-                onPress={() => {
-                  setAuthAction("upload");
-                  setAuthVisible(true);
-                }}
-              >
-                <Text style={styles.syncText}>⬆️ Upload ke Cloud</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.syncButton}
-                onPress={() => {
-                  setAuthAction("download");
-                  setAuthVisible(true);
-                }}
-              >
-                <Text style={styles.syncText}>⬇️ Download dari Cloud</Text>
-              </TouchableOpacity> */}
-
               <TouchableOpacity
                 style={[styles.syncButton, { backgroundColor: "#dc2626" }]}
                 onPress={() => {
@@ -243,7 +226,7 @@ export default function HomeScreen() {
             </>
           )}
           {lastSync && (
-            <Text style={styles.syncStatus}>📅 Terakhir: {lastSync}</Text>
+            <Text style={styles.syncStatus}>🗓️ Terakhir: {lastSync}</Text>
           )}
         </View>
 
@@ -257,7 +240,6 @@ export default function HomeScreen() {
           <Text style={styles.syncText}>🔓 Logout</Text>
         </TouchableOpacity>
 
-        {/* Modal Login */}
         <Modal transparent={true} visible={authVisible} animationType="slide">
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
@@ -267,11 +249,8 @@ export default function HomeScreen() {
                   ? "Upload"
                   : authAction === "download"
                   ? "Download"
-                  : authAction === "reset"
-                  ? "Reset"
-                  : ""}
+                  : "Reset"}
               </Text>
-
               <Text style={styles.fieldLabel}>🧑 Username</Text>
               <TextInput
                 style={styles.input}
@@ -279,8 +258,7 @@ export default function HomeScreen() {
                 value={inputUsername}
                 onChangeText={setInputUsername}
               />
-
-              <Text style={styles.fieldLabel}>🔒 Password</Text>
+              <Text style={styles.fieldLabel}>🔐 Password</Text>
               <TextInput
                 style={styles.input}
                 placeholder="Password"
@@ -288,7 +266,6 @@ export default function HomeScreen() {
                 value={inputPassword}
                 onChangeText={setInputPassword}
               />
-
               <View style={styles.modalButtons}>
                 <TouchableOpacity
                   onPress={verifyAndProceed}
@@ -315,79 +292,21 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    padding: 20,
-    gap: 16,
-  },
+  container: { padding: 20, gap: 16 },
   title: {
     textAlign: "center",
     fontSize: 20,
     fontWeight: "bold",
     color: "#1f2937",
   },
-  subtitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#1f2937",
-  },
-  normalText: {
-    fontSize: 14,
-    color: "#374151",
-  },
-  contentBox: {
-    backgroundColor: "#f3f4f6",
-    padding: 16,
-    borderRadius: 12,
-    gap: 8,
-  },
-  cardsContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 16,
-    justifyContent: "center",
-  },
-  card: {
-    padding: 16,
-    borderRadius: 12,
-    backgroundColor: "#e0f2fe",
-    alignItems: "center",
-    gap: 8,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  cardTitle: {
-    fontWeight: "bold",
-    color: "#1e3a8a",
-  },
-  cardCount: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#0f172a",
-  },
-  cardHint: {
-    fontSize: 12,
-    color: "#64748b",
-    textAlign: "center",
-  },
-  syncContainer: {
-    marginTop: 32,
-    gap: 12,
-    alignItems: "center",
-  },
+  syncContainer: { marginTop: 32, gap: 12, alignItems: "center" },
   syncButton: {
     backgroundColor: "#3b82f6",
     padding: 14,
     borderRadius: 10,
     width: "100%",
   },
-  syncText: {
-    color: "#fff",
-    fontWeight: "bold",
-    textAlign: "center",
-  },
+  syncText: { color: "#fff", fontWeight: "bold", textAlign: "center" },
   syncStatus: {
     marginTop: 10,
     color: "#0ea5e9",

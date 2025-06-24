@@ -41,6 +41,9 @@ export default function StockScreen() {
   const [barangKeluar, setBarangKeluar] = useState<Transaksi[]>([]);
   const [searchText, setSearchText] = useState("");
 
+  const [totalPrinciple, setTotalPrinciple] = useState(0);
+  const [totalBarang, setTotalBarang] = useState(0);
+
   const [gudangOpen, setGudangOpen] = useState(false);
   const [gudangDipilih, setGudangDipilih] = useState<string | null>(null);
   const [gudangItems, setGudangItems] = useState([
@@ -48,7 +51,6 @@ export default function StockScreen() {
     { label: "Gudang B", value: "Gudang B" },
     { label: "Gudang C", value: "Gudang C" },
     { label: "Gudang D", value: "Gudang D" },
-    // { label: "Gudang E (Good Stock)", value: "Gudang E" },
     { label: "Gudang E (Bad Stock)", value: "Gudang E (Bad Stock)" },
   ]);
 
@@ -74,7 +76,6 @@ export default function StockScreen() {
 
     const map = new Map();
 
-    // Barang Masuk ke Gudang Dipilih
     barangMasuk
       .filter((trx) => trx.gudang === gudangDipilih)
       .forEach((trx) => {
@@ -97,7 +98,6 @@ export default function StockScreen() {
         });
       });
 
-    // Barang Keluar dari Gudang Dipilih
     barangKeluar
       .filter((trx) => trx.jenisGudang === gudangDipilih)
       .forEach((trx) => {
@@ -120,7 +120,6 @@ export default function StockScreen() {
         });
       });
 
-    // Barang Masuk karena Mutasi Masuk
     barangKeluar
       .filter((trx) => trx.gudangTujuan === gudangDipilih)
       .forEach((trx) => {
@@ -151,6 +150,8 @@ export default function StockScreen() {
     });
 
     setStok(final);
+    setTotalBarang(final.length);
+    setTotalPrinciple(new Set(final.map((item: any) => item.principle)).size);
   }, [barangMasuk, barangKeluar, searchText, gudangDipilih]);
 
   const handleExport = async () => {
@@ -187,11 +188,7 @@ export default function StockScreen() {
       style={{ flex: 1, backgroundColor: "#fff" }}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <TouchableWithoutFeedback
-        onPress={Keyboard.dismiss}
-        accessible={false}
-        // keyboardShouldPersistTaps="handled"
-      >
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
         <ScrollView
           style={{ flex: 1 }}
           contentContainerStyle={styles.scrollContainer}
@@ -224,6 +221,17 @@ export default function StockScreen() {
 
           <View style={styles.content}>
             <Text style={styles.title}>📦 STOK BARANG</Text>
+
+            <View style={styles.summaryBox}>
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryLabel}>Total Principle</Text>
+                <Text style={styles.summaryValue}>{totalPrinciple}</Text>
+              </View>
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryLabel}>Total Barang</Text>
+                <Text style={styles.summaryValue}>{totalBarang}</Text>
+              </View>
+            </View>
 
             <TextInput
               placeholder="Cari nama/kode barang..."
@@ -312,5 +320,27 @@ const styles = StyleSheet.create({
   exportText: {
     color: "#fff",
     fontWeight: "bold",
+  },
+  summaryBox: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    backgroundColor: "#e0f2fe",
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 12,
+  },
+  summaryItem: {
+    alignItems: "center",
+    flex: 1,
+  },
+  summaryLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#1e3a8a",
+  },
+  summaryValue: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#0f172a",
   },
 });
