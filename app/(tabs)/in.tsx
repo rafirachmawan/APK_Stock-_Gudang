@@ -236,6 +236,12 @@ export default function InScreen() {
     return new Date(`${year}-${month}-${day}T00:00:00.000Z`).toISOString();
   };
 
+  // ✅ Tambahan untuk perbaikan error ED DateTimePicker
+  const parseDate = (ddmmyyyy: string): Date => {
+    const [day, month, year] = ddmmyyyy.split("-");
+    return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+  };
+
   const onChangeDate = (event: any, selected?: Date) => {
     setShowDatePicker(false);
     if (selected) {
