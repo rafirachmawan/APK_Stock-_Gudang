@@ -1,5 +1,4 @@
-// ✅ OutDetailScreen.tsx - Final Versi Format Seperti InDetail, Data dari 'barangKeluar', Support Jenis DR/MB/RB, Edit, Search, Export
-
+// ✅ OutDetailScreen.tsx - Final Lengkap
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useFocusEffect } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system";
@@ -158,7 +157,7 @@ export default function OutDetailScreen() {
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={{ paddingBottom: 100 }} // 👈 tambahkan ini
+      contentContainerStyle={{ paddingBottom: 100 }}
     >
       <Text style={styles.title}>Riwayat Barang Keluar</Text>
 
@@ -180,12 +179,17 @@ export default function OutDetailScreen() {
                   <Text style={styles.bold}>No Faktur: {trx.kodeApos}</Text>
                   <Text>Gudang: {trx.jenisGudang}</Text>
                   <Text>Catatan: {trx.catatan}</Text>
+                  {trx.jenisForm !== "MB" && (
+                    <>
+                      <Text>Sopir: {trx.namaSopir}</Text>
+                      <Text>Kendaraan: {trx.nomorKendaraan}</Text>
+                    </>
+                  )}
                   {trx.items.map((item, index) => (
                     <Text key={index}>
                       • {item.namaBarang} – ED: {item.ed || "-"}
                     </Text>
                   ))}
-
                   <TouchableOpacity
                     style={styles.editBtn}
                     onPress={() => {
@@ -206,6 +210,7 @@ export default function OutDetailScreen() {
         <Text style={{ color: "white" }}>Export Semua</Text>
       </TouchableOpacity>
 
+      {/* Modal Edit */}
       <Modal visible={modalVisible} transparent animationType="slide">
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -216,6 +221,7 @@ export default function OutDetailScreen() {
               {editedTrx && (
                 <ScrollView>
                   <Text style={styles.modalTitle}>Edit Transaksi</Text>
+
                   <Text style={styles.label}>No Faktur</Text>
                   <TextInput
                     style={styles.input}
@@ -224,6 +230,31 @@ export default function OutDetailScreen() {
                       setEditedTrx({ ...editedTrx, kodeApos: t })
                     }
                   />
+
+                  {editedTrx.jenisForm !== "MB" && (
+                    <>
+                      <Text style={styles.label}>Nama Sopir</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={editedTrx.namaSopir}
+                        onChangeText={(t) =>
+                          setEditedTrx({ ...editedTrx, namaSopir: t })
+                        }
+                        placeholder="Nama Sopir"
+                      />
+
+                      <Text style={styles.label}>Plat Nomor Kendaraan</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={editedTrx.nomorKendaraan}
+                        onChangeText={(t) =>
+                          setEditedTrx({ ...editedTrx, nomorKendaraan: t })
+                        }
+                        placeholder="Plat Nomor Kendaraan"
+                      />
+                    </>
+                  )}
+
                   <Text style={styles.label}>Jenis Gudang</Text>
                   <TextInput
                     style={styles.input}
@@ -232,6 +263,7 @@ export default function OutDetailScreen() {
                       setEditedTrx({ ...editedTrx, jenisGudang: t })
                     }
                   />
+
                   <Text style={styles.label}>Tanggal</Text>
                   <TouchableOpacity
                     onPress={() => setShowDatePicker(true)}
@@ -243,6 +275,7 @@ export default function OutDetailScreen() {
                       )}
                     </Text>
                   </TouchableOpacity>
+
                   {showDatePicker && (
                     <DateTimePicker
                       value={selectedDate}
@@ -251,6 +284,7 @@ export default function OutDetailScreen() {
                       onChange={onChangeDate}
                     />
                   )}
+
                   {editedTrx.items.map((item, i) => (
                     <View key={i} style={styles.itemBox}>
                       <Text style={styles.bold}>{item.namaBarang}</Text>

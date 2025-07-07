@@ -70,6 +70,9 @@ export default function OutScreen() {
   const [dataBarangMasuk, setDataBarangMasuk] = useState<ItemOut[]>([]);
   const [itemList, setItemList] = useState<ItemOut[]>([]);
 
+  const [openNamaSopir, setOpenNamaSopir] = useState(false);
+  const [openPlat, setOpenPlat] = useState(false);
+
   useFocusEffect(
     useCallback(() => {
       const unsub = onSnapshot(collection(db, "barangMasuk"), (snapshot) => {
@@ -364,6 +367,43 @@ export default function OutScreen() {
                 style={styles.input}
                 value={catatan}
                 onChangeText={setCatatan}
+              />
+            </>
+          )}
+          {jenisForm !== "MB" && (
+            <>
+              <Text style={styles.label}>Nama Sopir</Text>
+              <DropDownPicker
+                open={openNamaSopir}
+                value={namaSopir}
+                setOpen={setOpenNamaSopir}
+                setValue={setNamaSopir}
+                items={[
+                  { label: "Budi", value: "Budi" },
+                  { label: "Soleh", value: "Soleh" },
+                  { label: "Anto", value: "Anto" },
+                ]}
+                placeholder="Pilih Sopir"
+                style={styles.dropdown}
+                zIndex={4400}
+                listMode="SCROLLVIEW"
+              />
+
+              <Text style={styles.label}>Plat Nomor Kendaraan</Text>
+              <DropDownPicker
+                open={openPlat}
+                value={nomorKendaraan}
+                setOpen={setOpenPlat}
+                setValue={setNomorKendaraan}
+                items={[
+                  { label: "B 1234 XY", value: "B 1234 XY" },
+                  { label: "D 5678 AB", value: "D 5678 AB" },
+                  { label: "F 9012 CD", value: "F 9012 CD" },
+                ]}
+                placeholder="Pilih Plat Nomor"
+                style={styles.dropdown}
+                zIndex={4300}
+                listMode="SCROLLVIEW"
               />
             </>
           )}
