@@ -1,7 +1,16 @@
+import * as FileSystem from "expo-file-system";
+import * as Sharing from "expo-sharing";
 import { collection, getDocs } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import DropDownPicker from "react-native-dropdown-picker";
+import * as XLSX from "xlsx";
 import { db } from "../../utils/firebase";
 
 interface StokPerGudang {
@@ -109,6 +118,43 @@ export default function GenerateScreen() {
     ? items.filter((i) => i.principle === selectedBrand)
     : [];
 
+  const handleExport = async () => {
+    if (!selectedBrand) return;
+
+    const data: any[] = [];
+
+    filteredItems.forEach((item) => {
+      Object.entries(item.stok).forEach(([gudang, stok]) => {
+        data.push({
+          Kode: item.kode,
+          Nama: item.nama,
+          Principle: item.principle,
+          Gudang: gudang,
+          Large: stok.L,
+          Medium: stok.M,
+          Small: stok.S,
+        });
+      });
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Stok");
+
+    const wbout = XLSX.write(workbook, { type: "base64", bookType: "xlsx" });
+    const uri = FileSystem.cacheDirectory + `Stok_${selectedBrand}.xlsx`;
+
+    await FileSystem.writeAsStringAsync(uri, wbout, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+
+    await Sharing.shareAsync(uri, {
+      mimeType:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      dialogTitle: `Export Stok ${selectedBrand}`,
+    });
+  };
+
   return (
     <ScrollView style={styles.container}>
       <Text style={styles.title}>Generate Stok per Principle & Gudang</Text>
@@ -123,9 +169,7 @@ export default function GenerateScreen() {
           setItems={setBrandOptions}
           placeholder="Pilih Principle"
           listMode="SCROLLVIEW"
-          scrollViewProps={{
-            nestedScrollEnabled: true,
-          }}
+          scrollViewProps={{ nestedScrollEnabled: true }}
           dropDownDirection="AUTO"
           style={{ marginBottom: openBrand ? 200 : 10 }}
         />
@@ -146,6 +190,12 @@ export default function GenerateScreen() {
           ))}
         </View>
       ))}
+
+      {selectedBrand && (
+        <TouchableOpacity style={styles.exportBtn} onPress={handleExport}>
+          <Text style={styles.exportText}>📤 Export Stok {selectedBrand}</Text>
+        </TouchableOpacity>
+      )}
     </ScrollView>
   );
 }
@@ -181,4 +231,16 @@ const styles = StyleSheet.create({
   },
   gudangLabel: { fontWeight: "bold", color: "#374151" },
   stokText: { color: "#1f2937" },
+  exportBtn: {
+    backgroundColor: "#2563eb",
+    padding: 14,
+    borderRadius: 8,
+    alignItems: "center",
+    margin: 30,
+  },
+  exportText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 16,
+  },
 });
