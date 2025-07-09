@@ -379,9 +379,14 @@ export default function OutScreen() {
                 setOpen={setOpenNamaSopir}
                 setValue={setNamaSopir}
                 items={[
-                  { label: "Budi", value: "Budi" },
-                  { label: "Soleh", value: "Soleh" },
-                  { label: "Anto", value: "Anto" },
+                  {
+                    label: "AFIF - MIZAN ( KANVAS )",
+                    value: "AFIF - MIZAN ( KANVAS )",
+                  },
+                  { label: "DEDI - DENY MP", value: "DEDI - DENY MP" },
+                  { label: "DENY SP - EKO", value: "DENY SP - EKO" },
+                  { label: "ANWAR", value: "ANWAR" },
+                  { label: "DANANG", value: "DANANG" },
                 ]}
                 placeholder="Pilih Sopir"
                 style={styles.dropdown}
@@ -396,9 +401,34 @@ export default function OutScreen() {
                 setOpen={setOpenPlat}
                 setValue={setNomorKendaraan}
                 items={[
-                  { label: "B 1234 XY", value: "B 1234 XY" },
-                  { label: "D 5678 AB", value: "D 5678 AB" },
-                  { label: "F 9012 CD", value: "F 9012 CD" },
+                  {
+                    label: "AG 8574 AJ ( HIJAU )",
+                    value: "AG 8574 AJ ( HIJAU )",
+                  },
+                  {
+                    label: "AG 8602 RO ( PUTIH )",
+                    value: "AG 8602 RO ( PUTIH )",
+                  },
+                  {
+                    label: " AG 8796 RU ( KUNING )",
+                    value: " AG 8796 RU ( KUNING )",
+                  },
+                  {
+                    label: "AG 9115 RK ( MERAH BOX )",
+                    value: "AG 9115 RK ( MERAH BOX )",
+                  },
+                  {
+                    label: "B 9513 KDC ( MERAH KAYU )",
+                    value: "B 9513 KDC ( MERAH KAYU )",
+                  },
+                  {
+                    label: "AG 9121 RL ( BIRU )",
+                    value: "AG 9121 RL ( BIRU ) ",
+                  },
+                  {
+                    label: "AG 8709 AF ( TATA )",
+                    value: "AG 8709 AF ( TATA )",
+                  },
                 ]}
                 placeholder="Pilih Plat Nomor"
                 style={styles.dropdown}

@@ -3,6 +3,8 @@ import * as Sharing from "expo-sharing";
 import { collection, getDocs } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -156,47 +158,58 @@ export default function GenerateScreen() {
   };
 
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.title}>Generate Stok per Principle & Gudang</Text>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={{ paddingBottom: 100 }}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Text style={styles.title}>Generate Stok per Principle & Gudang</Text>
 
-      <View style={{ zIndex: 1000 }}>
-        <DropDownPicker
-          open={openBrand}
-          value={selectedBrand}
-          items={brandOptions}
-          setOpen={setOpenBrand}
-          setValue={setSelectedBrand}
-          setItems={setBrandOptions}
-          placeholder="Pilih Principle"
-          listMode="SCROLLVIEW"
-          scrollViewProps={{ nestedScrollEnabled: true }}
-          dropDownDirection="AUTO"
-          style={{ marginBottom: openBrand ? 200 : 10 }}
-        />
-      </View>
-
-      {filteredItems.map((item, idx) => (
-        <View key={idx} style={styles.itemBox}>
-          <Text style={styles.itemTitle}>
-            {item.nama} ({item.kode})
-          </Text>
-          {Object.entries(item.stok).map(([gudang, stok], i) => (
-            <View key={i} style={styles.stokRow}>
-              <Text style={styles.gudangLabel}>{gudang}</Text>
-              <Text style={styles.stokText}>L: {stok.L}</Text>
-              <Text style={styles.stokText}>M: {stok.M}</Text>
-              <Text style={styles.stokText}>S: {stok.S}</Text>
-            </View>
-          ))}
+        <View style={{ zIndex: 1000 }}>
+          <DropDownPicker
+            open={openBrand}
+            value={selectedBrand}
+            items={brandOptions}
+            setOpen={setOpenBrand}
+            setValue={setSelectedBrand}
+            setItems={setBrandOptions}
+            placeholder="Pilih Principle"
+            listMode="SCROLLVIEW"
+            scrollViewProps={{ nestedScrollEnabled: true }}
+            dropDownDirection="AUTO"
+            style={{ marginBottom: openBrand ? 200 : 10 }}
+          />
         </View>
-      ))}
 
-      {selectedBrand && (
-        <TouchableOpacity style={styles.exportBtn} onPress={handleExport}>
-          <Text style={styles.exportText}>📤 Export Stok {selectedBrand}</Text>
-        </TouchableOpacity>
-      )}
-    </ScrollView>
+        {filteredItems.map((item, idx) => (
+          <View key={idx} style={styles.itemBox}>
+            <Text style={styles.itemTitle}>
+              {item.nama} ({item.kode})
+            </Text>
+            {Object.entries(item.stok).map(([gudang, stok], i) => (
+              <View key={i} style={styles.stokRow}>
+                <Text style={styles.gudangLabel}>{gudang}</Text>
+                <Text style={styles.stokText}>L: {stok.L}</Text>
+                <Text style={styles.stokText}>M: {stok.M}</Text>
+                <Text style={styles.stokText}>S: {stok.S}</Text>
+              </View>
+            ))}
+          </View>
+        ))}
+
+        {selectedBrand && (
+          <TouchableOpacity style={styles.exportBtn} onPress={handleExport}>
+            <Text style={styles.exportText}>
+              📤 Export Stok {selectedBrand}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
