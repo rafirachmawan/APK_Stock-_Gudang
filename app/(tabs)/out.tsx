@@ -24,6 +24,9 @@ import {
 import DropDownPicker from "react-native-dropdown-picker";
 import { db } from "../../utils/firebase";
 
+import * as FileSystem from "expo-file-system";
+import * as XLSX from "xlsx";
+
 interface ItemOut {
   namaBarang: string;
   kode: string;
@@ -87,6 +90,43 @@ export default function OutScreen() {
         });
         setDataBarangMasuk(allItems);
       });
+
+      const loadKonversi = async () => {
+        try {
+          const downloadUrl =
+            "https://docs.google.com/spreadsheets/d/1Y_o_mSdv6J0mHLlZQvDPL3hRVWQquNn80J3wNb1-bYM/export?format=xlsx";
+          const localPath = FileSystem.documentDirectory + "konversi.xlsx";
+
+          // Unduh file dari URL
+          const downloadResumable = FileSystem.createDownloadResumable(
+            downloadUrl,
+            localPath
+          );
+          const { uri } = await downloadResumable.downloadAsync();
+
+          // Baca file XLSX yang sudah diunduh
+          const bstr = await FileSystem.readAsStringAsync(uri, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+          const workbook = XLSX.read(bstr, { type: "base64" });
+          const wsname = workbook.SheetNames[0];
+          const sheet = XLSX.utils.sheet_to_json(workbook.Sheets[wsname]);
+
+          const konversiFinal = sheet.map((row: any) => ({
+            Kode: row["Kode"],
+            KonversiL: parseInt(row["Konversi Dari Large Ke Medium"] || "1"),
+            KonversiM: parseInt(row["Konversi Dari Medium Ke Small"] || "1"),
+          }));
+          setKonversiData(konversiFinal);
+
+          console.log("✅ File konversi berhasil diambil dan dibaca");
+        } catch (e) {
+          console.error("❌ Gagal mengambil file konversi dari URL:", e);
+        }
+      };
+
+      loadKonversi();
+
       return () => unsub();
     }, [])
   );
@@ -163,6 +203,67 @@ export default function OutScreen() {
     setOpenNamaBarang((prev) => [...prev, false]);
   };
 
+  // tambahan
+  const konversiKeSatuan = (
+    jumlahS: number,
+    stok: { L: number; M: number; S: number },
+    konv: { KonversiL: number; KonversiM: number }
+  ) => {
+    let sisa = jumlahS;
+    let usedL = 0,
+      usedM = 0,
+      usedS = 0;
+
+    // Jika hanya satu level konversi, defaultkan
+    const konversiMtoS = konv.KonversiM || 1;
+    const konversiLtoM = konv.KonversiL || 1;
+    const konversiLtoS = konversiLtoM * konversiMtoS;
+
+    // Step 1: Small
+    if (stok.S >= sisa) {
+      usedS = sisa;
+      return { L: 0, M: 0, S: usedS };
+    } else {
+      usedS = stok.S;
+      sisa -= stok.S;
+    }
+
+    // Step 2: Medium
+    if (stok.M > 0 && konversiMtoS > 0) {
+      const maxM = Math.min(stok.M, Math.floor(sisa / konversiMtoS));
+      usedM = maxM;
+      sisa -= usedM * konversiMtoS;
+    }
+
+    // Step 3: Large
+    if (stok.L > 0 && konversiLtoS > 0) {
+      const maxL = Math.min(stok.L, Math.ceil(sisa / konversiLtoS));
+      usedL = maxL;
+      sisa -= usedL * konversiLtoS;
+    }
+
+    // Final check
+    if (sisa > 0) return null;
+
+    // Total sudah terpenuhi → sisa barang tidak semuanya dari stok small
+    // Maka hitung ulang kebutuhan S dari hasil total
+    const totalDipenuhi = jumlahS;
+    const totalDariL = usedL * konversiLtoS;
+    const totalDariM = usedM * konversiMtoS;
+    const totalDariS = totalDipenuhi - totalDariL - totalDariM;
+
+    // Ini hasil pengeluaran sebenarnya dalam Satuan
+    return {
+      L: usedL,
+      M: usedM,
+      S: totalDariS,
+    };
+  };
+
+  const [konversiData, setKonversiData] = useState<
+    { Kode: string; KonversiL: number; KonversiM: number }[]
+  >([]);
+
   const handleSubmit = async () => {
     if (!kodeApos || !jenisGudang || itemList.length === 0) {
       Alert.alert("Harap lengkapi semua data penting");
@@ -173,6 +274,7 @@ export default function OutScreen() {
     const tanggalFormatted = formatDate(tanggalTransaksi);
     const kodeGdngFinal = jenisForm === "MB" ? itemList[0]?.gdg || "-" : "-";
     const docId = `${kodeApos}-${tanggalFormatted}`;
+    const hasilAkhir: ItemOut[] = [];
 
     const newEntry: TransaksiOut = {
       jenisGudang,
@@ -184,7 +286,7 @@ export default function OutScreen() {
       namaSopir,
       jenisForm,
       waktuInput,
-      items: itemList,
+      items: hasilAkhir,
       createdAt: serverTimestamp(),
       gudangAsal: jenisGudang,
       ...(jenisForm === "MB" && { tujuanGudang }),
@@ -192,38 +294,44 @@ export default function OutScreen() {
 
     //
     // Validasi pengurangan stok
+
     for (const item of itemList) {
-      const barangSama = dataBarangMasuk.filter(
+      const stokBarang = dataBarangMasuk.filter(
         (b) => b.kode === item.kode && b.gdg === jenisGudang
       );
 
-      let stokLarge = 0,
-        stokMedium = 0,
-        stokSmall = 0;
-
-      for (const b of barangSama) {
-        stokLarge += parseInt(b.large || "0");
-        stokMedium += parseInt(b.medium || "0");
-        stokSmall += parseInt(b.small || "0");
+      let stokL = 0,
+        stokM = 0,
+        stokS = 0;
+      for (const s of stokBarang) {
+        stokL += parseInt(s.large || "0");
+        stokM += parseInt(s.medium || "0");
+        stokS += parseInt(s.small || "0");
       }
 
-      const outLarge = parseInt(item.large || "0");
-      const outMedium = parseInt(item.medium || "0");
-      const outSmall = parseInt(item.small || "0");
-
-      if (
-        outLarge > stokLarge ||
-        outMedium > stokMedium ||
-        outSmall > stokSmall
-      ) {
-        Alert.alert(
-          "Stok tidak cukup",
-          `Stok tidak mencukupi untuk ${item.namaBarang}\n` +
-            `Stok tersedia - Large: ${stokLarge}, Medium: ${stokMedium}, Small: ${stokSmall}\n` +
-            `Permintaan - Large: ${outLarge}, Medium: ${outMedium}, Small: ${outSmall}`
-        );
-        return; // Batalkan submit
+      const konv = konversiData.find((k) => k.Kode === item.kode);
+      if (!konv) {
+        Alert.alert("Konversi tidak ditemukan untuk", item.namaBarang);
+        return;
       }
+
+      const totalSmall = parseInt(item.small || "0");
+      const hasil = konversiKeSatuan(
+        totalSmall,
+        { L: stokL, M: stokM, S: stokS },
+        konv
+      );
+      if (!hasil) {
+        Alert.alert("Stok tidak mencukupi untuk", item.namaBarang);
+        return;
+      }
+
+      hasilAkhir.push({
+        ...item,
+        large: hasil.L.toString(),
+        medium: hasil.M.toString(),
+        small: hasil.S.toString(),
+      });
     }
 
     try {
