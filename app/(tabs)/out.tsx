@@ -548,7 +548,7 @@ export default function OutScreen() {
 
           {/* Item List */}
           {itemList.map((item, i) => (
-            <View key={i} style={styles.itemBox}>
+            <View key={`item-${i}`} style={styles.itemBox}>
               <Text style={styles.label}>Nama Barang</Text>
               <DropDownPicker
                 open={openNamaBarang[i] || false}
@@ -571,9 +571,14 @@ export default function OutScreen() {
                 }}
                 items={
                   jenisGudang
-                    ? barangFiltered.map((b) => ({
+                    ? Array.from(
+                        new Map(
+                          barangFiltered.map((b) => [b.namaBarang, b])
+                        ).values()
+                      ).map((b) => ({
                         label: b.namaBarang,
                         value: b.namaBarang,
+                        key: `${b.kode}-${b.namaBarang}`, // ✅ pastikan key unik
                       }))
                     : []
                 }
