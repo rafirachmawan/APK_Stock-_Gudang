@@ -1,8 +1,17 @@
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
-import { collection, onSnapshot } from "firebase/firestore";
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  onSnapshot,
+  query,
+  where,
+} from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
+  Alert,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
@@ -183,6 +192,63 @@ export default function StockScreen() {
     });
   };
 
+  const deleteDocsByGudang = async () => {
+    if (!gudangDipilih) return;
+
+    Alert.alert(
+      "Konfirmasi",
+      `Yakin ingin menghapus semua data di ${gudangDipilih}?`,
+      [
+        {
+          text: "Batal",
+          style: "cancel",
+        },
+        {
+          text: "Hapus",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              // Hapus dari barangMasuk
+              const qMasuk = query(
+                collection(db, "barangMasuk"),
+                where("gudang", "==", gudangDipilih)
+              );
+              const snapMasuk = await getDocs(qMasuk);
+              for (const docMasuk of snapMasuk.docs) {
+                await deleteDoc(doc(db, "barangMasuk", docMasuk.id));
+              }
+
+              // Hapus dari barangKeluar (jenisGudang)
+              const qKeluar = query(
+                collection(db, "barangKeluar"),
+                where("jenisGudang", "==", gudangDipilih)
+              );
+              const snapKeluar = await getDocs(qKeluar);
+              for (const docKeluar of snapKeluar.docs) {
+                await deleteDoc(doc(db, "barangKeluar", docKeluar.id));
+              }
+
+              // Hapus dari barangKeluar (gudangTujuan)
+              const qMutasiMasuk = query(
+                collection(db, "barangKeluar"),
+                where("gudangTujuan", "==", gudangDipilih)
+              );
+              const snapMutasi = await getDocs(qMutasiMasuk);
+              for (const docMutasi of snapMutasi.docs) {
+                await deleteDoc(doc(db, "barangKeluar", docMutasi.id));
+              }
+
+              Alert.alert("Sukses", "✅ Semua data dihapus.");
+            } catch (err) {
+              console.error(err);
+              Alert.alert("Gagal", "❌ Terjadi kesalahan saat menghapus.");
+            }
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: "#fff" }}
@@ -266,6 +332,26 @@ export default function StockScreen() {
               </TouchableOpacity>
             )}
           </View>
+          <TouchableOpacity
+            onPress={deleteDocsByGudang}
+            style={{
+              backgroundColor: "#ef4444",
+              padding: 12,
+              borderRadius: 8,
+              marginTop: 12,
+              marginHorizontal: 16,
+            }}
+          >
+            <Text
+              style={{
+                color: "white",
+                fontWeight: "bold",
+                textAlign: "center",
+              }}
+            >
+              🗑️ Hapus Semua Data di {gudangDipilih}
+            </Text>
+          </TouchableOpacity>
         </ScrollView>
       </TouchableWithoutFeedback>
     </KeyboardAvoidingView>

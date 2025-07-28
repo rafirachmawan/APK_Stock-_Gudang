@@ -297,7 +297,6 @@ export default function InScreen() {
           : jenisForm === "Return"
           ? `Return - ${subJenisReturn}`
           : "Stock Awal",
-
       waktuInput: convertToISODate(manualTanggal),
       items: itemList,
     };
@@ -307,25 +306,41 @@ export default function InScreen() {
         ...newEntry,
         createdAt: serverTimestamp(),
       };
+
       Object.keys(payload).forEach((key) => {
         if (payload[key] === undefined) delete payload[key];
       });
 
-      // 🔥 ID dokumen diambil dari kodeApos + tanggal input
       const docId =
         jenisForm === "Stock Awal"
           ? `STOKAWAL-${manualTanggal}-${Date.now()}`
           : `${kodeApos || kodeRetur}-${manualTanggal}`;
 
-      console.log("📦 ID Dokumen:", docId); // debug
+      console.log("📦 ID Dokumen:", docId);
+
+      // 🔥 Simpan ke Firestore
       await setDoc(doc(db, "barangMasuk", docId), payload);
+
+      // 💾 Simpan kode gudang terakhir ke lokal
       await AsyncStorage.setItem("lastKodeGdng", kodeGdng);
 
+      // 📤 Kirim ke Google Spreadsheet
+      const GOOGLE_SCRIPT_URL =
+        "https://script.google.com/macros/s/AKfycbzcBK5cr_pkttCOL64UlUr9AswTSPLN0s_263HNamX0YW0WGcve_OYxdlNfNIHw7SrM/exec";
+
+      await fetch(GOOGLE_SCRIPT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newEntry),
+      });
+
+      // 🔁 Update kode gudang
       const next = (parseInt(kodeGdng, 10) + 1).toString().padStart(4, "0");
       setKodeGdng(next);
-      Alert.alert("✅ Data berhasil disimpan ke cloud");
 
-      // Reset form
+      Alert.alert("✅ Data berhasil disimpan ke cloud dan spreadsheet");
+
+      // 🔄 Reset Form
       setItemList([]);
       setOpenNamaBarang([]);
       setKodeApos("");
@@ -334,8 +349,8 @@ export default function InScreen() {
       setManualTanggal("");
       setJenisGudang("");
     } catch (error) {
-      console.error("❌ Gagal simpan ke Firestore:", error);
-      Alert.alert("Gagal menyimpan data ke server.");
+      console.error("❌ Gagal simpan:", error);
+      Alert.alert("Gagal menyimpan data ke server atau spreadsheet.");
     }
   };
 

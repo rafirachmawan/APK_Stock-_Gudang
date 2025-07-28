@@ -276,25 +276,7 @@ export default function OutScreen() {
     const docId = `${kodeApos}-${tanggalFormatted}`;
     const hasilAkhir: ItemOut[] = [];
 
-    const newEntry: TransaksiOut = {
-      jenisGudang,
-      kodeGdng: kodeGdngFinal,
-      kodeApos,
-      kategori,
-      catatan,
-      nomorKendaraan,
-      namaSopir,
-      jenisForm,
-      waktuInput,
-      items: hasilAkhir,
-      createdAt: serverTimestamp(),
-      gudangAsal: jenisGudang,
-      ...(jenisForm === "MB" && { tujuanGudang }),
-    };
-
-    //
-    // Validasi pengurangan stok
-
+    // 🔁 Perhitungan stok dan hasil konversi
     for (const item of itemList) {
       const stokBarang = dataBarangMasuk.filter(
         (b) => b.kode === item.kode && b.gdg === jenisGudang
@@ -321,11 +303,13 @@ export default function OutScreen() {
         { L: stokL, M: stokM, S: stokS },
         konv
       );
+
       if (!hasil) {
         Alert.alert("Stok tidak mencukupi untuk", item.namaBarang);
         return;
       }
 
+      // 🧮 Hasil konversi untuk penyimpanan stok
       hasilAkhir.push({
         ...item,
         large: hasil.L.toString(),
@@ -334,8 +318,42 @@ export default function OutScreen() {
       });
     }
 
+    // 🔒 Data untuk Firestore (stok dihitung)
+    const newEntry: TransaksiOut = {
+      jenisGudang,
+      kodeGdng: kodeGdngFinal,
+      kodeApos,
+      kategori,
+      catatan,
+      nomorKendaraan,
+      namaSopir,
+      jenisForm,
+      waktuInput,
+      items: hasilAkhir,
+      createdAt: serverTimestamp(),
+      gudangAsal: jenisGudang,
+      ...(jenisForm === "MB" && { tujuanGudang }),
+    };
+
+    // 📤 Data mentah untuk Spreadsheet (tanpa konversi, pakai input user)
+    const dataUntukSpreadsheet = {
+      jenisGudang,
+      kodeGdng: kodeGdngFinal,
+      kodeApos,
+      kategori,
+      catatan,
+      nomorKendaraan,
+      namaSopir,
+      jenisForm,
+      waktuInput,
+      gudangAsal: jenisGudang,
+      items: itemList, // 👈 original input, bukan hasil konversi
+    };
+
     try {
       await setDoc(doc(db, "barangKeluar", docId), newEntry);
+
+      // 🔁 Jika MB, tambahkan juga ke barangMasuk
       if (jenisForm === "MB" && tujuanGudang) {
         const barangMasukBaru = {
           jenisForm: "Mutasi Masuk",
@@ -354,6 +372,15 @@ export default function OutScreen() {
         await setDoc(doc(db, "barangMasuk", docId), barangMasukBaru);
       }
 
+      // ✅ Kirim ke Google Spreadsheet
+      const GOOGLE_SCRIPT_URL =
+        "https://script.google.com/macros/s/AKfycbz-UIC1jGrdWo8986nsb8LpOIpXeljomj8gmaHmN6U6KnBNUTcXdEQ1adXBe8EWRzCI/exec"; // Ganti sesuai milikmu
+      await fetch(GOOGLE_SCRIPT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(dataUntukSpreadsheet),
+      });
+
       Alert.alert("✅ Transaksi berhasil disimpan ke cloud");
       setItemList([]);
       setKodeApos("");
@@ -363,8 +390,8 @@ export default function OutScreen() {
       setNamaSopir("");
       setTujuanGudang("");
     } catch (err) {
-      console.error("❌ Gagal simpan ke Firestore:", err);
-      Alert.alert("Gagal simpan ke server");
+      console.error("❌ Gagal simpan:", err);
+      Alert.alert("Gagal simpan ke server atau Spreadsheet");
     }
   };
 
