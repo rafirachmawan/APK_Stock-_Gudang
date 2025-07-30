@@ -76,6 +76,8 @@ export default function OutScreen() {
   const [openNamaSopir, setOpenNamaSopir] = useState(false);
   const [openPlat, setOpenPlat] = useState(false);
 
+  const [openGudangPerItem, setOpenGudangPerItem] = useState<boolean[]>([]);
+
   useFocusEffect(
     useCallback(() => {
       const unsub = onSnapshot(collection(db, "barangMasuk"), (snapshot) => {
@@ -141,9 +143,22 @@ export default function OutScreen() {
   const barangFiltered = dataBarangMasuk.filter((b) => b.gdg === jenisGudang);
 
   const handleSelectBarang = (index: number, nama: string) => {
-    const foundItems = barangFiltered.filter((b) => b.namaBarang === nama);
+    const updated = [...itemList];
+
+    // Pastikan user sudah pilih gudang untuk item ini
+    const gudangDipilih = updated[index].gdg;
+    if (!gudangDipilih) {
+      Alert.alert("Pilih gudang terlebih dahulu untuk item ini");
+      return;
+    }
+
+    // Cari semua barang dengan nama & gudang yang sesuai
+    const foundItems = dataBarangMasuk.filter(
+      (b) => b.namaBarang === nama && b.gdg === gudangDipilih
+    );
+
     if (foundItems.length > 0) {
-      // Ambil ED paling pendek
+      // Ambil barang dengan ED terpendek
       const sorted = foundItems.sort((a, b) => {
         const edA = new Date(a.ed || "9999-12-31");
         const edB = new Date(b.ed || "9999-12-31");
@@ -151,19 +166,21 @@ export default function OutScreen() {
       });
       const found = sorted[0];
 
-      const updated = [...itemList];
+      // Update item ke dalam list
       updated[index] = {
         ...updated[index],
         namaBarang: found.namaBarang,
         kode: found.kode,
         principle: found.principle,
         gdg: found.gdg,
-        ed: found.ed || "", // ✅ ini akan jadi ED paling pendek
+        ed: found.ed || "",
         large: "",
         medium: "",
         small: "",
       };
       setItemList(updated);
+    } else {
+      Alert.alert("Barang tidak ditemukan di gudang tersebut");
     }
   };
 
@@ -197,10 +214,11 @@ export default function OutScreen() {
         medium: "",
         small: "",
         principle: "",
-        gdg: jenisGudang,
+        gdg: "",
       },
     ]);
     setOpenNamaBarang((prev) => [...prev, false]);
+    setOpenGudangPerItem((prev) => [...prev, false]);
   };
 
   // tambahan
@@ -279,7 +297,7 @@ export default function OutScreen() {
     // 🔁 Perhitungan stok dan hasil konversi
     for (const item of itemList) {
       const stokBarang = dataBarangMasuk.filter(
-        (b) => b.kode === item.kode && b.gdg === jenisGudang
+        (b) => b.kode === item.kode && b.gdg === item.gdg
       );
 
       let stokL = 0,
@@ -576,6 +594,37 @@ export default function OutScreen() {
           {/* Item List */}
           {itemList.map((item, i) => (
             <View key={`item-${i}`} style={styles.itemBox}>
+              {/* 🏷️ Pilih Gudang */}
+              <Text style={styles.label}>Pilih Gudang untuk Barang Ini</Text>
+              <DropDownPicker
+                open={openGudangPerItem[i] || false}
+                setOpen={(val) => {
+                  const copy = [...openGudangPerItem];
+                  copy[i] = val;
+                  setOpenGudangPerItem(copy);
+                }}
+                value={item.gdg}
+                setValue={(cb) => {
+                  const val = cb(item.gdg);
+                  handleChangeItem(i, "gdg", val);
+                }}
+                items={[
+                  { label: "Gudang A", value: "Gudang A" },
+                  { label: "Gudang B", value: "Gudang B" },
+                  { label: "Gudang C", value: "Gudang C" },
+                  { label: "Gudang D", value: "Gudang D" },
+                  {
+                    label: "Gudang E (Bad Stock)",
+                    value: "Gudang E (Bad Stock)",
+                  },
+                ]}
+                placeholder="Pilih Gudang"
+                style={styles.dropdown}
+                zIndex={9000 - i}
+                zIndexInverse={i}
+              />
+
+              {/* 📦 Nama Barang */}
               <Text style={styles.label}>Nama Barang</Text>
               <DropDownPicker
                 open={openNamaBarang[i] || false}
@@ -587,8 +636,8 @@ export default function OutScreen() {
                 value={item.namaBarang}
                 setValue={(cb) => {
                   const val = cb(item.namaBarang);
-                  const exists = barangFiltered.some(
-                    (b) => b.namaBarang === val
+                  const exists = dataBarangMasuk.some(
+                    (b) => b.namaBarang === val && b.gdg === item.gdg
                   );
                   if (exists) {
                     handleSelectBarang(i, val);
@@ -597,15 +646,17 @@ export default function OutScreen() {
                   }
                 }}
                 items={
-                  jenisGudang
+                  item.gdg
                     ? Array.from(
                         new Map(
-                          barangFiltered.map((b) => [b.namaBarang, b])
+                          dataBarangMasuk
+                            .filter((b) => b.gdg === item.gdg)
+                            .map((b) => [b.namaBarang, b])
                         ).values()
                       ).map((b) => ({
                         label: b.namaBarang,
                         value: b.namaBarang,
-                        key: `${b.kode}-${b.namaBarang}`, // ✅ pastikan key unik
+                        key: `${b.kode}-${b.namaBarang}`,
                       }))
                     : []
                 }
@@ -614,11 +665,12 @@ export default function OutScreen() {
                 style={styles.dropdown}
                 listMode="SCROLLVIEW"
                 scrollViewProps={{ nestedScrollEnabled: true }}
-                zIndex={1000 - i}
+                zIndex={8000 - i}
                 zIndexInverse={i}
-                disabled={!jenisGudang}
+                disabled={!item.gdg}
               />
 
+              {/* 🔤 Data Barang */}
               <Text style={styles.label}>Kode</Text>
               <TextInput
                 style={styles.input}
@@ -649,7 +701,7 @@ export default function OutScreen() {
                 value={item.small}
                 onChangeText={(t) => handleChangeItem(i, "small", t)}
               />
-              {/*  */}
+
               <Text style={styles.label}>ED (dd-mm-yyyy)</Text>
               <TextInput
                 style={styles.input}
