@@ -1,12 +1,10 @@
-// ✅ InScreen.tsx Final Versi: Hapus No Faktur Supplier + Dokumen Firebase pakai ID dinamis
+// ✅ InScreen.tsx — kirim ke Spreadsheet + sertakan operatorName/operatorUsername
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import * as FileSystem from "expo-file-system";
 import { doc, serverTimestamp, setDoc } from "firebase/firestore";
-import { TouchableWithoutFeedback } from "react-native";
-
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Keyboard,
@@ -17,18 +15,19 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from "react-native";
 import DropDownPicker from "react-native-dropdown-picker";
 import * as XLSX from "xlsx";
 import { db } from "../../utils/firebase";
+import { expandAllowed, getUserProfile } from "../../utils/userProfile";
 
 interface PrincipalItem {
   principle: string;
   namaBarang: string;
   kode: string;
 }
-
 interface ItemInput {
   namaBarang: string;
   kode: string;
@@ -38,19 +37,27 @@ interface ItemInput {
   small: string;
   catatan: string;
 }
-
 interface PurchaseForm {
-  jenisGudang: string;
-  gudang: string;
+  jenisGudang: string; // Gudang Utama | Gudang BS
+  gudang: string; // Gudang A/B/C/D/E(BS)
   kodeGdng: string;
   kodeApos?: string;
   kodeRetur?: string;
   suratJalan?: string;
   principle: string;
-  jenisForm: string;
-  waktuInput: string;
+  jenisForm: string; // Pembelian - ..., Return - ..., Stock Awal
+  waktuInput: string; // ISO date
   items: ItemInput[];
+
+  // ➕ kolom operator (untuk Firestore & Spreadsheet)
+  operatorName?: string;
+  operatorUsername?: string;
+  operatorGuestName?: string;
 }
+
+// 🔗 Apps Script Spreadsheet (Barang Masuk)
+const APPSCRIPT_IN_URL =
+  "https://script.google.com/macros/s/AKfycbxuAFtkFbBSGOfPC_fwYbRYhH2EitaRPzQ3EuDzqKTs0ZKN5sSQHa9j7ERRUYQWXzSw/exec";
 
 export default function InScreen() {
   const [itemList, setItemList] = useState<ItemInput[]>([]);
@@ -64,53 +71,61 @@ export default function InScreen() {
   const [subJenisPembelian, setSubJenisPembelian] = useState<
     "Pabrik" | "Mutasi"
   >("Pabrik");
-  const [subJenisReturn, setSubJenisReturn] = useState("Return Good Stock");
+  const [subJenisReturn] = useState("Return Good Stock");
 
-  const [jenisGudang, setJenisGudang] = useState("");
+  const [jenisGudang, setJenisGudang] = useState<
+    "Gudang Utama" | "Gudang BS" | ""
+  >("");
   const [openJenisGudang, setOpenJenisGudang] = useState(false);
-  const [openJenis, setOpenJenis] = useState(false);
+  const [openJenisForm, setOpenJenisForm] = useState(false);
   const [openSubJenis, setOpenSubJenis] = useState(false);
-  const [openSubReturn, setOpenSubReturn] = useState(false);
   const [openPrinciple, setOpenPrinciple] = useState(false);
   const [openGudang, setOpenGudang] = useState(false);
-  const [openJenisForm, setOpenJenisForm] = useState(false);
-
   const [openNamaBarang, setOpenNamaBarang] = useState<boolean[]>([]);
 
   const [gudang, setGudang] = useState("");
   const [kodeGdng, setKodeGdng] = useState("0001");
   const [kodeApos, setKodeApos] = useState("");
   const [kodeRetur, setKodeRetur] = useState("");
-  const [suratJalan, setSuratJalan] = useState("");
 
   const [manualTanggal, setManualTanggal] = useState("");
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [indexEDPicker, setIndexEDPicker] = useState<number | null>(null);
 
-  const barangByPrinciple = dataExcel.filter((d) => d.principle === principle);
-
-  const [openStates, setOpenStates] = useState({
-    jenisGudang: false,
-    jenisForm: false,
-    subPembelian: false,
-    subReturn: false,
-    principle: false,
-    gudang: false,
-  });
+  // ⛔️ gudang yang boleh untuk user ini
+  const [allowedGdg, setAllowedGdg] = useState<string[]>([]);
+  // 👤 profil login (untuk nama operator)
+  const [profile, setProfile] = useState<any>(null);
 
   useEffect(() => {
+    (async () => {
+      const prof = await getUserProfile(); // { username, displayName, guestName?, allowed, ... }
+      setProfile(prof);
+      const expanded = prof ? expandAllowed(prof.allowed) : [];
+      setAllowedGdg(expanded);
+      if (expanded.length === 1) setGudang(expanded[0]);
+    })();
+  }, []);
+
+  // otomatis set gudang E (BS) hanya jika diizinkan
+  useEffect(() => {
     if (jenisGudang === "Gudang BS") {
-      setGudang("Gudang E (Bad Stock)");
-      setOpenGudang(false);
-    } else if (jenisGudang === "Gudang Utama") {
-      // reset gudang jika sebelumnya otomatis dari Gudang BS
-      if (gudang === "Gudang E (Bad Stock)") {
-        setGudang("");
+      if (allowedGdg.includes("Gudang E (Bad Stock)")) {
+        setGudang("Gudang E (Bad Stock)");
+        setOpenGudang(false);
+      } else {
+        Alert.alert(
+          "Akses ditolak",
+          "Anda tidak boleh input ke Gudang E (Bad Stock)."
+        );
+        setJenisGudang("");
       }
+    } else if (jenisGudang === "Gudang Utama") {
+      if (gudang === "Gudang E (Bad Stock)") setGudang("");
       setOpenGudang(false);
     }
-  }, [jenisGudang]);
+  }, [jenisGudang, allowedGdg]);
 
   useEffect(() => {
     loadExcelHybrid();
@@ -119,10 +134,8 @@ export default function InScreen() {
 
   const loadLastKodeGudang = async () => {
     const lastKode = await AsyncStorage.getItem("lastKodeGdng");
-    if (lastKode) {
-      const next = (parseInt(lastKode, 10) + 1).toString().padStart(4, "0");
-      setKodeGdng(next);
-    }
+    if (lastKode)
+      setKodeGdng((parseInt(lastKode, 10) + 1).toString().padStart(4, "0"));
   };
 
   const loadExcelHybrid = async () => {
@@ -132,7 +145,6 @@ export default function InScreen() {
       await loadExcelFromAssets();
     }
   };
-
   const loadExcelFromURL = async () => {
     const EXCEL_URL =
       "https://docs.google.com/spreadsheets/d/1O2D9nLXWBbjpqZKBeypt_lJXqIzczmFUQp37vcTAvsA/export?format=xlsx";
@@ -147,7 +159,6 @@ export default function InScreen() {
     });
     parseExcel(fileContent);
   };
-
   const loadExcelFromAssets = async () => {
     const filePath = FileSystem.bundleDirectory + "list-principal.xlsx";
     const b64 = await FileSystem.readAsStringAsync(filePath, {
@@ -155,21 +166,6 @@ export default function InScreen() {
     });
     parseExcel(b64);
   };
-  //
-  const gudangItems = [
-    { label: "Gudang A", value: "Gudang A" },
-    { label: "Gudang B", value: "Gudang B" },
-    { label: "Gudang C", value: "Gudang C" },
-    { label: "Gudang D", value: "Gudang D" },
-    // { label: "Gudang E (Good Stock)", value: "Gudang E (Good Stock)" },
-  ];
-
-  if (jenisGudang === "Gudang BS") {
-    gudangItems.push({
-      label: "Gudang E (Bad Stock)",
-      value: "Gudang E (Bad Stock)",
-    });
-  }
   const parseExcel = (base64: string) => {
     const workbook = XLSX.read(base64, { type: "base64" });
     const worksheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -183,31 +179,31 @@ export default function InScreen() {
     setPrincipleList([...new Set(jsonData.map((d) => d.principle))]);
   };
 
+  const barangByPrinciple = useMemo(
+    () => dataExcel.filter((d) => d.principle === principle),
+    [dataExcel, principle]
+  );
+
   const handleSelectBarang = (index: number, namaBarang: string) => {
     const found = dataExcel.find(
       (d) => d.principle === principle && d.namaBarang === namaBarang
     );
-    if (found) {
-      const updated = [...itemList];
-      updated[index].namaBarang = found.namaBarang;
-      updated[index].kode = found.kode;
-      setItemList(updated);
-    }
+    if (!found) return;
+    const updated = [...itemList];
+    updated[index].namaBarang = found.namaBarang;
+    updated[index].kode = found.kode;
+    setItemList(updated);
   };
 
-  const handleChangeItem = (
-    index: number,
-    key: keyof ItemInput,
-    value: string
-  ) => {
+  const handleChangeItem = (i: number, key: keyof ItemInput, value: string) => {
     const updated = [...itemList];
-    updated[index][key] = value;
+    updated[i][key] = value;
     setItemList(updated);
   };
 
   const addItem = () => {
-    setItemList((prev) => [
-      ...prev,
+    setItemList((p) => [
+      ...p,
       {
         namaBarang: "",
         kode: "",
@@ -218,48 +214,56 @@ export default function InScreen() {
         catatan: "",
       },
     ]);
-    setOpenNamaBarang((prev) => [...prev, false]);
+    setOpenNamaBarang((p) => [...p, false]);
   };
-
   const removeItem = (i: number) => {
-    const updated = [...itemList];
-    updated.splice(i, 1);
-    setItemList(updated);
-
-    const updatedOpen = [...openNamaBarang];
-    updatedOpen.splice(i, 1);
-    setOpenNamaBarang(updatedOpen);
+    const a = [...itemList];
+    a.splice(i, 1);
+    setItemList(a);
+    const b = [...openNamaBarang];
+    b.splice(i, 1);
+    setOpenNamaBarang(b);
   };
 
   const convertToISODate = (ddmmyyyy: string) => {
     const [day, month, year] = ddmmyyyy.split("-");
     return new Date(`${year}-${month}-${day}T00:00:00.000Z`).toISOString();
   };
-
-  // ✅ Tambahan untuk perbaikan error ED DateTimePicker
   const parseDate = (ddmmyyyy: string): Date => {
     const [day, month, year] = ddmmyyyy.split("-");
     return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
   };
-
-  const onChangeDate = (event: any, selected?: Date) => {
+  const onChangeDate = (_event: any, selected?: Date) => {
     setShowDatePicker(false);
     if (selected) {
       const d = selected;
-      const day = d.getDate().toString().padStart(2, "0");
-      const month = (d.getMonth() + 1).toString().padStart(2, "0");
-      const year = d.getFullYear();
-      const formatted = `${day}-${month}-${year}`;
+      const formatted = `${String(d.getDate()).padStart(2, "0")}-${String(
+        d.getMonth() + 1
+      ).padStart(2, "0")}-${d.getFullYear()}`;
       setManualTanggal(formatted);
       setSelectedDate(d);
     }
   };
+
+  const gudangItems = useMemo(() => {
+    const result: string[] = [];
+    for (const g of ["Gudang A", "Gudang B", "Gudang C", "Gudang D"]) {
+      if (allowedGdg.includes(g)) result.push(g);
+    }
+    if (allowedGdg.includes("Gudang E (Bad Stock)"))
+      result.push("Gudang E (Bad Stock)");
+    return result.map((g) => ({ label: g, value: g }));
+  }, [allowedGdg]);
+
   const handleSubmit = async () => {
     if (!principle || !gudang || !jenisGudang || itemList.length === 0) {
       Alert.alert("Isi semua field wajib");
       return;
     }
-
+    if (!allowedGdg.includes(gudang)) {
+      Alert.alert("Akses ditolak", "Anda tidak berhak input ke gudang ini.");
+      return;
+    }
     if (jenisForm === "Pembelian" && !kodeApos) {
       Alert.alert(
         "⚠️ No Faktur belum diisi",
@@ -267,7 +271,6 @@ export default function InScreen() {
       );
       return;
     }
-
     if (jenisForm === "Return" && !kodeRetur) {
       Alert.alert(
         "⚠️ No Faktur Return belum diisi",
@@ -275,7 +278,6 @@ export default function InScreen() {
       );
       return;
     }
-
     if (!manualTanggal) {
       Alert.alert(
         "⚠️ Tanggal belum dipilih",
@@ -283,6 +285,15 @@ export default function InScreen() {
       );
       return;
     }
+
+    // 👤 siapkan nama operator
+    const operatorUsername = profile?.username || "-";
+    const operatorName =
+      (profile?.guestName && String(profile.guestName).trim()) ||
+      (profile?.displayName && String(profile.displayName).trim()) ||
+      operatorUsername;
+    const operatorGuestName =
+      (profile?.guestName && String(profile.guestName).trim()) || "";
 
     const newEntry: PurchaseForm = {
       jenisGudang,
@@ -299,6 +310,11 @@ export default function InScreen() {
           : "Stock Awal",
       waktuInput: convertToISODate(manualTanggal),
       items: itemList,
+
+      // ➕ sertakan operator
+      operatorName,
+      operatorUsername,
+      operatorGuestName,
     };
 
     try {
@@ -306,41 +322,32 @@ export default function InScreen() {
         ...newEntry,
         createdAt: serverTimestamp(),
       };
-
-      Object.keys(payload).forEach((key) => {
-        if (payload[key] === undefined) delete payload[key];
-      });
+      Object.keys(payload).forEach(
+        (k) => payload[k] === undefined && delete payload[k]
+      );
 
       const docId =
         jenisForm === "Stock Awal"
           ? `STOKAWAL-${manualTanggal}-${Date.now()}`
           : `${kodeApos || kodeRetur}-${manualTanggal}`;
 
-      console.log("📦 ID Dokumen:", docId);
-
-      // 🔥 Simpan ke Firestore
+      // 🔥 Firestore
       await setDoc(doc(db, "barangMasuk", docId), payload);
 
-      // 💾 Simpan kode gudang terakhir ke lokal
-      await AsyncStorage.setItem("lastKodeGdng", kodeGdng);
-
-      // 📤 Kirim ke Google Spreadsheet
-      const GOOGLE_SCRIPT_URL =
-        "https://script.google.com/macros/s/AKfycbzcBK5cr_pkttCOL64UlUr9AswTSPLN0s_263HNamX0YW0WGcve_OYxdlNfNIHw7SrM/exec";
-
-      await fetch(GOOGLE_SCRIPT_URL, {
+      // 📤 Spreadsheet
+      await fetch(APPSCRIPT_IN_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newEntry),
       });
 
-      // 🔁 Update kode gudang
-      const next = (parseInt(kodeGdng, 10) + 1).toString().padStart(4, "0");
-      setKodeGdng(next);
+      // 💾 update nomor gudang lokal
+      await AsyncStorage.setItem("lastKodeGdng", kodeGdng);
+      setKodeGdng((n) => (parseInt(n, 10) + 1).toString().padStart(4, "0"));
 
-      Alert.alert("✅ Data berhasil disimpan ke cloud dan spreadsheet");
+      Alert.alert("✅ Data berhasil disimpan");
 
-      // 🔄 Reset Form
+      // reset
       setItemList([]);
       setOpenNamaBarang([]);
       setKodeApos("");
@@ -423,16 +430,7 @@ export default function InScreen() {
             </>
           )}
 
-          {jenisForm === "Return" ? (
-            <>
-              {/* <Text style={styles.label}>No Faktur</Text>
-              <TextInput
-                style={styles.input}
-                value={kodeRetur}
-                onChangeText={setKodeRetur}
-              /> */}
-            </>
-          ) : jenisForm === "Pembelian" ? (
+          {jenisForm === "Pembelian" && (
             <>
               <Text style={styles.label}>No Faktur</Text>
               <TextInput
@@ -441,7 +439,17 @@ export default function InScreen() {
                 onChangeText={setKodeApos}
               />
             </>
-          ) : null}
+          )}
+          {jenisForm === "Return" && (
+            <>
+              <Text style={styles.label}>No Faktur</Text>
+              <TextInput
+                style={styles.input}
+                value={kodeRetur}
+                onChangeText={setKodeRetur}
+              />
+            </>
+          )}
 
           <Text style={styles.label}>Principle</Text>
           <DropDownPicker
@@ -471,8 +479,8 @@ export default function InScreen() {
             zIndexInverse={600}
             listMode="SCROLLVIEW"
             dropDownContainerStyle={{ maxHeight: 250 }}
-            disabled={jenisGudang === "Gudang BS"} // tetap disable agar tidak bisa diubah manual jika BS
           />
+
           <Text style={styles.label}>Tanggal Input</Text>
           <TouchableOpacity
             onPress={() => setShowDatePicker(true)}
@@ -489,30 +497,9 @@ export default function InScreen() {
             />
           )}
 
-          {jenisForm === "Return" ? (
-            <>
-              <Text style={styles.label}>No Faktur</Text>
-              <TextInput
-                style={styles.input}
-                value={kodeRetur}
-                onChangeText={setKodeRetur}
-              />
-            </>
-          ) : (
-            <>
-              {/* <Text style={styles.label}>No Faktur</Text>
-              <TextInput
-                style={styles.input}
-                value={kodeApos}
-                onChangeText={setKodeApos}
-              /> */}
-            </>
-          )}
-
           {itemList.map((item, i) => (
             <View key={i} style={styles.itemBox}>
               <Text style={styles.label}>Nama Barang</Text>
-              {/*  */}
               <DropDownPicker
                 open={openNamaBarang[i] || false}
                 setOpen={(val) => {
@@ -537,6 +524,7 @@ export default function InScreen() {
                 mode="BADGE"
                 listMode="SCROLLVIEW"
               />
+
               <Text style={styles.label}>ED</Text>
               <TouchableOpacity
                 onPress={() => setIndexEDPicker(i)}
@@ -552,12 +540,13 @@ export default function InScreen() {
                   onChange={(event, date) => {
                     if (event.type === "set" && date) {
                       const d = date;
-                      const day = d.getDate().toString().padStart(2, "0");
-                      const month = (d.getMonth() + 1)
-                        .toString()
-                        .padStart(2, "0");
-                      const year = d.getFullYear();
-                      const formatted = `${day}-${month}-${year}`;
+                      const formatted = `${String(d.getDate()).padStart(
+                        2,
+                        "0"
+                      )}-${String(d.getMonth() + 1).padStart(
+                        2,
+                        "0"
+                      )}-${d.getFullYear()}`;
                       handleChangeItem(i, "ed", formatted);
                     }
                     setIndexEDPicker(null);

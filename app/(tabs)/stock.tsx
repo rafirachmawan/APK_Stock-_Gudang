@@ -6,8 +6,7 @@ import {
   doc,
   getDocs,
   onSnapshot,
-  query,
-  where,
+  updateDoc,
 } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
@@ -30,22 +29,66 @@ import { db } from "../../utils/firebase";
 interface Item {
   namaBarang: string;
   kode: string;
+
   large: string;
   medium: string;
   small: string;
+
+  consumedL?: string;
+  consumedM?: string;
+  consumedS?: string;
+
+  gdg?: string; // asal gudang per item
   principle: string;
 }
 
 interface Transaksi {
-  gudang?: string;
-  gudangTujuan?: string;
+  gudang?: string; // barangMasuk
+  gudangTujuan?: string; // barangKeluar (MB)
+  jenisGudang?: string; // barangKeluar (asal: header)
+  jenisForm?: "DR" | "MB" | "RB";
   principle: string;
-  jenisGudang?: string;
   items: Item[];
 }
 
+type StokRow = {
+  kode: string;
+  nama: string;
+  principle: string;
+  totalLarge: number;
+  totalMedium: number;
+  totalSmall: number;
+};
+
+const normCode = (s: any) =>
+  String(s ?? "")
+    .trim()
+    .toUpperCase();
+
+const toInt = (v: any) => {
+  const n = parseInt(String(v ?? "0").trim(), 10);
+  return Number.isNaN(n) ? 0 : Math.max(0, n);
+};
+
+// 🔁 Pemetaan gudang fisik → grup logis
+const canonicalGudang = (g: any): string => {
+  const x = String(g ?? "").trim();
+  const U = x.toUpperCase();
+  if (!x) return "Unknown";
+  if (U.includes("E (BAD STOCK)")) return "Gudang E (Bad Stock)";
+  if (U.includes("BCD")) return "Gudang BCD";
+  if (
+    U.includes("GUDANG B") ||
+    U.includes("GUDANG C") ||
+    U.includes("GUDANG D")
+  )
+    return "Gudang BCD";
+  if (U.includes("GUDANG A")) return "Gudang A";
+  return x;
+};
+
 export default function StockScreen() {
-  const [stok, setStok] = useState<any[]>([]);
+  const [stok, setStok] = useState<StokRow[]>([]);
   const [barangMasuk, setBarangMasuk] = useState<Transaksi[]>([]);
   const [barangKeluar, setBarangKeluar] = useState<Transaksi[]>([]);
   const [searchText, setSearchText] = useState("");
@@ -57,9 +100,7 @@ export default function StockScreen() {
   const [gudangDipilih, setGudangDipilih] = useState<string | null>(null);
   const [gudangItems, setGudangItems] = useState([
     { label: "Gudang A", value: "Gudang A" },
-    { label: "Gudang B", value: "Gudang B" },
-    { label: "Gudang C", value: "Gudang C" },
-    { label: "Gudang D", value: "Gudang D" },
+    { label: "Gudang BCD", value: "Gudang BCD" },
     { label: "Gudang E (Bad Stock)", value: "Gudang E (Bad Stock)" },
   ]);
 
@@ -68,12 +109,10 @@ export default function StockScreen() {
       const data = snapshot.docs.map((doc) => doc.data() as Transaksi);
       setBarangMasuk(data);
     });
-
     const unsubOut = onSnapshot(collection(db, "barangKeluar"), (snapshot) => {
       const data = snapshot.docs.map((doc) => doc.data() as Transaksi);
       setBarangKeluar(data);
     });
-
     return () => {
       unsubIn();
       unsubOut();
@@ -83,84 +122,116 @@ export default function StockScreen() {
   useEffect(() => {
     if (!gudangDipilih) return;
 
-    const map = new Map();
+    const map = new Map<
+      string,
+      {
+        kodeRaw: string;
+        nama: string;
+        principle: string;
+        L: number;
+        M: number;
+        S: number;
+      }
+    >();
 
-    barangMasuk
-      .filter((trx) => trx.gudang === gudangDipilih)
-      .forEach((trx) => {
-        trx.items.forEach((item) => {
-          const key = item.kode;
-          if (!map.has(key)) {
-            map.set(key, {
-              kode: item.kode,
-              nama: item.namaBarang,
-              principle: item.principle || trx.principle || "-",
-              totalLarge: 0,
-              totalMedium: 0,
-              totalSmall: 0,
-            });
-          }
-          const data = map.get(key);
-          data.totalLarge += parseInt(item.large || "0");
-          data.totalMedium += parseInt(item.medium || "0");
-          data.totalSmall += parseInt(item.small || "0");
-        });
+    // + barangMasuk (group)
+    barangMasuk.forEach((trx) => {
+      const gGroup = canonicalGudang(trx.gudang);
+      if (gGroup !== gudangDipilih) return;
+      trx.items?.forEach((item) => {
+        const key = normCode(item.kode);
+        if (!map.has(key)) {
+          map.set(key, {
+            kodeRaw: String(item.kode ?? ""),
+            nama: item.namaBarang,
+            principle: item.principle || trx.principle || "-",
+            L: 0,
+            M: 0,
+            S: 0,
+          });
+        }
+        const data = map.get(key)!;
+        data.L += toInt(item.large);
+        data.M += toInt(item.medium);
+        data.S += toInt(item.small);
       });
-
-    barangKeluar
-      .filter((trx) => trx.jenisGudang === gudangDipilih)
-      .forEach((trx) => {
-        trx.items.forEach((item) => {
-          const key = item.kode;
-          if (!map.has(key)) return;
-          const data = map.get(key);
-          data.totalLarge = Math.max(
-            0,
-            data.totalLarge - parseInt(item.large || "0")
-          );
-          data.totalMedium = Math.max(
-            0,
-            data.totalMedium - parseInt(item.medium || "0")
-          );
-          data.totalSmall = Math.max(
-            0,
-            data.totalSmall - parseInt(item.small || "0")
-          );
-        });
-      });
-
-    barangKeluar
-      .filter((trx) => trx.gudangTujuan === gudangDipilih)
-      .forEach((trx) => {
-        trx.items.forEach((item) => {
-          const key = item.kode;
-          if (!map.has(key)) {
-            map.set(key, {
-              kode: item.kode,
-              nama: item.namaBarang,
-              principle: item.principle || trx.principle || "-",
-              totalLarge: 0,
-              totalMedium: 0,
-              totalSmall: 0,
-            });
-          }
-          const data = map.get(key);
-          data.totalLarge += parseInt(item.large || "0");
-          data.totalMedium += parseInt(item.medium || "0");
-          data.totalSmall += parseInt(item.small || "0");
-        });
-      });
-
-    const final = Array.from(map.values()).filter((item: any) => {
-      const match =
-        item.nama.toLowerCase().includes(searchText.toLowerCase()) ||
-        item.kode.toLowerCase().includes(searchText.toLowerCase());
-      return match;
     });
+
+    // - barangKeluar asal (group asal per item)
+    barangKeluar.forEach((trx) => {
+      trx.items?.forEach((item) => {
+        const asalRaw =
+          item.gdg && item.gdg.trim() !== "" ? item.gdg : trx.jenisGudang;
+        const gGroup = canonicalGudang(asalRaw);
+        if (gGroup !== gudangDipilih) return;
+
+        const key = normCode(item.kode);
+        if (!map.has(key)) {
+          map.set(key, {
+            kodeRaw: String(item.kode ?? ""),
+            nama: item.namaBarang,
+            principle: item.principle || trx.principle || "-",
+            L: 0,
+            M: 0,
+            S: 0,
+          });
+        }
+        const data = map.get(key)!;
+
+        const useL = toInt((item as any).consumedL ?? item.large);
+        const useM = toInt((item as any).consumedM ?? item.medium);
+        const useS = toInt((item as any).consumedS ?? item.small);
+
+        data.L = Math.max(0, data.L - useL);
+        data.M = Math.max(0, data.M - useM);
+        data.S = Math.max(0, data.S - useS);
+      });
+    });
+
+    // + mutasi masuk (group tujuan)
+    barangKeluar.forEach((trx) => {
+      const tujuan = canonicalGudang(trx.gudangTujuan);
+      if (tujuan !== gudangDipilih) return;
+      trx.items?.forEach((item) => {
+        const key = normCode(item.kode);
+        if (!map.has(key)) {
+          map.set(key, {
+            kodeRaw: String(item.kode ?? ""),
+            nama: item.namaBarang,
+            principle: item.principle || trx.principle || "-",
+            L: 0,
+            M: 0,
+            S: 0,
+          });
+        }
+        const data = map.get(key)!;
+        data.L += toInt(item.large);
+        data.M += toInt(item.medium);
+        data.S += toInt(item.small);
+      });
+    });
+
+    const final = Array.from(map.values())
+      .map((r) => ({
+        kode: r.kodeRaw,
+        nama: r.nama,
+        principle: r.principle,
+        totalLarge: r.L,
+        totalMedium: r.M,
+        totalSmall: r.S,
+      }))
+      .filter((item) => {
+        const q = searchText.trim().toLowerCase();
+        if (!q) return true;
+        return (
+          item.nama.toLowerCase().includes(q) ||
+          item.kode.toLowerCase().includes(q)
+        );
+      });
 
     setStok(final);
     setTotalBarang(final.length);
-    setTotalPrinciple(new Set(final.map((item: any) => item.principle)).size);
+    setTotalPrinciple(new Set(final.map((item) => item.principle)).size);
   }, [barangMasuk, barangKeluar, searchText, gudangDipilih]);
 
   const handleExport = async () => {
@@ -192,53 +263,66 @@ export default function StockScreen() {
     });
   };
 
+  // (opsional) Penghapusan menyeluruh per group gudang
   const deleteDocsByGudang = async () => {
     if (!gudangDipilih) return;
 
     Alert.alert(
       "Konfirmasi",
-      `Yakin ingin menghapus semua data di ${gudangDipilih}?`,
+      `Yakin ingin menghapus semua data terkait ${gudangDipilih}?`,
       [
-        {
-          text: "Batal",
-          style: "cancel",
-        },
+        { text: "Batal", style: "cancel" },
         {
           text: "Hapus",
           style: "destructive",
           onPress: async () => {
             try {
-              // Hapus dari barangMasuk
-              const qMasuk = query(
-                collection(db, "barangMasuk"),
-                where("gudang", "==", gudangDipilih)
-              );
-              const snapMasuk = await getDocs(qMasuk);
-              for (const docMasuk of snapMasuk.docs) {
-                await deleteDoc(doc(db, "barangMasuk", docMasuk.id));
+              // Hapus semua barangMasuk dg group ini
+              const snapMasuk = await getDocs(collection(db, "barangMasuk"));
+              for (const d of snapMasuk.docs) {
+                const trx = d.data() as Transaksi;
+                if (canonicalGudang(trx.gudang) === gudangDipilih) {
+                  await deleteDoc(doc(db, "barangMasuk", d.id));
+                }
               }
 
-              // Hapus dari barangKeluar (jenisGudang)
-              const qKeluar = query(
-                collection(db, "barangKeluar"),
-                where("jenisGudang", "==", gudangDipilih)
-              );
-              const snapKeluar = await getDocs(qKeluar);
-              for (const docKeluar of snapKeluar.docs) {
-                await deleteDoc(doc(db, "barangKeluar", docKeluar.id));
+              // barangKeluar
+              const snapKeluar = await getDocs(collection(db, "barangKeluar"));
+              for (const d of snapKeluar.docs) {
+                const trx = d.data() as Transaksi;
+                const jenis = String(trx.jenisForm ?? "").toUpperCase();
+                const tujuan = canonicalGudang(trx.gudangTujuan);
+                const headerAsal = canonicalGudang(trx.jenisGudang);
+
+                // Jika mutasi MASUK ke gudang ini → hapus seluruh dokumen
+                if (jenis === "MB" && tujuan === gudangDipilih) {
+                  await deleteDoc(doc(db, "barangKeluar", d.id));
+                  continue;
+                }
+
+                // Filter item yang BUKAN milik gudang ini (asal per item)
+                const items = Array.isArray(trx.items) ? trx.items : [];
+                const remaining = items.filter((it) => {
+                  const asalRaw =
+                    it.gdg && it.gdg.trim() !== "" ? it.gdg : trx.jenisGudang;
+                  const asalGroup = canonicalGudang(asalRaw);
+                  return asalGroup !== gudangDipilih;
+                });
+
+                if (remaining.length === items.length) continue; // tidak ada yang perlu dihapus
+                if (remaining.length === 0) {
+                  await deleteDoc(doc(db, "barangKeluar", d.id));
+                } else {
+                  await updateDoc(doc(db, "barangKeluar", d.id), {
+                    items: remaining,
+                  });
+                }
               }
 
-              // Hapus dari barangKeluar (gudangTujuan)
-              const qMutasiMasuk = query(
-                collection(db, "barangKeluar"),
-                where("gudangTujuan", "==", gudangDipilih)
+              Alert.alert(
+                "Sukses",
+                `✅ Semua data terkait ${gudangDipilih} dibersihkan.`
               );
-              const snapMutasi = await getDocs(qMutasiMasuk);
-              for (const docMutasi of snapMutasi.docs) {
-                await deleteDoc(doc(db, "barangKeluar", docMutasi.id));
-              }
-
-              Alert.alert("Sukses", "✅ Semua data dihapus.");
             } catch (err) {
               console.error(err);
               Alert.alert("Gagal", "❌ Terjadi kesalahan saat menghapus.");
@@ -332,6 +416,7 @@ export default function StockScreen() {
               </TouchableOpacity>
             )}
           </View>
+
           <TouchableOpacity
             onPress={deleteDocsByGudang}
             style={{
@@ -349,7 +434,7 @@ export default function StockScreen() {
                 textAlign: "center",
               }}
             >
-              🗑️ Hapus Semua Data di {gudangDipilih}
+              🗑️ Hapus Semua Data Terkait {gudangDipilih || "Gudang"}
             </Text>
           </TouchableOpacity>
         </ScrollView>
@@ -364,21 +449,14 @@ const styles = StyleSheet.create({
     paddingBottom: 100,
     backgroundColor: "#fff",
   },
-  content: {
-    paddingHorizontal: 16,
-    marginTop: 8,
-  },
+  content: { paddingHorizontal: 16, marginTop: 8 },
   title: {
     fontSize: 20,
     fontWeight: "bold",
     marginBottom: 12,
     textAlign: "center",
   },
-  dropdown: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
-  },
+  dropdown: { borderWidth: 1, borderColor: "#ccc", borderRadius: 8 },
   search: {
     borderWidth: 1,
     borderColor: "#ccc",
@@ -392,10 +470,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginBottom: 10,
   },
-  name: {
-    fontWeight: "bold",
-    fontSize: 16,
-  },
+  name: { fontWeight: "bold", fontSize: 16 },
   exportButton: {
     backgroundColor: "#007bff",
     padding: 14,
@@ -403,10 +478,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 20,
   },
-  exportText: {
-    color: "#fff",
-    fontWeight: "bold",
-  },
+  exportText: { color: "#fff", fontWeight: "bold" },
   summaryBox: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -415,18 +487,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginBottom: 12,
   },
-  summaryItem: {
-    alignItems: "center",
-    flex: 1,
-  },
-  summaryLabel: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#1e3a8a",
-  },
-  summaryValue: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#0f172a",
-  },
+  summaryItem: { alignItems: "center", flex: 1 },
+  summaryLabel: { fontSize: 14, fontWeight: "600", color: "#1e3a8a" },
+  summaryValue: { fontSize: 20, fontWeight: "bold", color: "#0f172a" },
 });
