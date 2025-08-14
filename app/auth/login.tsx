@@ -130,7 +130,7 @@ export default function LoginScreen() {
       };
       await AsyncStorage.setItem("userProfile", JSON.stringify(profile));
       await AsyncStorage.setItem("userLoggedIn", "true");
-      router.replace("/");
+      router.replace("/(tabs)");
       return;
     }
 
@@ -144,7 +144,7 @@ export default function LoginScreen() {
       };
       await AsyncStorage.setItem("userProfile", JSON.stringify(profile));
       await AsyncStorage.setItem("userLoggedIn", "true");
-      router.replace("/");
+      router.replace("/(tabs)");
       return;
     }
   };
