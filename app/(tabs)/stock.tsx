@@ -34,12 +34,22 @@ interface Item {
   medium: string;
   small: string;
 
+  // dokumen lama (sumber pemakaian)
   consumedL?: string;
   consumedM?: string;
   consumedS?: string;
 
   gdg?: string; // asal gudang per item
   principle: string;
+
+  // ➕ sisa pecahan (kembali ke stok)
+  leftoverM?: string; // sisa M dari pecah L→M
+  leftoverS?: string; // sisa S dari pecah M→S atau L→M→S
+
+  // ➕ pemakaian bersih (langsung mengurangi stok) — BISA NEGATIF untuk M/S!
+  netDL?: string;
+  netDM?: string;
+  netDS?: string;
 }
 
 interface Transaksi {
@@ -65,9 +75,16 @@ const normCode = (s: any) =>
     .trim()
     .toUpperCase();
 
+// Angka non-negatif (untuk input normal)
 const toInt = (v: any) => {
   const n = parseInt(String(v ?? "0").trim(), 10);
   return Number.isNaN(n) ? 0 : Math.max(0, n);
+};
+
+// 🔑 Angka apa adanya (boleh NEGATIF) — dipakai untuk netDM/netDS
+const toIntAny = (v: any) => {
+  const n = parseInt(String(v ?? "0").trim(), 10);
+  return Number.isNaN(n) ? 0 : n;
 };
 
 // 🔁 Pemetaan gudang fisik → grup logis
@@ -178,12 +195,38 @@ export default function StockScreen() {
         }
         const data = map.get(key)!;
 
-        const useL = toInt((item as any).consumedL ?? item.large);
-        const useM = toInt((item as any).consumedM ?? item.medium);
-        const useS = toInt((item as any).consumedS ?? item.small);
+        // ✅ PRIORITAS:
+        // 1) Pakai netDL/netDM/netDS (boleh NEGATIF untuk M/S)
+        // 2) Kalau tidak ada → pakai consumed* - leftover* (hasilnya boleh NEGATIF)
+        let useL = 0,
+          useM = 0,
+          useS = 0;
 
+        const hasNet =
+          (item as any).netDL !== undefined ||
+          (item as any).netDM !== undefined ||
+          (item as any).netDS !== undefined;
+
+        if (hasNet) {
+          useL = toIntAny((item as any).netDL);
+          useM = toIntAny((item as any).netDM); // ← IZINKAN NEGATIF
+          useS = toIntAny((item as any).netDS); // ← IZINKAN NEGATIF
+        } else {
+          const consumedL = toInt(item.consumedL ?? item.large);
+          const consumedM = toInt(item.consumedM ?? item.medium);
+          const consumedS = toInt(item.consumedS ?? item.small);
+
+          const leftoverM = toInt((item as any).leftoverM); // mungkin 0 kalau dok lama
+          const leftoverS = toInt((item as any).leftoverS);
+
+          useL = consumedL;
+          useM = consumedM - leftoverM; // ← bisa NEGATIF (menambah stok M)
+          useS = consumedS - leftoverS; // ← bisa NEGATIF (menambah stok S)
+        }
+
+        // Terapkan (stok tidak boleh minus)
         data.L = Math.max(0, data.L - useL);
-        data.M = Math.max(0, data.M - useM);
+        data.M = Math.max(0, data.M - useM); // jika useM = -3 → 0 - (-3) = +3 ✅
         data.S = Math.max(0, data.S - useS);
       });
     });
@@ -205,6 +248,7 @@ export default function StockScreen() {
           });
         }
         const data = map.get(key)!;
+        // Di gudang tujuan, yang DITERIMA = jumlah REQUEST (input L/M/S)
         data.L += toInt(item.large);
         data.M += toInt(item.medium);
         data.S += toInt(item.small);

@@ -1,4 +1,5 @@
-// ✅ OutScreen.tsx — Akses gudang terkunci berdasar user, principle auto-terisi, alokasi pakai consumed* + POST ke Apps Script
+// ✅ OutScreen.tsx — akses gudang berdasar user, principle auto, alokasi dengan leftover
+//    dan simpan NET DEDUCTION (netDL/netDM/netDS) agar stok selalu akurat.
 
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useFocusEffect } from "@react-navigation/native";
@@ -29,7 +30,7 @@ import * as XLSX from "xlsx";
 import { db } from "../../utils/firebase";
 import { expandAllowed, getUserProfile } from "../../utils/userProfile";
 
-/* ====== Tambahan: URL Apps Script BARANG KELUAR ====== */
+/* ====== URL Apps Script BARANG KELUAR ====== */
 const APPSCRIPT_OUT_URL =
   "https://script.google.com/macros/s/AKfycbzYtiZ87LBEJWjOnAF80W__inuO9dYNOdA8JgijUmonSmV7kG_BhElizoT22-fbZOE1/exec";
 
@@ -43,12 +44,24 @@ interface ItemOut {
   principle: string;
   gdg?: string;
   ed?: string;
+
+  // Pemakaian kotor (sumber):
   consumedL?: string;
   consumedM?: string;
   consumedS?: string;
+
+  // Sisa pecahan kembali ke stok:
+  leftoverM?: string; // sisa M dari L→M
+  leftoverS?: string; // sisa S dari M→S atau L→M→S
+
+  // 🔑 Pemakaian bersih (langsung mengurangi stok):
+  netDL?: string; // net deduction Large
+  netDM?: string; // net deduction Medium
+  netDS?: string; // net deduction Small
 }
+
 interface TransaksiOut {
-  jenisGudang: string; // asal (header)
+  jenisGudang: string; // gudang asal
   kodeGdng: string;
   kodeApos: string;
   kategori: string;
@@ -69,10 +82,12 @@ const formatDate = (date: Date) =>
   `${String(date.getDate()).padStart(2, "0")}-${String(
     date.getMonth() + 1
   ).padStart(2, "0")}-${date.getFullYear()}`;
+
 const toInt = (v: any) => {
   const n = parseInt(String(v ?? "0").trim(), 10);
   return Number.isNaN(n) ? 0 : Math.max(0, n);
 };
+
 const norm = (s: any) =>
   String(s ?? "")
     .trim()
@@ -114,7 +129,7 @@ export default function OutScreen() {
 
   // Akses user
   const [allowedGdg, setAllowedGdg] = useState<string[]>([]);
-  const [profile, setProfile] = useState<any>(null); // ➕ untuk identitas operator
+  const [profile, setProfile] = useState<any>(null);
 
   /* ====== Ambil data realtime & profile ====== */
   useEffect(() => {
@@ -137,7 +152,7 @@ export default function OutScreen() {
     };
   }, []);
 
-  // Ambil file konversi
+  // Ambil file konversi (dukung 2 versi header)
   useFocusEffect(
     useCallback(() => {
       const loadKonversi = async () => {
@@ -159,11 +174,15 @@ export default function OutScreen() {
           const konversiFinal = sheet.map((row: any) => ({
             Kode: String(row["Kode"] ?? "").trim(),
             KonversiL: parseInt(
-              row["Konversi Dari Large Ke Medium"] ?? "0",
+              (row["KonversiL"] ??
+                row["Konversi Dari Large Ke Medium"] ??
+                "0") as string,
               10
             ),
             KonversiM: parseInt(
-              row["Konversi Dari Medium Ke Small"] ?? "0",
+              (row["KonversiM"] ??
+                row["Konversi Dari Medium Ke Small"] ??
+                "0") as string,
               10
             ),
           }));
@@ -205,7 +224,7 @@ export default function OutScreen() {
       }
     }
 
-    // - barangKeluar (asal)
+    // - barangKeluar (asal) → pakai NET DEDUCTION bila tersedia
     for (const trx of keluarDocs) {
       const items = Array.isArray(trx.items) ? trx.items : [];
       for (const it of items) {
@@ -222,16 +241,19 @@ export default function OutScreen() {
           });
         }
         const row = map.get(key)!;
-        const useL = toInt(it.consumedL ?? it.large);
-        const useM = toInt(it.consumedM ?? it.medium);
-        const useS = toInt(it.consumedS ?? it.small);
+
+        // Prefer netDL/netDM/netDS → jika tidak ada, fallback ke consumed*, lalu ke input lama
+        const useL = toInt((it as any).netDL ?? it.consumedL ?? it.large);
+        const useM = toInt((it as any).netDM ?? it.consumedM ?? it.medium);
+        const useS = toInt((it as any).netDS ?? it.consumedS ?? it.small);
+
         row.L = Math.max(0, row.L - useL);
         row.M = Math.max(0, row.M - useM);
         row.S = Math.max(0, row.S - useS);
       }
     }
 
-    // + mutasi masuk (tujuan)
+    // + mutasi masuk (tujuan) — tetap menambah sesuai nilai input (barang diterima)
     for (const trx of keluarDocs) {
       if (!trx.gudangTujuan) continue;
       const tujuan = trx.gudangTujuan;
@@ -248,6 +270,7 @@ export default function OutScreen() {
           });
         }
         const row = map.get(key)!;
+        // Di tujuan, yang diterima adalah sesuai REQUEST (bukan consumed*)
         row.L += toInt(it.large);
         row.M += toInt(it.medium);
         row.S += toInt(it.small);
@@ -257,7 +280,7 @@ export default function OutScreen() {
     return map;
   }, [masukDocs, keluarDocs]);
 
-  // Daftar barang per gudang yang stok neto > 0 (untuk dropdown)
+  // Daftar barang per gudang > 0
   const itemsByGudang = useMemo(() => {
     const result: Record<
       string,
@@ -292,17 +315,19 @@ export default function OutScreen() {
     let consumedL = 0,
       consumedM = 0,
       consumedS = 0;
+    let addBackM = 0,
+      addBackS = 0;
 
-    // L → hanya pakai L
+    // L: hanya pakai L
     if (reqL > 0) {
       const useL = Math.min(reqL, stock.L);
       consumedL += useL;
       stock.L -= useL;
       reqL -= useL;
-      if (reqL > 0) return null; // tidak bisa naikkan L
+      if (reqL > 0) return null;
     }
 
-    // M → pakai M lalu convert dari L jika perlu
+    // M: pakai M lalu L→M
     if (reqM > 0) {
       const useM = Math.min(reqM, stock.M);
       consumedM += useM;
@@ -314,14 +339,22 @@ export default function OutScreen() {
         const useFromL = Math.min(stock.L, needL);
         consumedL += useFromL;
         stock.L -= useFromL;
+
         const producedM = useFromL * konv.LtoM;
         const takeM = Math.min(reqM, producedM);
         reqM -= takeM;
+
+        const leftoverM = producedM - takeM;
+        if (leftoverM > 0) {
+          addBackM += leftoverM;
+          stock.M += leftoverM; // kembali ke stok
+        }
       }
+
       if (reqM > 0) return null;
     }
 
-    // S → pakai S, lalu dari M, lalu dari L→M→S
+    // S: pakai S, lalu M→S, lalu L→M→S
     if (reqS > 0) {
       const useS = Math.min(reqS, stock.S);
       consumedS += useS;
@@ -333,9 +366,16 @@ export default function OutScreen() {
         const useM2 = Math.min(stock.M, needM);
         consumedM += useM2;
         stock.M -= useM2;
+
         const producedS1 = useM2 * konv.MtoS;
         const takeS1 = Math.min(reqS, producedS1);
         reqS -= takeS1;
+
+        const leftoverS1 = producedS1 - takeS1;
+        if (leftoverS1 > 0) {
+          addBackS += leftoverS1;
+          stock.S += leftoverS1;
+        }
       }
 
       if (reqS > 0 && konv.LtoM > 0 && konv.MtoS > 0) {
@@ -344,15 +384,37 @@ export default function OutScreen() {
         const useL2 = Math.min(stock.L, needL2);
         consumedL += useL2;
         stock.L -= useL2;
+
         const producedS2 = useL2 * sPerL;
         const takeS2 = Math.min(reqS, producedS2);
         reqS -= takeS2;
+
+        const leftoverS2 = producedS2 - takeS2;
+        if (leftoverS2 > 0) {
+          addBackS += leftoverS2;
+          stock.S += leftoverS2;
+        }
       }
 
       if (reqS > 0) return null;
     }
 
-    return { consumedL, consumedM, consumedS, leftStock: stock };
+    // 🔑 pemakaian bersih
+    const netDL = consumedL; // L tidak punya leftover
+    const netDM = consumedM - addBackM; // M yang benar-benar hilang dari stok
+    const netDS = consumedS - addBackS; // S yang benar-benar hilang dari stok
+
+    return {
+      consumedL,
+      consumedM,
+      consumedS,
+      addBackM,
+      addBackS,
+      netDL,
+      netDM,
+      netDS,
+      leftStock: stock,
+    };
   }
 
   /* ====== Handlers ====== */
@@ -406,6 +468,7 @@ export default function OutScreen() {
     setOpenNamaBarang((p) => [...p, false]);
     setOpenGudangPerItem((p) => [...p, false]);
   };
+
   const removeItem = (index: number) => {
     const updated = [...itemList];
     updated.splice(index, 1);
@@ -426,7 +489,7 @@ export default function OutScreen() {
     if (!allowedGdg.includes(jenisGudang)) {
       Alert.alert(
         "Akses ditolak",
-        "Anda tidak boleh mengeluarkan barang dari gudang ini."
+        "Anda tidak boleh mengeluarkan dari gudang ini."
       );
       return;
     }
@@ -466,7 +529,7 @@ export default function OutScreen() {
         principle: "-",
       };
 
-      // konversi
+      // konversi per kode
       const k = konversiData.find((z) => norm(z.Kode) === norm(item.kode));
       const LtoM = k?.KonversiL ?? 0;
       const MtoS = k?.KonversiM ?? 0;
@@ -496,10 +559,17 @@ export default function OutScreen() {
         consumedL: String(alloc.consumedL),
         consumedM: String(alloc.consumedM),
         consumedS: String(alloc.consumedS),
+        leftoverM: String(alloc.addBackM),
+        leftoverS: String(alloc.addBackS),
+
+        // 🔑 simpan pemakaian bersih
+        netDL: String(alloc.netDL),
+        netDM: String(alloc.netDM),
+        netDS: String(alloc.netDS),
       });
     }
 
-    // 👤 siapkan identitas operator untuk spreadsheet
+    // identitas operator
     const operatorUsername = profile?.username || "-";
     const operatorName =
       (profile?.guestName && String(profile.guestName).trim()) ||
@@ -526,10 +596,10 @@ export default function OutScreen() {
     };
 
     try {
-      // 🔥 Simpan ke Firestore (tetap seperti sebelumnya)
+      // 🔥 Firestore
       await setDoc(doc(db, "barangKeluar", docId), newEntry);
 
-      // 📤 Kirim juga ke Google Spreadsheet via Apps Script
+      // 📤 Kirim ke Google Spreadsheet
       const sheetPayload = {
         ...newEntry,
         operatorName,
@@ -543,7 +613,6 @@ export default function OutScreen() {
           body: JSON.stringify(sheetPayload),
         });
       } catch (e) {
-        // Gagal kirim ke sheet tidak menggagalkan simpan Firestore
         console.warn("Gagal kirim ke Spreadsheet:", e);
       }
 
@@ -670,13 +739,13 @@ export default function OutScreen() {
                 setValue={setNamaSopir}
                 items={[
                   {
-                    label: "AFIF - MIZAN ( KANVAS )",
-                    value: "AFIF - MIZAN ( KANVAS )",
+                    label: "Dedi - Deny Mp ",
+                    value: "Dedi - Deny MP",
                   },
-                  { label: "DEDI - DENY MP", value: "DEDI - DENY MP" },
-                  { label: "DENY SP - EKO", value: "DENY SP - EKO" },
-                  { label: "ANWAR", value: "ANWAR" },
-                  { label: "DANANG", value: "DANANG" },
+                  { label: "Deny SP - Eko", value: "Deny SP - Eko" },
+                  { label: "Anwar - Afif", value: "Anwar - Afif" },
+                  { label: "Fila - Mizan ", value: "Fila - Mizan" },
+                  { label: "-", value: "-" },
                 ]}
                 placeholder="Pilih Sopir"
                 style={styles.dropdown}
@@ -692,16 +761,16 @@ export default function OutScreen() {
                 setValue={setNomorKendaraan}
                 items={[
                   {
-                    label: "AG 8574 AJ ( HIJAU )",
-                    value: "AG 8574 AJ ( HIJAU )",
+                    label: "AG 8574 AJ ( HIJAU ) ( KANVAS )",
+                    value: "AG 8574 AJ ( HIJAU ) ( KANVAS )",
                   },
                   {
-                    label: "AG 8602 RO ( PUTIH )",
-                    value: "AG 8602 RO ( PUTIH )",
+                    label: "AG 8602 RO ( PUTIH ) ",
+                    value: "AG 8602 RO ( PUTIH ) ",
                   },
                   {
-                    label: " AG 8796 RU ( KUNING )",
-                    value: " AG 8796 RU ( KUNING )",
+                    label: "AG 8796 RU ( KUNING )",
+                    value: "AG 8796 RU ( KUNING )",
                   },
                   {
                     label: "AG 9115 RK ( MERAH BOX )",
