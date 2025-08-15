@@ -1,4 +1,6 @@
-// Final Version of StockDetailScreen.tsx with Sorting, Search, Delete, and Full Edit UI
+// StockDetailScreen.tsx — In Detail
+// - Export Excel (aman Android via SAF) + filter range tanggal + search
+// - Edit: HANYA "No Faktur" yang bisa diubah; lainnya read-only
 
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useFocusEffect } from "@react-navigation/native";
@@ -11,7 +13,7 @@ import {
   onSnapshot,
   updateDoc,
 } from "firebase/firestore";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   Alert,
   Keyboard,
@@ -48,23 +50,29 @@ interface PurchaseForm {
   principle: string;
   jenisForm?: string;
   jenisGudang?: string;
-  waktuInput: string;
+  waktuInput: string; // ISO
   items: ItemInput[];
 }
 
 export default function StockDetailScreen() {
   const [allData, setAllData] = useState<PurchaseForm[]>([]);
   const [searchText, setSearchText] = useState("");
+
+  // Edit modal (No Faktur only)
   const [modalVisible, setModalVisible] = useState(false);
   const [editedTrx, setEditedTrx] = useState<PurchaseForm | null>(null);
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
+
+  // Filter tanggal
+  const [startDate, setStartDate] = useState<Date | null>(null);
+  const [endDate, setEndDate] = useState<Date | null>(null);
+  const [showStartPicker, setShowStartPicker] = useState(false);
+  const [showEndPicker, setShowEndPicker] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
       const unsub = onSnapshot(collection(db, "barangMasuk"), (snapshot) => {
         const all: PurchaseForm[] = snapshot.docs.map(
-          (doc) => ({ id: doc.id, ...doc.data() } as PurchaseForm)
+          (d) => ({ id: d.id, ...d.data() } as PurchaseForm)
         );
         setAllData(all);
       });
@@ -72,24 +80,50 @@ export default function StockDetailScreen() {
     }, [])
   );
 
-  const filteredData = allData.filter((trx) => {
-    const tgl = new Date(trx.waktuInput).toLocaleDateString("id-ID");
-    const noFaktur = trx.kodeApos || trx.kodeRetur || "";
-    return (
-      tgl.includes(searchText) ||
-      noFaktur.toLowerCase().includes(searchText.toLowerCase())
-    );
-  });
+  // Helpers tanggal
+  const startOfDay = (d: Date) =>
+    new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0).getTime();
+  const endOfDay = (d: Date) =>
+    new Date(
+      d.getFullYear(),
+      d.getMonth(),
+      d.getDate(),
+      23,
+      59,
+      59,
+      999
+    ).getTime();
 
-  const grouped = filteredData.reduce((acc, trx) => {
-    const date = new Date(trx.waktuInput).toLocaleDateString("id-ID");
-    const jenis = trx.jenisForm || "Pembelian";
-    if (!acc[date]) acc[date] = {};
-    if (!acc[date][jenis]) acc[date][jenis] = [];
-    acc[date][jenis].push(trx);
-    return acc;
-  }, {} as Record<string, Record<string, PurchaseForm[]>>);
+  // Filter data (tanggal + search)
+  const filteredData = useMemo(() => {
+    const startMs = startDate ? startOfDay(startDate) : -Infinity;
+    const endMs = endDate ? endOfDay(endDate) : Infinity;
+    const q = searchText.trim().toLowerCase();
 
+    return allData.filter((trx) => {
+      const tMs = new Date(trx.waktuInput).getTime();
+      if (tMs < startMs || tMs > endMs) return false;
+
+      if (!q) return true;
+      const tgl = new Date(trx.waktuInput).toLocaleDateString("id-ID");
+      const noFaktur = (trx.kodeApos || trx.kodeRetur || "").toLowerCase();
+      return tgl.includes(q) || noFaktur.includes(q);
+    });
+  }, [allData, startDate, endDate, searchText]);
+
+  // Group per tanggal → jenis
+  const grouped = useMemo(() => {
+    return filteredData.reduce((acc, trx) => {
+      const date = new Date(trx.waktuInput).toLocaleDateString("id-ID");
+      const jenis = trx.jenisForm || "Pembelian";
+      if (!acc[date]) acc[date] = {};
+      if (!acc[date][jenis]) acc[date][jenis] = [];
+      acc[date][jenis].push(trx);
+      return acc;
+    }, {} as Record<string, Record<string, PurchaseForm[]>>);
+  }, [filteredData]);
+
+  // Hapus
   const handleDelete = async (trx: PurchaseForm) => {
     if (!trx.id) return;
     Alert.alert("Hapus Transaksi", "Yakin ingin menghapus data ini?", [
@@ -104,92 +138,245 @@ export default function StockDetailScreen() {
     ]);
   };
 
-  const handleChangeItem = (
-    index: number,
-    field: keyof ItemInput,
-    value: string
-  ) => {
-    if (!editedTrx) return;
-    const updatedItems = [...editedTrx.items];
-    updatedItems[index] = { ...updatedItems[index], [field]: value };
-    setEditedTrx({ ...editedTrx, items: updatedItems });
-  };
-
+  // Simpan edit (HANYA No Faktur)
   const handleSave = async () => {
-    if (!editedTrx || !editedTrx.id) return;
+    if (!editedTrx?.id) return;
     try {
-      await updateDoc(doc(db, "barangMasuk", editedTrx.id), {
-        gudang: editedTrx.gudang,
-        jenisGudang: editedTrx.jenisGudang,
-        jenisForm: editedTrx.jenisForm,
-        principle: editedTrx.principle,
-        kodeGdng: editedTrx.kodeGdng,
-        kodeApos: editedTrx.kodeApos,
-        kodeRetur: editedTrx.kodeRetur,
-        waktuInput: editedTrx.waktuInput,
-        items: editedTrx.items,
-      });
-      Alert.alert("Berhasil", "Data berhasil diperbarui");
+      const payload: any = {};
+      if (editedTrx.jenisForm?.startsWith("Return")) {
+        payload.kodeRetur = editedTrx.kodeRetur ?? "";
+      } else {
+        payload.kodeApos = editedTrx.kodeApos ?? "";
+      }
+      await updateDoc(doc(db, "barangMasuk", editedTrx.id), payload);
+      Alert.alert("Berhasil", "No Faktur berhasil diperbarui");
       setModalVisible(false);
-    } catch (err) {
-      Alert.alert("Gagal menyimpan perubahan");
+    } catch (e) {
+      Alert.alert("Gagal", "Tidak dapat menyimpan perubahan No Faktur.");
     }
   };
 
-  const onChangeDate = (event: any, selected?: Date) => {
-    setShowDatePicker(false);
-    if (selected && editedTrx) {
-      setSelectedDate(selected);
-      const iso = selected.toISOString();
-      setEditedTrx({ ...editedTrx, waktuInput: iso });
-    }
-  };
-
-  //
-
-  const exportToExcel = () => {
-    const exportData: any[] = [];
-    allData.forEach((trx) => {
-      trx.items.forEach((item) => {
-        exportData.push({
-          Tanggal: new Date(trx.waktuInput).toLocaleDateString("id-ID"),
-          JenisGudang: trx.jenisGudang || "-",
-          JenisForm: trx.jenisForm || "-",
-          Gudang: trx.gudang,
-          Principle: trx.principle,
-          KodeGudang: trx.kodeGdng,
-          NoFaktur: trx.kodeApos || trx.kodeRetur || "-",
-          NamaBarang: item.namaBarang,
-          KodeBarang: item.kode,
-          Large: item.large,
-          Medium: item.medium,
-          Small: item.small,
-          Catatan: item.catatan || "-",
-          ED: item.ed || "-", // ✅ Tambahkan ED di Excel
+  // Export → XLSX (berdasarkan filteredData) — aman untuk Android (SAF)
+  const exportToExcel = async () => {
+    try {
+      const rows: any[] = [];
+      filteredData.forEach((trx) => {
+        trx.items.forEach((it) => {
+          rows.push({
+            Tanggal: new Date(trx.waktuInput).toLocaleDateString("id-ID"),
+            JenisGudang: trx.jenisGudang || "-",
+            JenisForm: trx.jenisForm || "-",
+            Gudang: trx.gudang,
+            Principle: trx.principle,
+            KodeGudang: trx.kodeGdng,
+            NoFaktur: trx.kodeApos || trx.kodeRetur || "-",
+            NamaBarang: it.namaBarang,
+            KodeBarang: it.kode,
+            Large: it.large,
+            Medium: it.medium,
+            Small: it.small,
+            Catatan: it.catatan || "-",
+            ED: it.ed || "-",
+          });
         });
       });
-    });
 
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "BarangMasuk");
-    const uri = FileSystem.cacheDirectory + "BarangMasuk.xlsx";
-    const buffer = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
+      if (rows.length === 0) {
+        Alert.alert(
+          "Tidak ada data",
+          "Tidak ada baris yang cocok dengan filter."
+        );
+        return;
+      }
 
-    FileSystem.writeAsStringAsync(uri, buffer, {
-      encoding: FileSystem.EncodingType.Base64,
-    }).then(() => Sharing.shareAsync(uri));
+      const ws = XLSX.utils.json_to_sheet(rows, {
+        header: [
+          "Tanggal",
+          "JenisGudang",
+          "JenisForm",
+          "Gudang",
+          "Principle",
+          "KodeGudang",
+          "NoFaktur",
+          "NamaBarang",
+          "KodeBarang",
+          "Large",
+          "Medium",
+          "Small",
+          "Catatan",
+          "ED",
+        ],
+      });
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "BarangMasuk");
+
+      const base64 = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
+
+      const safe = (s: string) => s.replace(/[\\/:*?"<>|]/g, "-");
+      const fmt = (d?: Date | null) =>
+        d
+          ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
+              2,
+              "0"
+            )}-${String(d.getDate()).padStart(2, "0")}`
+          : "ALL";
+      const nameHint = `${fmt(startDate)}_to_${fmt(endDate)}`;
+      const fileName = safe(`BarangMasuk_${nameHint}.xlsx`);
+      const mime =
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+      if (Platform.OS === "android") {
+        try {
+          const perm =
+            await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+          if (perm.granted) {
+            const uri = await FileSystem.StorageAccessFramework.createFileAsync(
+              perm.directoryUri,
+              fileName,
+              mime
+            );
+            await FileSystem.writeAsStringAsync(uri, base64, {
+              encoding: FileSystem.EncodingType.Base64,
+            });
+            Alert.alert("Berhasil", `File tersimpan: ${fileName}`);
+            return;
+          }
+        } catch (e) {
+          console.warn("SAF error, fallback ke cache+share:", e);
+        }
+      }
+
+      const fileUri = FileSystem.cacheDirectory + fileName;
+      await FileSystem.writeAsStringAsync(fileUri, base64, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(fileUri, {
+          mimeType: mime,
+          UTI: "com.microsoft.excel.xlsx",
+          dialogTitle: "Export Data Barang Masuk",
+        });
+      } else {
+        Alert.alert("File siap", `Lokasi: ${fileUri}`);
+      }
+    } catch (e) {
+      console.error("Export error:", e);
+      Alert.alert(
+        "Export gagal",
+        "Terjadi kesalahan saat membuat atau membagikan file Excel."
+      );
+    }
+  };
+
+  // Picker filter
+  const handlePickStart = (_: any, d?: Date) => {
+    setShowStartPicker(false);
+    if (!d) return;
+    if (endDate && d > endDate) {
+      setStartDate(endDate);
+      setEndDate(d);
+    } else {
+      setStartDate(d);
+    }
+  };
+  const handlePickEnd = (_: any, d?: Date) => {
+    setShowEndPicker(false);
+    if (!d) return;
+    if (startDate && d < startDate) {
+      setEndDate(startDate);
+      setStartDate(d);
+    } else {
+      setEndDate(d);
+    }
+  };
+  const clearDates = () => {
+    setStartDate(null);
+    setEndDate(null);
   };
 
   return (
     <ScrollView
       style={{ flex: 1, padding: 16, backgroundColor: "#fff" }}
       contentContainerStyle={{ paddingBottom: 100 }}
+      keyboardShouldPersistTaps="handled"
     >
       <Text style={{ fontSize: 20, fontWeight: "bold", marginBottom: 12 }}>
         Riwayat Barang Masuk
       </Text>
 
+      {/* Export di atas */}
+      <TouchableOpacity
+        onPress={exportToExcel}
+        style={{
+          backgroundColor: "#28a745",
+          padding: 12,
+          borderRadius: 8,
+          alignItems: "center",
+          marginBottom: 12,
+        }}
+      >
+        <Text style={{ color: "white", fontWeight: "bold" }}>
+          Export (Sesuai Filter)
+        </Text>
+      </TouchableOpacity>
+
+      {/* Filter tanggal */}
+      <View
+        style={{
+          flexDirection: "row",
+          gap: 10,
+          marginBottom: 12,
+          alignItems: "center",
+        }}
+      >
+        <TouchableOpacity
+          onPress={() => setShowStartPicker(true)}
+          style={[styles.input, { flex: 1 }]}
+        >
+          <Text>
+            Dari: {startDate ? startDate.toLocaleDateString("id-ID") : "—"}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => setShowEndPicker(true)}
+          style={[styles.input, { flex: 1 }]}
+        >
+          <Text>
+            Sampai: {endDate ? endDate.toLocaleDateString("id-ID") : "—"}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={clearDates}
+          style={{
+            paddingVertical: 12,
+            paddingHorizontal: 14,
+            backgroundColor: "#e5e7eb",
+            borderRadius: 8,
+          }}
+        >
+          <Text style={{ fontWeight: "600", color: "#111827" }}>Reset</Text>
+        </TouchableOpacity>
+      </View>
+
+      {showStartPicker && (
+        <DateTimePicker
+          value={startDate || new Date()}
+          mode="date"
+          display="default"
+          onChange={handlePickStart}
+        />
+      )}
+      {showEndPicker && (
+        <DateTimePicker
+          value={endDate || new Date()}
+          mode="date"
+          display="default"
+          onChange={handlePickEnd}
+        />
+      )}
+
+      {/* Search */}
       <TextInput
         placeholder="Cari No Faktur atau Tanggal (dd/mm/yyyy)"
         style={{
@@ -203,6 +390,7 @@ export default function StockDetailScreen() {
         onChangeText={setSearchText}
       />
 
+      {/* List */}
       {Object.entries(grouped)
         .sort((a, b) => {
           const dateA = new Date(a[0].split("/").reverse().join("-"));
@@ -234,7 +422,9 @@ export default function StockDetailScreen() {
                     <Text style={{ fontWeight: "bold" }}>
                       No Faktur: {trx.kodeApos || trx.kodeRetur || "-"}
                     </Text>
-                    <Text>Waktu: {trx.waktuInput}</Text>
+                    <Text>
+                      Waktu: {new Date(trx.waktuInput).toLocaleString("id-ID")}
+                    </Text>
                     <View
                       style={{ flexDirection: "row", gap: 10, marginTop: 8 }}
                     >
@@ -277,6 +467,7 @@ export default function StockDetailScreen() {
           </View>
         ))}
 
+      {/* Modal edit — hanya No Faktur editable */}
       <Modal visible={modalVisible} transparent animationType="slide">
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -306,7 +497,7 @@ export default function StockDetailScreen() {
                       marginBottom: 10,
                     }}
                   >
-                    Edit Transaksi
+                    Edit No Faktur
                   </Text>
 
                   <Text>Jenis Gudang</Text>
@@ -341,14 +532,22 @@ export default function StockDetailScreen() {
                   <TextInput
                     style={styles.input}
                     value={editedTrx.kodeGdng}
-                    onChangeText={(t) =>
-                      setEditedTrx({ ...editedTrx, kodeGdng: t })
-                    }
+                    editable={false}
                   />
 
-                  <Text>No Faktur</Text>
+                  <Text>Tanggal</Text>
                   <TextInput
                     style={styles.input}
+                    value={new Date(editedTrx.waktuInput).toLocaleDateString(
+                      "id-ID"
+                    )}
+                    editable={false}
+                  />
+
+                  {/* Satu-satunya field yang bisa diubah */}
+                  <Text>No Faktur</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: "#fff" }]}
                     value={editedTrx.kodeApos || editedTrx.kodeRetur || ""}
                     onChangeText={(t) => {
                       if (editedTrx.jenisForm?.startsWith("Return")) {
@@ -357,34 +556,15 @@ export default function StockDetailScreen() {
                         setEditedTrx({ ...editedTrx, kodeApos: t });
                       }
                     }}
+                    placeholder="No Faktur"
                   />
 
-                  <Text>Tanggal</Text>
-                  <TouchableOpacity
-                    onPress={() => setShowDatePicker(true)}
-                    style={styles.input}
-                  >
-                    <Text>
-                      {new Date(editedTrx.waktuInput).toLocaleDateString(
-                        "id-ID"
-                      )}
-                    </Text>
-                  </TouchableOpacity>
-                  {showDatePicker && (
-                    <DateTimePicker
-                      value={selectedDate}
-                      mode="date"
-                      display="default"
-                      onChange={onChangeDate}
-                    />
-                  )}
-                  {/*  */}
-
+                  {/* Items (read-only) */}
                   {editedTrx.items.map((item, i) => (
                     <View
                       key={i}
                       style={{
-                        backgroundColor: "#eee",
+                        backgroundColor: "#f1f5f9",
                         padding: 10,
                         borderRadius: 6,
                         marginBottom: 10,
@@ -393,36 +573,12 @@ export default function StockDetailScreen() {
                       <Text style={{ fontWeight: "bold" }}>
                         {item.namaBarang}
                       </Text>
-                      <TextInput
-                        style={styles.input}
-                        value={item.large}
-                        onChangeText={(t) => handleChangeItem(i, "large", t)}
-                        placeholder="Large"
-                      />
-                      <TextInput
-                        style={styles.input}
-                        value={item.medium}
-                        onChangeText={(t) => handleChangeItem(i, "medium", t)}
-                        placeholder="Medium"
-                      />
-                      <TextInput
-                        style={styles.input}
-                        value={item.small}
-                        onChangeText={(t) => handleChangeItem(i, "small", t)}
-                        placeholder="Small"
-                      />
-                      <TextInput
-                        style={styles.input}
-                        value={item.catatan || ""}
-                        onChangeText={(t) => handleChangeItem(i, "catatan", t)}
-                        placeholder="Catatan"
-                      />
-                      <TextInput
-                        style={styles.input}
-                        value={item.ed || ""}
-                        onChangeText={(t) => handleChangeItem(i, "ed", t)}
-                        placeholder="ED (dd-mm-yyyy)"
-                      />
+                      <Text>Kode: {item.kode}</Text>
+                      <Text>Large: {item.large}</Text>
+                      <Text>Medium: {item.medium}</Text>
+                      <Text>Small: {item.small}</Text>
+                      <Text>Catatan: {item.catatan || "-"}</Text>
+                      <Text>ED: {item.ed || "-"}</Text>
                     </View>
                   ))}
 
@@ -459,18 +615,6 @@ export default function StockDetailScreen() {
           </TouchableWithoutFeedback>
         </KeyboardAvoidingView>
       </Modal>
-      <TouchableOpacity
-        onPress={exportToExcel}
-        style={{
-          marginTop: 20,
-          backgroundColor: "#28a745",
-          padding: 14,
-          borderRadius: 8,
-          alignItems: "center",
-        }}
-      >
-        <Text style={{ color: "white", fontWeight: "bold" }}>Export Semua</Text>
-      </TouchableOpacity>
     </ScrollView>
   );
 }
@@ -482,5 +626,6 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     padding: 10,
     marginBottom: 10,
+    backgroundColor: "#f8fafc", // abu-abu ringan untuk menandai read-only
   },
 });

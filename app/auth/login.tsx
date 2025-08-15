@@ -170,7 +170,7 @@ export default function LoginScreen() {
             {/* ⬇️ Logo Presisi persis di bawah judul */}
             <Image
               // Sesuaikan path jika struktur proyek berbeda
-              source={require("../../assets/images/logoPresisi.png")}
+              source={require("../../assets/images/logoPresisi2.png")}
               style={styles.logo}
               resizeMode="contain"
             />
@@ -269,7 +269,7 @@ const styles = StyleSheet.create({
   // ⬇️ style logo
   logo: {
     width: 360,
-    height: 200,
+    height: 180,
     marginTop: 8,
     marginBottom: 6,
   },
