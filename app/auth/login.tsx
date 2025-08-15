@@ -4,6 +4,7 @@ import React, { useMemo, useState } from "react";
 import {
   Alert,
   Dimensions,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -165,7 +166,16 @@ export default function LoginScreen() {
 
           <View style={{ alignItems: "center", marginTop: 60 }}>
             <Text style={styles.title}>Gudang Astro</Text>
-            <Text style={{ color: "#6b7280", marginTop: 4 }}>
+
+            {/* ⬇️ Logo Presisi persis di bawah judul */}
+            <Image
+              // Sesuaikan path jika struktur proyek berbeda
+              source={require("../../assets/images/logoPresisi.png")}
+              style={styles.logo}
+              resizeMode="contain"
+            />
+
+            <Text style={styles.subtitle}>
               Login Multi Gudang — PIC & Guest
             </Text>
           </View>
@@ -209,7 +219,7 @@ export default function LoginScreen() {
               <Text style={styles.loginButtonText}>Login</Text>
             </TouchableOpacity>
 
-            <View style={styles.helpBox}>
+            {/* <View style={styles.helpBox}>
               <Text style={styles.helpTitle}>Contoh Akun</Text>
               <Text style={styles.helpLine}>
                 Gudang A → PIC: deny/1234, Guest: ga/0000
@@ -223,7 +233,7 @@ export default function LoginScreen() {
               <Text style={[styles.helpLine, { marginTop: 6 }]}>
                 Nama operator akan tampil di In/Out Detail & Spreadsheet.
               </Text>
-            </View>
+            </View> */}
           </View>
 
           {/* FOOTER */}
@@ -256,6 +266,14 @@ const styles = StyleSheet.create({
     color: "#007AFF",
     marginTop: -30,
   },
+  // ⬇️ style logo
+  logo: {
+    width: 360,
+    height: 200,
+    marginTop: 8,
+    marginBottom: 6,
+  },
+  subtitle: { color: "#6b7280", marginTop: 2 },
   form: { paddingHorizontal: 20, marginTop: 40 },
   input: {
     borderWidth: 1,
