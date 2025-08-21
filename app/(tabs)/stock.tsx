@@ -6,6 +6,8 @@ import {
   doc,
   getDocs,
   onSnapshot,
+  serverTimestamp,
+  setDoc,
   updateDoc,
 } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
@@ -13,6 +15,7 @@ import {
   Alert,
   Keyboard,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -34,19 +37,16 @@ interface Item {
   medium: string;
   small: string;
 
-  // dokumen lama (sumber pemakaian)
   consumedL?: string;
   consumedM?: string;
   consumedS?: string;
 
-  gdg?: string; // asal gudang per item
+  gdg?: string;
   principle: string;
 
-  // ➕ sisa pecahan (kembali ke stok)
-  leftoverM?: string; // sisa M dari pecah L→M
-  leftoverS?: string; // sisa S dari pecah M→S atau L→M→S
+  leftoverM?: string;
+  leftoverS?: string;
 
-  // ➕ pemakaian bersih (langsung mengurangi stok) — BISA NEGATIF untuk M/S!
   netDL?: string;
   netDM?: string;
   netDS?: string;
@@ -70,24 +70,24 @@ type StokRow = {
   totalSmall: number;
 };
 
+// 🔐 Password admin (ganti kalau perlu)
+const STOCK_ADMIN_PASSWORD = "admin123";
+
 const normCode = (s: any) =>
   String(s ?? "")
     .trim()
     .toUpperCase();
 
-// Angka non-negatif (untuk input normal)
 const toInt = (v: any) => {
   const n = parseInt(String(v ?? "0").trim(), 10);
   return Number.isNaN(n) ? 0 : Math.max(0, n);
 };
 
-// 🔑 Angka apa adanya (boleh NEGATIF) — dipakai untuk netDM/netDS
 const toIntAny = (v: any) => {
   const n = parseInt(String(v ?? "0").trim(), 10);
   return Number.isNaN(n) ? 0 : n;
 };
 
-// 🔁 Pemetaan gudang fisik → grup logis
 const canonicalGudang = (g: any): string => {
   const x = String(g ?? "").trim();
   const U = x.toUpperCase();
@@ -120,6 +120,14 @@ export default function StockScreen() {
     { label: "Gudang BCD", value: "Gudang BCD" },
     { label: "Gudang E (Bad Stock)", value: "Gudang E (Bad Stock)" },
   ]);
+
+  // ====== Edit Modal State ======
+  const [editVisible, setEditVisible] = useState(false);
+  const [editTarget, setEditTarget] = useState<StokRow | null>(null);
+  const [inputL, setInputL] = useState("");
+  const [inputM, setInputM] = useState("");
+  const [inputS, setInputS] = useState("");
+  const [adminPassword, setAdminPassword] = useState("");
 
   useEffect(() => {
     const unsubIn = onSnapshot(collection(db, "barangMasuk"), (snapshot) => {
@@ -195,9 +203,6 @@ export default function StockScreen() {
         }
         const data = map.get(key)!;
 
-        // ✅ PRIORITAS:
-        // 1) Pakai netDL/netDM/netDS (boleh NEGATIF untuk M/S)
-        // 2) Kalau tidak ada → pakai consumed* - leftover* (hasilnya boleh NEGATIF)
         let useL = 0,
           useM = 0,
           useS = 0;
@@ -209,24 +214,23 @@ export default function StockScreen() {
 
         if (hasNet) {
           useL = toIntAny((item as any).netDL);
-          useM = toIntAny((item as any).netDM); // ← IZINKAN NEGATIF
-          useS = toIntAny((item as any).netDS); // ← IZINKAN NEGATIF
+          useM = toIntAny((item as any).netDM);
+          useS = toIntAny((item as any).netDS);
         } else {
           const consumedL = toInt(item.consumedL ?? item.large);
           const consumedM = toInt(item.consumedM ?? item.medium);
           const consumedS = toInt(item.consumedS ?? item.small);
 
-          const leftoverM = toInt((item as any).leftoverM); // mungkin 0 kalau dok lama
+          const leftoverM = toInt((item as any).leftoverM);
           const leftoverS = toInt((item as any).leftoverS);
 
           useL = consumedL;
-          useM = consumedM - leftoverM; // ← bisa NEGATIF (menambah stok M)
-          useS = consumedS - leftoverS; // ← bisa NEGATIF (menambah stok S)
+          useM = consumedM - leftoverM;
+          useS = consumedS - leftoverS;
         }
 
-        // Terapkan (stok tidak boleh minus)
         data.L = Math.max(0, data.L - useL);
-        data.M = Math.max(0, data.M - useM); // jika useM = -3 → 0 - (-3) = +3 ✅
+        data.M = Math.max(0, data.M - useM);
         data.S = Math.max(0, data.S - useS);
       });
     });
@@ -248,7 +252,6 @@ export default function StockScreen() {
           });
         }
         const data = map.get(key)!;
-        // Di gudang tujuan, yang DITERIMA = jumlah REQUEST (input L/M/S)
         data.L += toInt(item.large);
         data.M += toInt(item.medium);
         data.S += toInt(item.small);
@@ -307,7 +310,6 @@ export default function StockScreen() {
     });
   };
 
-  // (opsional) Penghapusan menyeluruh per group gudang
   const deleteDocsByGudang = async () => {
     if (!gudangDipilih) return;
 
@@ -321,7 +323,6 @@ export default function StockScreen() {
           style: "destructive",
           onPress: async () => {
             try {
-              // Hapus semua barangMasuk dg group ini
               const snapMasuk = await getDocs(collection(db, "barangMasuk"));
               for (const d of snapMasuk.docs) {
                 const trx = d.data() as Transaksi;
@@ -330,21 +331,17 @@ export default function StockScreen() {
                 }
               }
 
-              // barangKeluar
               const snapKeluar = await getDocs(collection(db, "barangKeluar"));
               for (const d of snapKeluar.docs) {
                 const trx = d.data() as Transaksi;
                 const jenis = String(trx.jenisForm ?? "").toUpperCase();
                 const tujuan = canonicalGudang(trx.gudangTujuan);
-                const headerAsal = canonicalGudang(trx.jenisGudang);
 
-                // Jika mutasi MASUK ke gudang ini → hapus seluruh dokumen
                 if (jenis === "MB" && tujuan === gudangDipilih) {
                   await deleteDoc(doc(db, "barangKeluar", d.id));
                   continue;
                 }
 
-                // Filter item yang BUKAN milik gudang ini (asal per item)
                 const items = Array.isArray(trx.items) ? trx.items : [];
                 const remaining = items.filter((it) => {
                   const asalRaw =
@@ -353,7 +350,7 @@ export default function StockScreen() {
                   return asalGroup !== gudangDipilih;
                 });
 
-                if (remaining.length === items.length) continue; // tidak ada yang perlu dihapus
+                if (remaining.length === items.length) continue;
                 if (remaining.length === 0) {
                   await deleteDoc(doc(db, "barangKeluar", d.id));
                 } else {
@@ -375,6 +372,152 @@ export default function StockScreen() {
         },
       ]
     );
+  };
+
+  // ====== Helpers penyesuaian (tidak mengubah logika stok kamu) ======
+  const createAdjustmentIn = async (
+    row: StokRow,
+    dL: number,
+    dM: number,
+    dS: number
+  ) => {
+    const id = `ADJ-IN-${normCode(row.kode)}-${Date.now()}`;
+    const docRef = doc(db, "barangMasuk", id);
+    const payload: Transaksi = {
+      gudang: gudangDipilih || "-",
+      principle: row.principle || "-",
+      items: [
+        {
+          namaBarang: row.nama,
+          kode: row.kode,
+          large: String(Math.max(0, dL)),
+          medium: String(Math.max(0, dM)),
+          small: String(Math.max(0, dS)),
+          principle: row.principle || "-",
+        },
+      ],
+    };
+    await setDoc(docRef, { ...payload, waktuInput: serverTimestamp() } as any);
+  };
+
+  const createAdjustmentOut = async (
+    row: StokRow,
+    dL: number,
+    dM: number,
+    dS: number
+  ) => {
+    const id = `ADJ-OUT-${normCode(row.kode)}-${Date.now()}`;
+    const docRef = doc(db, "barangKeluar", id);
+    const payload: Transaksi = {
+      jenisForm: "DR",
+      jenisGudang: gudangDipilih || "-",
+      principle: row.principle || "-",
+      items: [
+        {
+          namaBarang: row.nama,
+          kode: row.kode,
+          large: "0",
+          medium: "0",
+          small: "0",
+          netDL: String(Math.max(0, dL)),
+          netDM: String(Math.max(0, dM)),
+          netDS: String(Math.max(0, dS)),
+          principle: row.principle || "-",
+          gdg: gudangDipilih || "-",
+        } as any,
+      ],
+    };
+    await setDoc(docRef, { ...payload, waktuInput: serverTimestamp() } as any);
+  };
+
+  const verifyPassword = () => {
+    if (adminPassword !== STOCK_ADMIN_PASSWORD) {
+      Alert.alert("Ditolak", "Password admin salah.");
+      return false;
+    }
+    return true;
+  };
+
+  const applyEdit = async () => {
+    if (!editTarget || !gudangDipilih) return;
+
+    // ✅ sekarang Simpan juga wajib password
+    if (!verifyPassword()) return;
+
+    const curL = toInt(editTarget.totalLarge);
+    const curM = toInt(editTarget.totalMedium);
+    const curS = toInt(editTarget.totalSmall);
+
+    const tgtL = toInt(inputL);
+    const tgtM = toInt(inputM);
+    const tgtS = toInt(inputS);
+
+    const dL = tgtL - curL;
+    const dM = tgtM - curM;
+    const dS = tgtS - curS;
+
+    if (dL === 0 && dM === 0 && dS === 0) {
+      Alert.alert("Info", "Tidak ada perubahan qty.");
+      return;
+    }
+
+    try {
+      if (dL > 0 || dM > 0 || dS > 0) {
+        await createAdjustmentIn(
+          editTarget,
+          Math.max(0, dL),
+          Math.max(0, dM),
+          Math.max(0, dS)
+        );
+      }
+      if (dL < 0 || dM < 0 || dS < 0) {
+        await createAdjustmentOut(
+          editTarget,
+          Math.max(0, -dL),
+          Math.max(0, -dM),
+          Math.max(0, -dS)
+        );
+      }
+      setEditVisible(false);
+      Alert.alert("Sukses", "Perubahan stok berhasil disimpan.");
+    } catch (e) {
+      console.error(e);
+      Alert.alert("Gagal", "Terjadi kesalahan saat menyimpan penyesuaian.");
+    }
+  };
+
+  const openEdit = (row: StokRow) => {
+    setEditTarget(row);
+    setInputL(String(row.totalLarge));
+    setInputM(String(row.totalMedium));
+    setInputS(String(row.totalSmall));
+    setAdminPassword("");
+    setEditVisible(true);
+  };
+
+  const deleteItemAllStock = async () => {
+    if (!editTarget || !gudangDipilih) return;
+
+    // Tetap wajib password
+    if (!verifyPassword()) return;
+
+    const curL = toInt(editTarget.totalLarge);
+    const curM = toInt(editTarget.totalMedium);
+    const curS = toInt(editTarget.totalSmall);
+
+    if (curL === 0 && curM === 0 && curS === 0) {
+      Alert.alert("Info", "Stok barang ini sudah kosong.");
+      return;
+    }
+
+    try {
+      await createAdjustmentOut(editTarget, curL, curM, curS);
+      setEditVisible(false);
+      Alert.alert("Sukses", "Barang dihapus (stok dikurangi menjadi 0).");
+    } catch (e) {
+      console.error(e);
+      Alert.alert("Gagal", "Terjadi kesalahan saat menghapus barang.");
+    }
   };
 
   return (
@@ -435,14 +578,21 @@ export default function StockScreen() {
             />
 
             {stok.map((item, index) => (
-              <View key={index} style={styles.card}>
-                <Text style={styles.name}>{item.nama}</Text>
-                <Text>Kode: {item.kode}</Text>
-                <Text>Principle: {item.principle}</Text>
-                <Text>Large: {item.totalLarge}</Text>
-                <Text>Medium: {item.totalMedium}</Text>
-                <Text>Small: {item.totalSmall}</Text>
-              </View>
+              <TouchableOpacity
+                key={index}
+                onPress={() => openEdit(item)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.card}>
+                  <Text style={styles.name}>{item.nama}</Text>
+                  <Text>Kode: {item.kode}</Text>
+                  <Text>Principle: {item.principle}</Text>
+                  <Text>Large: {item.totalLarge}</Text>
+                  <Text>Medium: {item.totalMedium}</Text>
+                  <Text>Small: {item.totalSmall}</Text>
+                  <Text style={styles.tapHint}>Tap untuk edit / hapus</Text>
+                </View>
+              </TouchableOpacity>
             ))}
 
             {stok.length === 0 && gudangDipilih && (
@@ -483,6 +633,99 @@ export default function StockScreen() {
           </TouchableOpacity>
         </ScrollView>
       </TouchableWithoutFeedback>
+
+      {/* ======= Modal Edit ======= */}
+      <Modal
+        visible={editVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setEditVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Edit Stok</Text>
+            <Text style={styles.modalSub}>
+              {editTarget?.nama} ({editTarget?.kode})
+            </Text>
+
+            <View style={{ height: 12 }} />
+
+            <View style={styles.row}>
+              <Text style={styles.lbl}>Large</Text>
+              <TextInput
+                value={inputL}
+                onChangeText={setInputL}
+                keyboardType="number-pad"
+                style={styles.inp}
+                placeholder="0"
+              />
+            </View>
+            <View style={styles.row}>
+              <Text style={styles.lbl}>Medium</Text>
+              <TextInput
+                value={inputM}
+                onChangeText={setInputM}
+                keyboardType="number-pad"
+                style={styles.inp}
+                placeholder="0"
+              />
+            </View>
+            <View style={styles.row}>
+              <Text style={styles.lbl}>Small</Text>
+              <TextInput
+                value={inputS}
+                onChangeText={setInputS}
+                keyboardType="number-pad"
+                style={styles.inp}
+                placeholder="0"
+              />
+            </View>
+
+            {/* Password Section — jelas & tidak gepeng */}
+            <View style={{ height: 16 }} />
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>🔒 Password Admin</Text>
+              <Text style={styles.sectionDesc}>
+                Wajib diisi untuk **Simpan** maupun **Hapus Barang**.
+              </Text>
+              <TextInput
+                value={adminPassword}
+                onChangeText={setAdminPassword}
+                secureTextEntry
+                placeholder="Masukkan password admin"
+                style={styles.pwInput}
+              />
+            </View>
+
+            {/* Actions */}
+            <View style={{ height: 10 }} />
+            <View style={styles.btnRow}>
+              <TouchableOpacity
+                onPress={() => setEditVisible(false)}
+                style={[styles.btn, { backgroundColor: "#94a3b8" }]}
+              >
+                <Text style={styles.btnText}>Batal</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={applyEdit}
+                style={[styles.btn, { backgroundColor: "#0ea5e9" }]}
+              >
+                <Text style={styles.btnText}>Simpan</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.divider} />
+
+            {/* Delete */}
+            <TouchableOpacity
+              onPress={deleteItemAllStock}
+              style={styles.deleteBtn}
+            >
+              <Text style={styles.deleteText}>Hapus Barang Ini</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -515,6 +758,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   name: { fontWeight: "bold", fontSize: 16 },
+  tapHint: { marginTop: 6, color: "#334155", fontStyle: "italic" },
   exportButton: {
     backgroundColor: "#007bff",
     padding: 14,
@@ -534,4 +778,79 @@ const styles = StyleSheet.create({
   summaryItem: { alignItems: "center", flex: 1 },
   summaryLabel: { fontSize: 14, fontWeight: "600", color: "#1e3a8a" },
   summaryValue: { fontSize: 20, fontWeight: "bold", color: "#0f172a" },
+
+  // Modal
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    justifyContent: "center",
+    padding: 16,
+  },
+  modalCard: {
+    backgroundColor: "white",
+    borderRadius: 16,
+    padding: 18,
+  },
+  modalTitle: { fontSize: 18, fontWeight: "bold", textAlign: "center" },
+  modalSub: { fontSize: 14, color: "#475569", textAlign: "center" },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 8,
+    gap: 10,
+  },
+  lbl: { width: 80, fontWeight: "600" },
+  inp: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: "#fff",
+  },
+
+  section: {
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 12,
+    padding: 12,
+  },
+  sectionTitle: { fontWeight: "700", marginBottom: 4 },
+  sectionDesc: { color: "#64748b", marginBottom: 8 },
+  pwInput: {
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12, // ➜ lebih tinggi (tidak gepeng)
+    backgroundColor: "#fff",
+  },
+
+  btnRow: { flexDirection: "row", gap: 10, marginTop: 12 },
+  btn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  btnText: { color: "white", fontWeight: "bold" },
+
+  divider: {
+    height: 1,
+    backgroundColor: "#e2e8f0",
+    width: "100%",
+    marginTop: 14,
+    marginBottom: 12,
+  },
+
+  // Delete button — tebal & lebar
+  deleteBtn: {
+    backgroundColor: "#ef4444",
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  deleteText: { color: "white", fontWeight: "800" },
 });
