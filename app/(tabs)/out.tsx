@@ -7,6 +7,7 @@ import * as FileSystem from "expo-file-system";
 import {
   collection,
   doc,
+  getDocs,
   onSnapshot,
   serverTimestamp,
   setDoc,
@@ -93,6 +94,126 @@ const norm = (s: any) =>
     .trim()
     .toUpperCase()
     .replace(/[\s\-_]/g, "");
+
+/* ========== PATCH: builder stok fresh anti-race (selaras StockScreen) ========== */
+async function buildFreshNetStockMap() {
+  const masukSnap = await getDocs(collection(db, "barangMasuk"));
+  const keluarSnap = await getDocs(collection(db, "barangKeluar"));
+
+  const map = new Map<
+    string,
+    { L: number; M: number; S: number; nama: string; principle: string }
+  >();
+
+  const toIntLocal = (v: any) => {
+    const n = parseInt(String(v ?? "0").trim(), 10);
+    return Number.isNaN(n) ? 0 : Math.max(0, n);
+  };
+  const toIntAnyLocal = (v: any) => {
+    const n = parseInt(String(v ?? "0").trim(), 10);
+    return Number.isNaN(n) ? 0 : n;
+  };
+
+  // + barangMasuk
+  masukSnap.docs.forEach((d) => {
+    const trx = d.data() as any;
+    const gudang = trx.gudang || "Unknown";
+    const items = Array.isArray(trx.items) ? trx.items : [];
+    items.forEach((it: any) => {
+      const key = `${gudang}|${norm(it.kode)}`;
+      if (!map.has(key)) {
+        map.set(key, {
+          L: 0,
+          M: 0,
+          S: 0,
+          nama: it.namaBarang || "",
+          principle: it.principle || trx.principle || "-",
+        });
+      }
+      const row = map.get(key)!;
+      row.L += toIntLocal(it.large);
+      row.M += toIntLocal(it.medium);
+      row.S += toIntLocal(it.small);
+    });
+  });
+
+  // - barangKeluar (asal) — gunakan net* HANYA untuk dokumen adjustment (ciri: _adjustment true & L/M/S = 0)
+  keluarSnap.docs.forEach((d) => {
+    const trx = d.data() as any;
+    const items = Array.isArray(trx.items) ? trx.items : [];
+    items.forEach((it: any) => {
+      const asal =
+        it.gdg && String(it.gdg).trim() !== "" ? it.gdg : trx.jenisGudang;
+      const key = `${asal}|${norm(it.kode)}`;
+      if (!map.has(key)) {
+        map.set(key, {
+          L: 0,
+          M: 0,
+          S: 0,
+          nama: it.namaBarang || "",
+          principle: it.principle || trx.principle || "-",
+        });
+      }
+      const row = map.get(key)!;
+
+      const isAdjOut =
+        it._adjustment === true &&
+        toIntLocal(it.large) === 0 &&
+        toIntLocal(it.medium) === 0 &&
+        toIntLocal(it.small) === 0;
+
+      let useL = 0,
+        useM = 0,
+        useS = 0;
+
+      if (isAdjOut) {
+        useL = Math.max(0, toIntAnyLocal(it.netDL));
+        useM = Math.max(0, toIntAnyLocal(it.netDM));
+        useS = Math.max(0, toIntAnyLocal(it.netDS));
+      } else {
+        const consumedL = toIntLocal(it.consumedL ?? it.large);
+        const consumedM = toIntLocal(it.consumedM ?? it.medium);
+        const consumedS = toIntLocal(it.consumedS ?? it.small);
+        const leftoverM = toIntLocal(it.leftoverM);
+        const leftoverS = toIntLocal(it.leftoverS);
+
+        useL = Math.max(0, consumedL);
+        useM = Math.max(0, consumedM - leftoverM);
+        useS = Math.max(0, consumedS - leftoverS);
+      }
+
+      row.L = Math.max(0, row.L - useL);
+      row.M = Math.max(0, row.M - useM);
+      row.S = Math.max(0, row.S - useS);
+    });
+  });
+
+  // + mutasi masuk (tujuan) — hanya MB
+  keluarSnap.docs.forEach((d) => {
+    const trx = d.data() as any;
+    if (String(trx.jenisForm ?? "").toUpperCase() !== "MB") return;
+    if (!trx.tujuanGudang) return;
+    const items = Array.isArray(trx.items) ? trx.items : [];
+    items.forEach((it: any) => {
+      const key = `${trx.tujuanGudang}|${norm(it.kode)}`;
+      if (!map.has(key)) {
+        map.set(key, {
+          L: 0,
+          M: 0,
+          S: 0,
+          nama: it.namaBarang || "",
+          principle: it.principle || trx.principle || "-",
+        });
+      }
+      const row = map.get(key)!;
+      row.L += toIntLocal(it.large);
+      row.M += toIntLocal(it.medium);
+      row.S += toIntLocal(it.small);
+    });
+  });
+
+  return map;
+}
 
 /* ===================== Komponen ===================== */
 export default function OutScreen() {
@@ -195,7 +316,7 @@ export default function OutScreen() {
     }, [])
   );
 
-  /* ====== Stok neto per (gudang,kode) ====== */
+  /* ====== Stok neto per (gudang,kode) (untuk UI listing, tetap pakai snapshot) ====== */
   const netStockMap = useMemo(() => {
     const map = new Map<
       string,
@@ -224,7 +345,7 @@ export default function OutScreen() {
       }
     }
 
-    // - barangKeluar (asal) → pakai NET DEDUCTION bila tersedia
+    // - barangKeluar (asal) → pakai NET DEDUCTION bila tersedia (ini hanya untuk tampilan list)
     for (const trx of keluarDocs) {
       const items = Array.isArray(trx.items) ? trx.items : [];
       for (const it of items) {
@@ -242,7 +363,6 @@ export default function OutScreen() {
         }
         const row = map.get(key)!;
 
-        // Prefer netDL/netDM/netDS → jika tidak ada, fallback ke consumed*, lalu ke input lama
         const useL = toInt((it as any).netDL ?? it.consumedL ?? it.large);
         const useM = toInt((it as any).netDM ?? it.consumedM ?? it.medium);
         const useS = toInt((it as any).netDS ?? it.consumedS ?? it.small);
@@ -270,7 +390,6 @@ export default function OutScreen() {
           });
         }
         const row = map.get(key)!;
-        // Di tujuan, yang diterima adalah sesuai REQUEST (bukan consumed*)
         row.L += toInt(it.large);
         row.M += toInt(it.medium);
         row.S += toInt(it.small);
@@ -504,6 +623,9 @@ export default function OutScreen() {
       }
     }
 
+    // ⛳️ PATCH: ambil stok paling baru untuk mencegah race dengan ADJ-IN
+    const freshMap = await buildFreshNetStockMap();
+
     const waktuInput = tanggalTransaksi.toISOString();
     const tanggalFormatted = formatDate(tanggalTransaksi);
     const rand = Math.random().toString(36).slice(2, 8).toUpperCase();
@@ -521,7 +643,7 @@ export default function OutScreen() {
       }
 
       const key = `${gdg}|${norm(item.kode)}`;
-      const cur = netStockMap.get(key) || {
+      const cur = freshMap.get(key) || { // <-- pakai stok fresh
         L: 0,
         M: 0,
         S: 0,
@@ -738,10 +860,7 @@ export default function OutScreen() {
                 setOpen={setOpenNamaSopir}
                 setValue={setNamaSopir}
                 items={[
-                  {
-                    label: "Dedi - Deny Mp ",
-                    value: "Dedi - Deny MP",
-                  },
+                  { label: "Dedi - Deny Mp ", value: "Dedi - Deny MP" },
                   { label: "Deny SP - Eko", value: "Deny SP - Eko" },
                   { label: "Anwar - Afif", value: "Anwar - Afif" },
                   { label: "Fila - Mizan ", value: "Fila - Mizan" },
