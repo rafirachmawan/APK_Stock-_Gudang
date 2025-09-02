@@ -1,4 +1,4 @@
-// ✅ OutDetailScreen.tsx - Final Lengkap
+// ✅ OutDetailScreen.tsx - Final Lengkap (fix pencarian & guard aman)
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useFocusEffect } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system";
@@ -68,7 +68,7 @@ export default function OutDetailScreen() {
       const q = query(collection(db, "barangKeluar"), orderBy("waktuInput"));
       const unsub = onSnapshot(q, (snapshot) => {
         const all: TransaksiOut[] = snapshot.docs.map(
-          (doc) => ({ id: doc.id, ...doc.data() } as TransaksiOut)
+          (d) => ({ id: d.id, ...(d.data() as any) } as TransaksiOut)
         );
         setAllData(all);
       });
@@ -76,17 +76,23 @@ export default function OutDetailScreen() {
     }, [])
   );
 
+  // 🔧 FIX: pencarian aman meski kodeApos / waktuInput kosong
   const filtered = allData.filter((trx) => {
-    const tgl = new Date(trx.waktuInput).toLocaleDateString("id-ID");
-    return (
-      tgl.includes(searchText) ||
-      trx.kodeApos.toLowerCase().includes(searchText.toLowerCase())
-    );
+    const tgl = trx?.waktuInput
+      ? new Date(trx.waktuInput).toLocaleDateString("id-ID")
+      : "";
+    const faktur = (trx?.kodeApos || "").toLowerCase();
+    const search = (searchText || "").toLowerCase();
+
+    return tgl.includes(search) || faktur.includes(search);
   });
 
+  // Pengelompokan tampilan
   const grouped = filtered.reduce((acc, trx) => {
-    const tgl = new Date(trx.waktuInput).toLocaleDateString("id-ID");
-    const jenis = trx.jenisForm;
+    const tgl = trx?.waktuInput
+      ? new Date(trx.waktuInput).toLocaleDateString("id-ID")
+      : "-";
+    const jenis = trx?.jenisForm || "-";
     if (!acc[tgl]) acc[tgl] = {};
     if (!acc[tgl][jenis]) acc[tgl][jenis] = [];
     acc[tgl][jenis].push(trx);
@@ -95,25 +101,28 @@ export default function OutDetailScreen() {
 
   const exportToExcel = () => {
     const exportData: any[] = [];
-    allData.forEach((trx) => {
-      trx.items.forEach((item) => {
+    (allData || []).forEach((trx) => {
+      const rows = Array.isArray(trx.items) ? trx.items : [];
+      rows.forEach((item) => {
         exportData.push({
-          Tanggal: new Date(trx.waktuInput).toLocaleDateString("id-ID"),
-          JenisForm: trx.jenisForm,
-          Gudang: trx.jenisGudang,
-          NoFaktur: trx.kodeApos,
-          Kategori: trx.kategori,
-          Catatan: trx.catatan,
-          Sopir: trx.namaSopir,
-          Kendaraan: trx.nomorKendaraan,
-          GudangTujuan: trx.tujuanGudang || "-",
-          NamaBarang: item.namaBarang,
-          KodeBarang: item.kode,
-          Large: item.large,
-          Medium: item.medium,
-          Small: item.small,
-          CatatanItem: item.catatan || "-",
-          ED: item.ed || "-",
+          Tanggal: trx?.waktuInput
+            ? new Date(trx.waktuInput).toLocaleDateString("id-ID")
+            : "-",
+          JenisForm: trx?.jenisForm || "-",
+          Gudang: trx?.jenisGudang || "-",
+          NoFaktur: trx?.kodeApos || "-",
+          Kategori: trx?.kategori || "-",
+          Catatan: trx?.catatan || "-",
+          Sopir: trx?.namaSopir || "-",
+          Kendaraan: trx?.nomorKendaraan || "-",
+          GudangTujuan: trx?.tujuanGudang || "-",
+          NamaBarang: item?.namaBarang || "-",
+          KodeBarang: item?.kode || "-",
+          Large: item?.large ?? "",
+          Medium: item?.medium ?? "",
+          Small: item?.small ?? "",
+          CatatanItem: item?.catatan || "-",
+          ED: item?.ed || "-",
         });
       });
     });
@@ -129,7 +138,7 @@ export default function OutDetailScreen() {
 
   const handleChangeItem = (i: number, field: keyof ItemOut, value: string) => {
     if (!editedTrx) return;
-    const updated = [...editedTrx.items];
+    const updated = [...(editedTrx.items || [])];
     updated[i] = { ...updated[i], [field]: value };
     setEditedTrx({ ...editedTrx, items: updated });
   };
@@ -137,7 +146,8 @@ export default function OutDetailScreen() {
   const handleSave = async () => {
     if (!editedTrx?.id) return;
     try {
-      await updateDoc(doc(db, "barangKeluar", editedTrx.id), editedTrx);
+      const { id, ...payload } = editedTrx as any; // hindari menulis field id ke dokumen
+      await updateDoc(doc(db, "barangKeluar", id), payload);
       Alert.alert("✅ Berhasil diupdate");
       setModalVisible(false);
     } catch (e) {
@@ -165,7 +175,7 @@ export default function OutDetailScreen() {
         style={styles.input}
         value={searchText}
         onChangeText={setSearchText}
-        placeholder="Cari tanggal atau No Faktur"
+        placeholder="Cari tanggal (dd/mm/yyyy) atau No Faktur"
       />
 
       {Object.entries(grouped).map(([tgl, jenisMap]) => (
@@ -176,18 +186,20 @@ export default function OutDetailScreen() {
               <Text style={styles.jenisTitle}>{jenis}</Text>
               {list.map((trx) => (
                 <View key={trx.id} style={styles.card}>
-                  <Text style={styles.bold}>No Faktur: {trx.kodeApos}</Text>
-                  <Text>Gudang: {trx.jenisGudang}</Text>
-                  <Text>Catatan: {trx.catatan}</Text>
+                  <Text style={styles.bold}>
+                    No Faktur: {trx.kodeApos || "-"}
+                  </Text>
+                  <Text>Gudang: {trx.jenisGudang || "-"}</Text>
+                  <Text>Catatan: {trx.catatan || "-"}</Text>
                   {trx.jenisForm !== "MB" && (
                     <>
-                      <Text>Sopir: {trx.namaSopir}</Text>
-                      <Text>Kendaraan: {trx.nomorKendaraan}</Text>
+                      <Text>Sopir: {trx.namaSopir || "-"}</Text>
+                      <Text>Kendaraan: {trx.nomorKendaraan || "-"}</Text>
                     </>
                   )}
-                  {trx.items.map((item, index) => (
+                  {(trx.items || []).map((item, index) => (
                     <Text key={index}>
-                      • {item.namaBarang} – ED: {item.ed || "-"}
+                      • {item?.namaBarang || "-"} – ED: {item?.ed || "-"}
                     </Text>
                   ))}
                   <TouchableOpacity
@@ -195,6 +207,9 @@ export default function OutDetailScreen() {
                     onPress={() => {
                       setEditedTrx(trx);
                       setModalVisible(true);
+                      setSelectedDate(
+                        trx?.waktuInput ? new Date(trx.waktuInput) : new Date()
+                      );
                     }}
                   >
                     <Text style={{ color: "white" }}>✏️ Edit</Text>
@@ -270,9 +285,11 @@ export default function OutDetailScreen() {
                     style={styles.input}
                   >
                     <Text>
-                      {new Date(editedTrx.waktuInput).toLocaleDateString(
-                        "id-ID"
-                      )}
+                      {editedTrx.waktuInput
+                        ? new Date(editedTrx.waktuInput).toLocaleDateString(
+                            "id-ID"
+                          )
+                        : "-"}
                     </Text>
                   </TouchableOpacity>
 
@@ -285,9 +302,9 @@ export default function OutDetailScreen() {
                     />
                   )}
 
-                  {editedTrx.items.map((item, i) => (
+                  {(editedTrx.items || []).map((item, i) => (
                     <View key={i} style={styles.itemBox}>
-                      <Text style={styles.bold}>{item.namaBarang}</Text>
+                      <Text style={styles.bold}>{item?.namaBarang || "-"}</Text>
                       <TextInput
                         style={styles.input}
                         value={item.large}
