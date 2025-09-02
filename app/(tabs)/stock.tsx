@@ -51,8 +51,7 @@ interface Item {
   netDM?: string;
   netDS?: string;
 
-  // opsional, untuk audit
-  _adjustment?: boolean;
+  _adjustment?: boolean; // penanda dokumen dari fitur Edit/Hapus
 }
 
 interface Transaksi {
@@ -74,7 +73,6 @@ type StokRow = {
   totalSmall: number;
 };
 
-// 🔐 Password admin (ganti kalau perlu)
 const STOCK_ADMIN_PASSWORD = "admin123";
 
 const normCode = (s: any) =>
@@ -86,7 +84,6 @@ const toInt = (v: any) => {
   const n = parseInt(String(v ?? "0").trim(), 10);
   return Number.isNaN(n) ? 0 : Math.max(0, n);
 };
-
 const toIntAny = (v: any) => {
   const n = parseInt(String(v ?? "0").trim(), 10);
   return Number.isNaN(n) ? 0 : n;
@@ -207,28 +204,26 @@ export default function StockScreen() {
         }
         const data = map.get(key)!;
 
-        // --- gunakan net* HANYA untuk dokumen adjustment ---
-        const isAdjustment =
-          (item as any)._adjustment === true ||
-          String(trx.jenisForm ?? "").toUpperCase() === "ADJ-OUT";
+        // ========== INTI PERBAIKAN ==========
+        // Gunakan net* HANYA jika ini benar-benar dokumen ADJ-OUT:
+        //  - _adjustment === true
+        //  - dan large/medium/small semuanya "0"
+        // Jika tidak, pakai consumed* atau large/medium/small + leftover*.
+        const isAdjOut =
+          item._adjustment === true &&
+          toInt(item.large) === 0 &&
+          toInt(item.medium) === 0 &&
+          toInt(item.small) === 0;
 
         let useL = 0,
           useM = 0,
           useS = 0;
 
-        const hasNet =
-          (item as any).netDL !== undefined ||
-          (item as any).netDM !== undefined ||
-          (item as any).netDS !== undefined;
-
-        if (isAdjustment && hasNet) {
-          // ADJ-OUT: pakai net* (clamp non-negatif)
+        if (isAdjOut) {
           useL = Math.max(0, toIntAny((item as any).netDL));
           useM = Math.max(0, toIntAny((item as any).netDM));
           useS = Math.max(0, toIntAny((item as any).netDS));
         } else {
-          // Transaksi normal keluar (DR/RB/MB):
-          // pakai consumed* kalau ada, else fallback ke large/medium/small + leftover*
           const consumedL = toInt(item.consumedL ?? item.large);
           const consumedM = toInt(item.consumedM ?? item.medium);
           const consumedS = toInt(item.consumedS ?? item.small);
@@ -241,7 +236,6 @@ export default function StockScreen() {
           useS = Math.max(0, consumedS - leftoverS);
         }
 
-        // kurangi stok (clamp ke 0)
         data.L = Math.max(0, data.L - useL);
         data.M = Math.max(0, data.M - useM);
         data.S = Math.max(0, data.S - useS);
@@ -251,7 +245,6 @@ export default function StockScreen() {
     // + mutasi masuk (group tujuan) — HANYA untuk MB
     barangKeluar.forEach((trx) => {
       if (String(trx.jenisForm ?? "").toUpperCase() !== "MB") return;
-
       const tujuan = canonicalGudang(trx.gudangTujuan);
       if (tujuan !== gudangDipilih) return;
 
@@ -390,7 +383,7 @@ export default function StockScreen() {
     );
   };
 
-  // ====== Helpers penyesuaian (tidak mengubah logika stok kamu) ======
+  // ====== Helpers penyesuaian ======
   const createAdjustmentIn = async (
     row: StokRow,
     dL: number,
@@ -427,8 +420,7 @@ export default function StockScreen() {
     const id = `ADJ-OUT-${normCode(row.kode)}-${Date.now()}`;
     const docRef = doc(db, "barangKeluar", id);
     const payload: Transaksi = {
-      // jenisForm bisa dibiarkan "DR" atau pakai "ADJ-OUT" untuk pembeda; kita tetap tandai _adjustment
-      jenisForm: "DR",
+      jenisForm: "ADJ-OUT", // <— khusus, bukan DR
       jenisGudang: gudangDipilih || "-",
       principle: row.principle || "-",
       items: [
@@ -460,7 +452,6 @@ export default function StockScreen() {
 
   const applyEdit = async () => {
     if (!editTarget || !gudangDipilih) return;
-
     if (!verifyPassword()) return;
 
     const curL = toInt(editTarget.totalLarge);
@@ -516,7 +507,6 @@ export default function StockScreen() {
 
   const deleteItemAllStock = async () => {
     if (!editTarget || !gudangDipilih) return;
-
     if (!verifyPassword()) return;
 
     const curL = toInt(editTarget.totalLarge);
@@ -699,13 +689,10 @@ export default function StockScreen() {
               />
             </View>
 
-            {/* Password Section */}
             <View style={{ height: 16 }} />
-            <View style={styles.section}>
+            <View className="section" style={styles.section}>
               <Text style={styles.sectionTitle}>🔒 Password Admin</Text>
-              <Text style={styles.sectionDesc}>
-                Wajib diisi untuk **Simpan** maupun **Hapus Barang**.
-              </Text>
+              <Text style={styles.sectionDesc}>Wajib untuk Simpan/Hapus.</Text>
               <TextInput
                 value={adminPassword}
                 onChangeText={setAdminPassword}
@@ -715,7 +702,6 @@ export default function StockScreen() {
               />
             </View>
 
-            {/* Actions */}
             <View style={{ height: 10 }} />
             <View style={styles.btnRow}>
               <TouchableOpacity
@@ -734,7 +720,6 @@ export default function StockScreen() {
 
             <View style={styles.divider} />
 
-            {/* Delete */}
             <TouchableOpacity
               onPress={deleteItemAllStock}
               style={styles.deleteBtn}
@@ -749,11 +734,7 @@ export default function StockScreen() {
 }
 
 const styles = StyleSheet.create({
-  scrollContainer: {
-    flexGrow: 1,
-    paddingBottom: 100,
-    backgroundColor: "#fff",
-  },
+  scrollContainer: { flexGrow: 1, paddingBottom: 100, backgroundColor: "#fff" },
   content: { paddingHorizontal: 16, marginTop: 8 },
   title: {
     fontSize: 20,
@@ -796,27 +777,16 @@ const styles = StyleSheet.create({
   summaryItem: { alignItems: "center", flex: 1 },
   summaryLabel: { fontSize: 14, fontWeight: "600", color: "#1e3a8a" },
   summaryValue: { fontSize: 20, fontWeight: "bold", color: "#0f172a" },
-
-  // Modal
   modalBackdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.35)",
     justifyContent: "center",
     padding: 16,
   },
-  modalCard: {
-    backgroundColor: "white",
-    borderRadius: 16,
-    padding: 18,
-  },
+  modalCard: { backgroundColor: "white", borderRadius: 16, padding: 18 },
   modalTitle: { fontSize: 18, fontWeight: "bold", textAlign: "center" },
   modalSub: { fontSize: 14, color: "#475569", textAlign: "center" },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 8,
-    gap: 10,
-  },
+  row: { flexDirection: "row", alignItems: "center", marginTop: 8, gap: 10 },
   lbl: { width: 80, fontWeight: "600" },
   inp: {
     flex: 1,
@@ -827,7 +797,6 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     backgroundColor: "#fff",
   },
-
   section: {
     backgroundColor: "#f8fafc",
     borderWidth: 1,
@@ -845,16 +814,9 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     backgroundColor: "#fff",
   },
-
   btnRow: { flexDirection: "row", gap: 10, marginTop: 12 },
-  btn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: "center",
-  },
+  btn: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: "center" },
   btnText: { color: "white", fontWeight: "bold" },
-
   divider: {
     height: 1,
     backgroundColor: "#e2e8f0",
@@ -862,7 +824,6 @@ const styles = StyleSheet.create({
     marginTop: 14,
     marginBottom: 12,
   },
-
   deleteBtn: {
     backgroundColor: "#ef4444",
     paddingVertical: 14,
