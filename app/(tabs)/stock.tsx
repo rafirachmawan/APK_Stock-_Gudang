@@ -59,7 +59,7 @@ interface Transaksi {
   gudang?: string; // barangMasuk
   gudangTujuan?: string; // barangKeluar (MB)
   jenisGudang?: string; // barangKeluar (asal: header)
-  jenisForm?: "DR" | "MB" | "RB" | "ADJ-IN";
+  jenisForm?: "DR" | "MB" | "RB" | "ADJ-IN" | "ADJ-OUT";
   principle: string;
   items: Item[];
   waktuInput?: any;
@@ -186,7 +186,7 @@ export default function StockScreen() {
       });
     });
 
-    // - barangKeluar asal (group asal per item) — CLAMP & net* non-negatif
+    // - barangKeluar asal (group asal per item)
     barangKeluar.forEach((trx) => {
       trx.items?.forEach((item) => {
         const asalRaw =
@@ -207,6 +207,11 @@ export default function StockScreen() {
         }
         const data = map.get(key)!;
 
+        // --- gunakan net* HANYA untuk dokumen adjustment ---
+        const isAdjustment =
+          (item as any)._adjustment === true ||
+          String(trx.jenisForm ?? "").toUpperCase() === "ADJ-OUT";
+
         let useL = 0,
           useM = 0,
           useS = 0;
@@ -216,13 +221,14 @@ export default function StockScreen() {
           (item as any).netDM !== undefined ||
           (item as any).netDS !== undefined;
 
-        if (hasNet) {
-          // net* selalu non-negatif
+        if (isAdjustment && hasNet) {
+          // ADJ-OUT: pakai net* (clamp non-negatif)
           useL = Math.max(0, toIntAny((item as any).netDL));
           useM = Math.max(0, toIntAny((item as any).netDM));
           useS = Math.max(0, toIntAny((item as any).netDS));
         } else {
-          // fallback ke consumed/leftover (leftover tidak boleh bikin penambahan)
+          // Transaksi normal keluar (DR/RB/MB):
+          // pakai consumed* kalau ada, else fallback ke large/medium/small + leftover*
           const consumedL = toInt(item.consumedL ?? item.large);
           const consumedM = toInt(item.consumedM ?? item.medium);
           const consumedS = toInt(item.consumedS ?? item.small);
@@ -421,7 +427,8 @@ export default function StockScreen() {
     const id = `ADJ-OUT-${normCode(row.kode)}-${Date.now()}`;
     const docRef = doc(db, "barangKeluar", id);
     const payload: Transaksi = {
-      jenisForm: "DR", // tetap DR; kita bedakan via net* & _adjustment
+      // jenisForm bisa dibiarkan "DR" atau pakai "ADJ-OUT" untuk pembeda; kita tetap tandai _adjustment
+      jenisForm: "DR",
       jenisGudang: gudangDipilih || "-",
       principle: row.principle || "-",
       items: [
@@ -454,7 +461,6 @@ export default function StockScreen() {
   const applyEdit = async () => {
     if (!editTarget || !gudangDipilih) return;
 
-    // ✅ sekarang Simpan juga wajib password
     if (!verifyPassword()) return;
 
     const curL = toInt(editTarget.totalLarge);
@@ -511,7 +517,6 @@ export default function StockScreen() {
   const deleteItemAllStock = async () => {
     if (!editTarget || !gudangDipilih) return;
 
-    // Tetap wajib password
     if (!verifyPassword()) return;
 
     const curL = toInt(editTarget.totalLarge);
@@ -694,7 +699,7 @@ export default function StockScreen() {
               />
             </View>
 
-            {/* Password Section — jelas & tidak gepeng */}
+            {/* Password Section */}
             <View style={{ height: 16 }} />
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>🔒 Password Admin</Text>
@@ -858,7 +863,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
 
-  // Delete button — tebal & lebar
   deleteBtn: {
     backgroundColor: "#ef4444",
     paddingVertical: 14,
