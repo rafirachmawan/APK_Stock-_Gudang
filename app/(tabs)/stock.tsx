@@ -50,15 +50,19 @@ interface Item {
   netDL?: string;
   netDM?: string;
   netDS?: string;
+
+  // opsional, untuk audit
+  _adjustment?: boolean;
 }
 
 interface Transaksi {
   gudang?: string; // barangMasuk
   gudangTujuan?: string; // barangKeluar (MB)
   jenisGudang?: string; // barangKeluar (asal: header)
-  jenisForm?: "DR" | "MB" | "RB";
+  jenisForm?: "DR" | "MB" | "RB" | "ADJ-IN";
   principle: string;
   items: Item[];
+  waktuInput?: any;
 }
 
 type StokRow = {
@@ -182,7 +186,7 @@ export default function StockScreen() {
       });
     });
 
-    // - barangKeluar asal (group asal per item)
+    // - barangKeluar asal (group asal per item) — CLAMP & net* non-negatif
     barangKeluar.forEach((trx) => {
       trx.items?.forEach((item) => {
         const asalRaw =
@@ -213,10 +217,12 @@ export default function StockScreen() {
           (item as any).netDS !== undefined;
 
         if (hasNet) {
-          useL = toIntAny((item as any).netDL);
-          useM = toIntAny((item as any).netDM);
-          useS = toIntAny((item as any).netDS);
+          // net* selalu non-negatif
+          useL = Math.max(0, toIntAny((item as any).netDL));
+          useM = Math.max(0, toIntAny((item as any).netDM));
+          useS = Math.max(0, toIntAny((item as any).netDS));
         } else {
+          // fallback ke consumed/leftover (leftover tidak boleh bikin penambahan)
           const consumedL = toInt(item.consumedL ?? item.large);
           const consumedM = toInt(item.consumedM ?? item.medium);
           const consumedS = toInt(item.consumedS ?? item.small);
@@ -224,21 +230,25 @@ export default function StockScreen() {
           const leftoverM = toInt((item as any).leftoverM);
           const leftoverS = toInt((item as any).leftoverS);
 
-          useL = consumedL;
-          useM = consumedM - leftoverM;
-          useS = consumedS - leftoverS;
+          useL = Math.max(0, consumedL);
+          useM = Math.max(0, consumedM - leftoverM);
+          useS = Math.max(0, consumedS - leftoverS);
         }
 
+        // kurangi stok (clamp ke 0)
         data.L = Math.max(0, data.L - useL);
         data.M = Math.max(0, data.M - useM);
         data.S = Math.max(0, data.S - useS);
       });
     });
 
-    // + mutasi masuk (group tujuan)
+    // + mutasi masuk (group tujuan) — HANYA untuk MB
     barangKeluar.forEach((trx) => {
+      if (String(trx.jenisForm ?? "").toUpperCase() !== "MB") return;
+
       const tujuan = canonicalGudang(trx.gudangTujuan);
       if (tujuan !== gudangDipilih) return;
+
       trx.items?.forEach((item) => {
         const key = normCode(item.kode);
         if (!map.has(key)) {
@@ -386,6 +396,7 @@ export default function StockScreen() {
     const payload: Transaksi = {
       gudang: gudangDipilih || "-",
       principle: row.principle || "-",
+      jenisForm: "ADJ-IN",
       items: [
         {
           namaBarang: row.nama,
@@ -394,6 +405,7 @@ export default function StockScreen() {
           medium: String(Math.max(0, dM)),
           small: String(Math.max(0, dS)),
           principle: row.principle || "-",
+          _adjustment: true,
         },
       ],
     };
@@ -409,7 +421,7 @@ export default function StockScreen() {
     const id = `ADJ-OUT-${normCode(row.kode)}-${Date.now()}`;
     const docRef = doc(db, "barangKeluar", id);
     const payload: Transaksi = {
-      jenisForm: "DR",
+      jenisForm: "DR", // tetap DR; kita bedakan via net* & _adjustment
       jenisGudang: gudangDipilih || "-",
       principle: row.principle || "-",
       items: [
@@ -424,6 +436,7 @@ export default function StockScreen() {
           netDS: String(Math.max(0, dS)),
           principle: row.principle || "-",
           gdg: gudangDipilih || "-",
+          _adjustment: true,
         } as any,
       ],
     };
@@ -824,7 +837,7 @@ const styles = StyleSheet.create({
     borderColor: "#cbd5e1",
     borderRadius: 10,
     paddingHorizontal: 12,
-    paddingVertical: 12, // ➜ lebih tinggi (tidak gepeng)
+    paddingVertical: 12,
     backgroundColor: "#fff",
   },
 
