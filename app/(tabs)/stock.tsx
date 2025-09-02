@@ -51,12 +51,13 @@ interface Item {
   netDM?: string;
   netDS?: string;
 
-  _adjustment?: boolean; // penanda dokumen dari fitur Edit/Hapus
+  _adjustment?: boolean;
 }
 
 interface Transaksi {
   gudang?: string; // barangMasuk
-  gudangTujuan?: string; // barangKeluar (MB)
+  gudangTujuan?: string; // barangKeluar (beberapa data lama)
+  tujuanGudang?: string; // barangKeluar (OutScreen)
   jenisGudang?: string; // barangKeluar (asal: header)
   jenisForm?: "DR" | "MB" | "RB" | "ADJ-IN" | "ADJ-OUT";
   principle: string;
@@ -73,6 +74,7 @@ type StokRow = {
   totalSmall: number;
 };
 
+// 🔐 Password admin
 const STOCK_ADMIN_PASSWORD = "admin123";
 
 const normCode = (s: any) =>
@@ -204,11 +206,7 @@ export default function StockScreen() {
         }
         const data = map.get(key)!;
 
-        // ========== INTI PERBAIKAN ==========
-        // Gunakan net* HANYA jika ini benar-benar dokumen ADJ-OUT:
-        //  - _adjustment === true
-        //  - dan large/medium/small semuanya "0"
-        // Jika tidak, pakai consumed* atau large/medium/small + leftover*.
+        // Gunakan NET hanya untuk ADJ-OUT (dokumen dari fitur Edit/Hapus)
         const isAdjOut =
           item._adjustment === true &&
           toInt(item.large) === 0 &&
@@ -220,16 +218,15 @@ export default function StockScreen() {
           useS = 0;
 
         if (isAdjOut) {
-          useL = Math.max(0, toIntAny((item as any).netDL));
-          useM = Math.max(0, toIntAny((item as any).netDM));
-          useS = Math.max(0, toIntAny((item as any).netDS));
+          useL = Math.max(0, toIntAny(item.netDL));
+          useM = Math.max(0, toIntAny(item.netDM));
+          useS = Math.max(0, toIntAny(item.netDS));
         } else {
           const consumedL = toInt(item.consumedL ?? item.large);
           const consumedM = toInt(item.consumedM ?? item.medium);
           const consumedS = toInt(item.consumedS ?? item.small);
-
-          const leftoverM = toInt((item as any).leftoverM);
-          const leftoverS = toInt((item as any).leftoverS);
+          const leftoverM = toInt(item.leftoverM);
+          const leftoverS = toInt(item.leftoverS);
 
           useL = Math.max(0, consumedL);
           useM = Math.max(0, consumedM - leftoverM);
@@ -245,7 +242,8 @@ export default function StockScreen() {
     // + mutasi masuk (group tujuan) — HANYA untuk MB
     barangKeluar.forEach((trx) => {
       if (String(trx.jenisForm ?? "").toUpperCase() !== "MB") return;
-      const tujuan = canonicalGudang(trx.gudangTujuan);
+
+      const tujuan = canonicalGudang(trx.gudangTujuan ?? trx.tujuanGudang);
       if (tujuan !== gudangDipilih) return;
 
       trx.items?.forEach((item) => {
@@ -344,7 +342,9 @@ export default function StockScreen() {
               for (const d of snapKeluar.docs) {
                 const trx = d.data() as Transaksi;
                 const jenis = String(trx.jenisForm ?? "").toUpperCase();
-                const tujuan = canonicalGudang(trx.gudangTujuan);
+                const tujuan = canonicalGudang(
+                  trx.gudangTujuan ?? trx.tujuanGudang
+                );
 
                 if (jenis === "MB" && tujuan === gudangDipilih) {
                   await deleteDoc(doc(db, "barangKeluar", d.id));
@@ -383,7 +383,7 @@ export default function StockScreen() {
     );
   };
 
-  // ====== Helpers penyesuaian ======
+  // ====== Helpers penyesuaian (tidak mengubah logika stok) ======
   const createAdjustmentIn = async (
     row: StokRow,
     dL: number,
@@ -420,7 +420,7 @@ export default function StockScreen() {
     const id = `ADJ-OUT-${normCode(row.kode)}-${Date.now()}`;
     const docRef = doc(db, "barangKeluar", id);
     const payload: Transaksi = {
-      jenisForm: "ADJ-OUT", // <— khusus, bukan DR
+      jenisForm: "ADJ-OUT",
       jenisGudang: gudangDipilih || "-",
       principle: row.principle || "-",
       items: [
@@ -560,7 +560,7 @@ export default function StockScreen() {
               mode="BADGE"
               listMode="SCROLLVIEW"
               dropDownDirection="AUTO"
-              searchable={true}
+              searchable
             />
           </View>
 
@@ -690,9 +690,11 @@ export default function StockScreen() {
             </View>
 
             <View style={{ height: 16 }} />
-            <View className="section" style={styles.section}>
+            <View style={styles.section}>
               <Text style={styles.sectionTitle}>🔒 Password Admin</Text>
-              <Text style={styles.sectionDesc}>Wajib untuk Simpan/Hapus.</Text>
+              <Text style={styles.sectionDesc}>
+                Wajib diisi untuk **Simpan** maupun **Hapus Barang**.
+              </Text>
               <TextInput
                 value={adminPassword}
                 onChangeText={setAdminPassword}
