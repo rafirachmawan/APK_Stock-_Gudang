@@ -1,6 +1,6 @@
 // ✅ OutScreen.tsx — akses gudang berdasar user, alokasi dengan leftover,
 //    simpan consumed*, leftover*, dan net* (tanpa ubah logika),
-//    + PATCH anti-race & konsistensi gudang.
+//    + PATCH anti-race & konsistensi gudang (canonicalGudang di semua lookup).
 
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useFocusEffect } from "@react-navigation/native";
@@ -35,6 +35,7 @@ import { expandAllowed, getUserProfile } from "../../utils/userProfile";
 const APPSCRIPT_OUT_URL =
   "https://script.google.com/macros/s/AKfycbzYtiZ87LBEJWjOnAF80W__inuO9dYNOdA8JgijUmonSmV7kG_BhElizoT22-fbZOE1/exec";
 
+/* ===================== Types ===================== */
 interface ItemOut {
   namaBarang: string;
   kode: string;
@@ -44,11 +45,14 @@ interface ItemOut {
   principle: string;
   gdg?: string;
   ed?: string;
+
   consumedL?: string;
   consumedM?: string;
   consumedS?: string;
+
   leftoverM?: string;
   leftoverS?: string;
+
   netDL?: string;
   netDM?: string;
   netDS?: string;
@@ -71,6 +75,7 @@ interface TransaksiOut {
   runId?: string;
 }
 
+/* ===================== Helpers ===================== */
 const formatDate = (date: Date) =>
   `${String(date.getDate()).padStart(2, "0")}-${String(
     date.getMonth() + 1
@@ -220,6 +225,7 @@ async function buildFreshNetStockMap() {
   return map;
 }
 
+/* ===================== Komponen ===================== */
 export default function OutScreen() {
   // Header
   const [jenisGudang, setJenisGudang] = useState("");
@@ -256,6 +262,7 @@ export default function OutScreen() {
   const [allowedGdg, setAllowedGdg] = useState<string[]>([]);
   const [profile, setProfile] = useState<any>(null);
 
+  /* ====== Ambil data realtime & profile ====== */
   useEffect(() => {
     const unsubIn = onSnapshot(collection(db, "barangMasuk"), (s) => {
       setMasukDocs(s.docs.map((d) => d.data()));
@@ -276,6 +283,7 @@ export default function OutScreen() {
     };
   }, []);
 
+  // Ambil file konversi
   useFocusEffect(
     useCallback(() => {
       const loadKonversi = async () => {
@@ -318,14 +326,14 @@ export default function OutScreen() {
     }, [])
   );
 
-  // Stok neto snapshot (untuk pilihan barang di dropdown)
+  /* ====== Stok neto per (gudang,kode) untuk UI (pakai snapshot) ====== */
   const netStockMap = useMemo(() => {
     const map = new Map<
       string,
       { L: number; M: number; S: number; nama: string; principle: string }
     >();
 
-    // + masuk
+    // + barangMasuk
     for (const trx of masukDocs) {
       const gudang = canonicalGudang(trx.gudang);
       const items = Array.isArray(trx.items) ? trx.items : [];
@@ -347,7 +355,7 @@ export default function OutScreen() {
       }
     }
 
-    // - keluar (asal) — untuk tampilan
+    // - barangKeluar (asal) → pakai net* kalau ada (untuk tampilan)
     for (const trx of keluarDocs) {
       const items = Array.isArray(trx.items) ? trx.items : [];
       for (const it of items) {
@@ -376,10 +384,10 @@ export default function OutScreen() {
       }
     }
 
-    // + mutasi (tujuan)
+    // + mutasi masuk (tujuan)
     for (const trx of keluarDocs) {
-      if (!trx.tujuanGudang && !trx.gudangTujuan) continue;
       const tujuan = canonicalGudang(trx.tujuanGudang ?? trx.gudangTujuan);
+      if (!tujuan) continue;
       const items = Array.isArray(trx.items) ? trx.items : [];
       for (const it of items) {
         const key = `${tujuan}|${norm(it.kode)}`;
@@ -416,7 +424,7 @@ export default function OutScreen() {
       result[gdg].push({
         label: val.nama || kodeKey,
         value: val.nama || kodeKey,
-        kode: kodeKey,
+        kode: kodeKey, // sudah norm
         principle: val.principle || "-",
       });
     });
@@ -426,6 +434,7 @@ export default function OutScreen() {
     return result;
   }, [netStockMap]);
 
+  /* ====== Alokasi permintaan dengan konversi ====== */
   function allocateOut(
     reqL: number,
     reqM: number,
@@ -537,6 +546,7 @@ export default function OutScreen() {
     };
   }
 
+  /* ====== Handlers ====== */
   const handleSelectBarang = (index: number, nama: string) => {
     const updated = [...itemList];
     const gdgDipilih = updated[index].gdg || jenisGudang;
@@ -545,7 +555,9 @@ export default function OutScreen() {
       return;
     }
 
-    const list = itemsByGudang[gdgDipilih] || [];
+    // 🔑 gunakan canonical untuk ambil kandidat
+    const list = itemsByGudang[canonicalGudang(gdgDipilih)] || [];
+
     const found = list.find((x) => x.value === nama);
     if (!found) {
       Alert.alert("Barang tidak ada stoknya di gudang ini");
@@ -555,7 +567,7 @@ export default function OutScreen() {
     updated[index] = {
       ...updated[index],
       namaBarang: nama,
-      kode: found.kode, // kode sudah dinormalisasi di map
+      kode: found.kode, // sudah norm
       principle: found.principle || "-",
       gdg: gdgDipilih,
       large: "",
@@ -623,7 +635,7 @@ export default function OutScreen() {
       }
     }
 
-    // PATCH: ambil stok terbaru, selaras logika StockScreen (anti race)
+    // ⛳️ Ambil stok paling baru (selaras StockScreen)
     const freshMap = await buildFreshNetStockMap();
 
     const waktuInput = tanggalTransaksi.toISOString();
@@ -636,13 +648,15 @@ export default function OutScreen() {
     const hasilItems: ItemOut[] = [];
 
     for (const [i, item] of itemList.entries()) {
-      const gdg = item.gdg && item.gdg.trim() !== "" ? item.gdg : jenisGudang;
+      const gdgRaw =
+        item.gdg && item.gdg.trim() !== "" ? item.gdg : jenisGudang;
+      const gdgKey = canonicalGudang(gdgRaw);
       if (!item.kode) {
         Alert.alert(`Pilih barang untuk item #${i + 1}`);
         return;
       }
 
-      const key = `${canonicalGudang(gdg)}|${norm(item.kode)}`;
+      const key = `${gdgKey}|${norm(item.kode)}`;
       const cur = freshMap.get(key) || {
         L: 0,
         M: 0,
@@ -688,13 +702,14 @@ export default function OutScreen() {
       });
     }
 
-    const operatorUsername = profile?.username || "-";
+    const profileData = profile;
+    const operatorUsername = profileData?.username || "-";
     const operatorName =
-      (profile?.guestName && String(profile.guestName).trim()) ||
-      (profile?.displayName && String(profile.displayName).trim()) ||
+      (profileData?.guestName && String(profileData.guestName).trim()) ||
+      (profileData?.displayName && String(profileData.displayName).trim()) ||
       operatorUsername;
     const operatorGuestName =
-      (profile?.guestName && String(profile.guestName).trim()) || "";
+      (profileData?.guestName && String(profileData.guestName).trim()) || "";
 
     const newEntry: TransaksiOut = {
       jenisGudang,
@@ -746,6 +761,7 @@ export default function OutScreen() {
     }
   };
 
+  /* ===================== UI ===================== */
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
@@ -758,6 +774,7 @@ export default function OutScreen() {
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ paddingBottom: 300 }}
         >
+          {/* Gudang asal */}
           <Text style={styles.label}>Jenis Gudang (Asal)</Text>
           <DropDownPicker
             open={openJenisGudang}
@@ -773,6 +790,7 @@ export default function OutScreen() {
             listMode="SCROLLVIEW"
           />
 
+          {/* Jenis Form */}
           <Text style={styles.label}>Jenis Form</Text>
           <DropDownPicker
             open={openJenis}
@@ -789,6 +807,7 @@ export default function OutScreen() {
             listMode="SCROLLVIEW"
           />
 
+          {/* Tanggal */}
           <Text style={styles.label}>Tanggal</Text>
           <TouchableOpacity
             onPress={() => setShowDate(true)}
@@ -808,6 +827,7 @@ export default function OutScreen() {
             />
           )}
 
+          {/* No Faktur */}
           <Text style={styles.label}>No Faktur</Text>
           <TextInput
             style={styles.input}
@@ -815,6 +835,7 @@ export default function OutScreen() {
             onChangeText={setKodeApos}
           />
 
+          {/* Gudang Tujuan (MB) */}
           {jenisForm === "MB" && (
             <>
               <Text style={styles.label}>Gudang Tujuan</Text>
@@ -828,6 +849,7 @@ export default function OutScreen() {
                 zIndex={4800}
                 listMode="SCROLLVIEW"
               />
+
               <Text style={styles.label}>Keterangan</Text>
               <TextInput
                 style={styles.input}
@@ -837,6 +859,7 @@ export default function OutScreen() {
             </>
           )}
 
+          {/* Non-MB: sopir & plat */}
           {jenisForm !== "MB" && (
             <>
               <Text style={styles.label}>Nama Sopir</Text>
@@ -902,9 +925,13 @@ export default function OutScreen() {
             </>
           )}
 
+          {/* Item List */}
           {itemList.map((item, i) => {
             const gdg = item.gdg || "";
-            const candidates = gdg ? itemsByGudang[gdg] || [] : [];
+            // 🔑 gunakan canonical saat mengambil kandidat dari map
+            const candidates = gdg
+              ? itemsByGudang[canonicalGudang(gdg)] || []
+              : [];
             return (
               <View key={`item-${i}`} style={styles.itemBox}>
                 <Text style={styles.label}>Pilih Gudang untuk Barang Ini</Text>
@@ -919,6 +946,7 @@ export default function OutScreen() {
                   setValue={(cb) => {
                     const val = cb(item.gdg);
                     handleChangeItem(i, "gdg", val);
+                    // reset barang ketika ganti gudang
                     handleChangeItem(i, "namaBarang", "");
                     handleChangeItem(i, "kode", "");
                     handleChangeItem(i, "principle", "");
@@ -1016,6 +1044,7 @@ export default function OutScreen() {
   );
 }
 
+/* ===================== Styles ===================== */
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16, backgroundColor: "#fff" },
   label: { marginBottom: 4, fontWeight: "bold" },
