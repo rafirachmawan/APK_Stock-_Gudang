@@ -1,4 +1,4 @@
-// ✅ OutDetailScreen.tsx - Final Lengkap (fix pencarian & guard aman)
+// ✅ OutDetailScreen.tsx - Final Lengkap (fix pencarian & guard aman + admin gate)
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useFocusEffect } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system";
@@ -29,6 +29,9 @@ import {
 import * as XLSX from "xlsx";
 import { db } from "../../utils/firebase";
 
+/* 🔐 Password Admin */
+const STOCK_ADMIN_PASSWORD = "admin123@";
+
 interface ItemOut {
   namaBarang: string;
   kode: string;
@@ -56,6 +59,11 @@ interface TransaksiOut {
 }
 
 export default function OutDetailScreen() {
+  /* ====== Gate Password ====== */
+  const [isAuthed, setIsAuthed] = useState(false);
+  const [pwInput, setPwInput] = useState("");
+
+  /* ====== State Data & UI ====== */
   const [allData, setAllData] = useState<TransaksiOut[]>([]);
   const [searchText, setSearchText] = useState("");
   const [modalVisible, setModalVisible] = useState(false);
@@ -63,8 +71,10 @@ export default function OutDetailScreen() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
 
+  // Subscriber Firestore HANYA setelah lolos password
   useFocusEffect(
     useCallback(() => {
+      if (!isAuthed) return;
       const q = query(collection(db, "barangKeluar"), orderBy("waktuInput"));
       const unsub = onSnapshot(q, (snapshot) => {
         const all: TransaksiOut[] = snapshot.docs.map(
@@ -73,17 +83,16 @@ export default function OutDetailScreen() {
         setAllData(all);
       });
       return () => unsub();
-    }, [])
+    }, [isAuthed])
   );
 
   // 🔧 FIX: pencarian aman meski kodeApos / waktuInput kosong
-  const filtered = allData.filter((trx) => {
+  const filtered = (allData || []).filter((trx) => {
     const tgl = trx?.waktuInput
       ? new Date(trx.waktuInput).toLocaleDateString("id-ID")
       : "";
     const faktur = (trx?.kodeApos || "").toLowerCase();
     const search = (searchText || "").toLowerCase();
-
     return tgl.includes(search) || faktur.includes(search);
   });
 
@@ -99,7 +108,7 @@ export default function OutDetailScreen() {
     return acc;
   }, {} as Record<string, Record<string, TransaksiOut[]>>);
 
-  const exportToExcel = () => {
+  const exportToExcel = async () => {
     const exportData: any[] = [];
     (allData || []).forEach((trx) => {
       const rows = Array.isArray(trx.items) ? trx.items : [];
@@ -126,14 +135,43 @@ export default function OutDetailScreen() {
         });
       });
     });
+
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "BarangKeluar");
-    const uri = FileSystem.cacheDirectory + "BarangKeluar.xlsx";
+
+    const fileName = "BarangKeluar.xlsx";
+    const uri = FileSystem.cacheDirectory + fileName;
     const buffer = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
-    FileSystem.writeAsStringAsync(uri, buffer, {
+
+    // Android: coba SAF dulu, kalau gagal share dari cache
+    if (Platform.OS === "android") {
+      try {
+        const mime =
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+        const perm =
+          await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+        if (perm.granted) {
+          const fUri = await FileSystem.StorageAccessFramework.createFileAsync(
+            perm.directoryUri,
+            fileName,
+            mime
+          );
+          await FileSystem.writeAsStringAsync(fUri, buffer, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+          Alert.alert("Berhasil", `File tersimpan: ${fileName}`);
+          return;
+        }
+      } catch {
+        // fallback di bawah
+      }
+    }
+
+    await FileSystem.writeAsStringAsync(uri, buffer, {
       encoding: FileSystem.EncodingType.Base64,
-    }).then(() => Sharing.shareAsync(uri));
+    });
+    await Sharing.shareAsync(uri);
   };
 
   const handleChangeItem = (i: number, field: keyof ItemOut, value: string) => {
@@ -146,7 +184,7 @@ export default function OutDetailScreen() {
   const handleSave = async () => {
     if (!editedTrx?.id) return;
     try {
-      const { id, ...payload } = editedTrx as any; // hindari menulis field id ke dokumen
+      const { id, ...payload } = editedTrx as any; // hindari tulis field id ke dokumen
       await updateDoc(doc(db, "barangKeluar", id), payload);
       Alert.alert("✅ Berhasil diupdate");
       setModalVisible(false);
@@ -156,7 +194,7 @@ export default function OutDetailScreen() {
     }
   };
 
-  const onChangeDate = (event: any, selected?: Date) => {
+  const onChangeDate = (_: any, selected?: Date) => {
     setShowDatePicker(false);
     if (selected && editedTrx) {
       setSelectedDate(selected);
@@ -164,6 +202,79 @@ export default function OutDetailScreen() {
     }
   };
 
+  /* ====== Render: Gate Password dulu ====== */
+  if (!isAuthed) {
+    return (
+      <KeyboardAvoidingView
+        style={{ flex: 1, backgroundColor: "#fff" }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View
+            style={{
+              flex: 1,
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 24,
+              backgroundColor: "#ffffff",
+            }}
+          >
+            <Text style={{ fontSize: 22, fontWeight: "800", marginBottom: 8 }}>
+              🔒 Akses Admin
+            </Text>
+            <Text
+              style={{
+                color: "#475569",
+                marginBottom: 16,
+                textAlign: "center",
+              }}
+            >
+              Masukkan password admin untuk membuka halaman detail barang
+              keluar.
+            </Text>
+
+            <TextInput
+              value={pwInput}
+              onChangeText={setPwInput}
+              secureTextEntry
+              placeholder="Password admin"
+              style={{
+                borderWidth: 1,
+                borderColor: "#cbd5e1",
+                borderRadius: 10,
+                paddingHorizontal: 12,
+                paddingVertical: 12,
+                width: "100%",
+                backgroundColor: "#fff",
+                marginBottom: 12,
+              }}
+            />
+
+            <TouchableOpacity
+              onPress={() => {
+                if (pwInput !== STOCK_ADMIN_PASSWORD) {
+                  Alert.alert("Ditolak", "Password admin salah.");
+                  return;
+                }
+                setIsAuthed(true);
+              }}
+              style={{
+                backgroundColor: "#0ea5e9",
+                paddingVertical: 12,
+                borderRadius: 10,
+                alignItems: "center",
+                width: "100%",
+              }}
+            >
+              <Text style={{ color: "white", fontWeight: "bold" }}>Masuk</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
+    );
+  }
+
+  /* ====== Render Konten Utama ====== */
   return (
     <ScrollView
       style={styles.container}

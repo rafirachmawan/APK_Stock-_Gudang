@@ -75,7 +75,7 @@ type StokRow = {
 };
 
 // 🔐 Password admin
-const STOCK_ADMIN_PASSWORD = "admin123";
+const STOCK_ADMIN_PASSWORD = "admin123@";
 
 const normCode = (s: any) =>
   String(s ?? "")
@@ -206,36 +206,38 @@ export default function StockScreen() {
         }
         const data = map.get(key)!;
 
-        // Gunakan NET hanya untuk ADJ-OUT (dokumen dari fitur Edit/Hapus)
+        // ✅ ADJ-OUT: pakai net* (bersih)
         const isAdjOut =
-          item._adjustment === true &&
-          toInt(item.large) === 0 &&
-          toInt(item.medium) === 0 &&
-          toInt(item.small) === 0;
-
-        let useL = 0,
-          useM = 0,
-          useS = 0;
+          String(trx.jenisForm ?? "").toUpperCase() === "ADJ-OUT" &&
+          item._adjustment === true;
 
         if (isAdjOut) {
-          useL = Math.max(0, toIntAny(item.netDL));
-          useM = Math.max(0, toIntAny(item.netDM));
-          useS = Math.max(0, toIntAny(item.netDS));
+          const dL = Math.max(0, toIntAny(item.netDL));
+          const dM = Math.max(0, toIntAny(item.netDM));
+          const dS = Math.max(0, toIntAny(item.netDS));
+          data.L = Math.max(0, data.L - dL);
+          data.M = Math.max(0, data.M - dM);
+          data.S = Math.max(0, data.S - dS);
         } else {
+          // ✅ Transaksi biasa (DR/RB/MB): kurangi konsumsi, lalu tambah leftover
           const consumedL = toInt(item.consumedL ?? item.large);
           const consumedM = toInt(item.consumedM ?? item.medium);
           const consumedS = toInt(item.consumedS ?? item.small);
-          const leftoverM = toInt(item.leftoverM);
-          const leftoverS = toInt(item.leftoverS);
 
-          useL = Math.max(0, consumedL);
-          useM = Math.max(0, consumedM - leftoverM);
-          useS = Math.max(0, consumedS - leftoverS);
+          // 1) kurangi stok
+          data.L = Math.max(0, data.L - consumedL);
+          data.M = Math.max(0, data.M - consumedM);
+          data.S = Math.max(0, data.S - consumedS);
+
+          // 2) tambahkan kembali leftover (dibatasi agar ≤ konsumsi)
+          const rawLeftoverM = toInt(item.leftoverM);
+          const rawLeftoverS = toInt(item.leftoverS);
+          const safeLeftoverM = Math.min(rawLeftoverM, consumedM);
+          const safeLeftoverS = Math.min(rawLeftoverS, consumedS);
+
+          data.M += safeLeftoverM;
+          data.S += safeLeftoverS;
         }
-
-        data.L = Math.max(0, data.L - useL);
-        data.M = Math.max(0, data.M - useM);
-        data.S = Math.max(0, data.S - useS);
       });
     });
 
@@ -330,6 +332,7 @@ export default function StockScreen() {
           style: "destructive",
           onPress: async () => {
             try {
+              // 1) Hapus semua barangMasuk di gudangDipilih
               const snapMasuk = await getDocs(collection(db, "barangMasuk"));
               for (const d of snapMasuk.docs) {
                 const trx = d.data() as Transaksi;
@@ -338,19 +341,27 @@ export default function StockScreen() {
                 }
               }
 
+              // 2) Bersihkan barangKeluar:
+              //    - Untuk item yang ASAL-nya = gudangDipilih -> buang item tsb dari dokumen
+              //    - Khusus MB yang TUJUAN = gudangDipilih -> jangan hapus doc!
+              //      Cukup "matikan" efek tambah dengan mengganti tujuan ke __REMOVED__
               const snapKeluar = await getDocs(collection(db, "barangKeluar"));
               for (const d of snapKeluar.docs) {
                 const trx = d.data() as Transaksi;
                 const jenis = String(trx.jenisForm ?? "").toUpperCase();
-                const tujuan = canonicalGudang(
+                const tujuanNow = canonicalGudang(
                   trx.gudangTujuan ?? trx.tujuanGudang
                 );
 
-                if (jenis === "MB" && tujuan === gudangDipilih) {
-                  await deleteDoc(doc(db, "barangKeluar", d.id));
-                  continue;
+                // a) Kalau MB dan TUJUAN = gudangDipilih -> nonaktifkan penambahan ke tujuan
+                if (jenis === "MB" && tujuanNow === gudangDipilih) {
+                  await updateDoc(doc(db, "barangKeluar", d.id), {
+                    gudangTujuan: "__REMOVED__",
+                    tujuanGudang: "__REMOVED__",
+                  } as any);
                 }
 
+                // b) Buang item yang ASAL-nya = gudangDipilih
                 const items = Array.isArray(trx.items) ? trx.items : [];
                 const remaining = items.filter((it) => {
                   const asalRaw =
@@ -360,12 +371,13 @@ export default function StockScreen() {
                 });
 
                 if (remaining.length === items.length) continue;
+
                 if (remaining.length === 0) {
                   await deleteDoc(doc(db, "barangKeluar", d.id));
                 } else {
                   await updateDoc(doc(db, "barangKeluar", d.id), {
                     items: remaining,
-                  });
+                  } as any);
                 }
               }
 

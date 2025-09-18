@@ -1,4 +1,4 @@
-// StockDetailScreen.tsx — In Detail
+// StockDetailScreen.tsx — In Detail (with admin password gate)
 // - Export Excel (aman Android via SAF) + filter range tanggal + search
 // - Edit: HANYA "No Faktur" yang bisa diubah; lainnya read-only
 
@@ -31,6 +31,9 @@ import {
 import * as XLSX from "xlsx";
 import { db } from "../../utils/firebase";
 
+/* ====== Password Admin ====== */
+const STOCK_ADMIN_PASSWORD = "admin123@";
+
 interface ItemInput {
   namaBarang: string;
   kode: string;
@@ -55,6 +58,11 @@ interface PurchaseForm {
 }
 
 export default function StockDetailScreen() {
+  /* ====== Gate password ====== */
+  const [isAuthed, setIsAuthed] = useState(false);
+  const [pwInput, setPwInput] = useState("");
+
+  /* ====== Data ====== */
   const [allData, setAllData] = useState<PurchaseForm[]>([]);
   const [searchText, setSearchText] = useState("");
 
@@ -68,8 +76,10 @@ export default function StockDetailScreen() {
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
 
+  // Listener Firestore hanya setelah lolos password
   useFocusEffect(
     useCallback(() => {
+      if (!isAuthed) return;
       const unsub = onSnapshot(collection(db, "barangMasuk"), (snapshot) => {
         const all: PurchaseForm[] = snapshot.docs.map(
           (d) => ({ id: d.id, ...d.data() } as PurchaseForm)
@@ -77,7 +87,7 @@ export default function StockDetailScreen() {
         setAllData(all);
       });
       return () => unsub();
-    }, [])
+    }, [isAuthed])
   );
 
   // Helpers tanggal
@@ -295,6 +305,78 @@ export default function StockDetailScreen() {
     setEndDate(null);
   };
 
+  /* ========= Render: Gate password dulu ========= */
+  if (!isAuthed) {
+    return (
+      <KeyboardAvoidingView
+        style={{ flex: 1, backgroundColor: "#fff" }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View
+            style={{
+              flex: 1,
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 24,
+              backgroundColor: "#ffffff",
+            }}
+          >
+            <Text style={{ fontSize: 22, fontWeight: "800", marginBottom: 8 }}>
+              🔒 Akses Admin
+            </Text>
+            <Text
+              style={{
+                color: "#475569",
+                marginBottom: 16,
+                textAlign: "center",
+              }}
+            >
+              Masukkan password admin untuk membuka halaman detail barang masuk.
+            </Text>
+
+            <TextInput
+              value={pwInput}
+              onChangeText={setPwInput}
+              secureTextEntry
+              placeholder="Password admin"
+              style={{
+                borderWidth: 1,
+                borderColor: "#cbd5e1",
+                borderRadius: 10,
+                paddingHorizontal: 12,
+                paddingVertical: 12,
+                width: "100%",
+                backgroundColor: "#fff",
+                marginBottom: 12,
+              }}
+            />
+
+            <TouchableOpacity
+              onPress={() => {
+                if (pwInput !== STOCK_ADMIN_PASSWORD) {
+                  Alert.alert("Ditolak", "Password admin salah.");
+                  return;
+                }
+                setIsAuthed(true);
+              }}
+              style={{
+                backgroundColor: "#0ea5e9",
+                paddingVertical: 12,
+                borderRadius: 10,
+                alignItems: "center",
+                width: "100%",
+              }}
+            >
+              <Text style={{ color: "white", fontWeight: "bold" }}>Masuk</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
+    );
+  }
+
+  /* ========= Render konten utama ========= */
   return (
     <ScrollView
       style={{ flex: 1, padding: 16, backgroundColor: "#fff" }}
