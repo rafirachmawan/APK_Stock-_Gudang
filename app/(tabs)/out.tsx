@@ -33,7 +33,7 @@ import { db } from "../../utils/firebase";
 import { expandAllowed, getUserProfile } from "../../utils/userProfile";
 
 const APPSCRIPT_OUT_URL =
-  "https://script.google.com/macros/s/AKfycbzYtiZ87LBEJWjOnAF80W__inuO9dYNOdA8JgijUmonSmV7kG_BhElizoT22-fbZOE1/exec";
+  "https://script.google.com/macros/s/AKfycbzkDVSLqa_f8RHi6kFc8DJuutR92q5JATIxuZq3GTlB9jtJNtFsADTJIl1OzwKNcO5R/exec";
 
 /* ===================== Types ===================== */
 interface ItemOut {
@@ -45,6 +45,7 @@ interface ItemOut {
   principle: string;
   gdg?: string;
   ed?: string;
+  catatan?: string; // ✅ ditambahkan
 
   consumedL?: string;
   consumedM?: string;
@@ -295,7 +296,8 @@ export default function OutScreen() {
             downloadUrl,
             localPath
           );
-          const { uri } = await downloadResumable.downloadAsync();
+          const res = await downloadResumable.downloadAsync();
+          const uri = res?.uri ?? localPath; // ✅ handle undefined
           const b64 = await FileSystem.readAsStringAsync(uri, {
             encoding: FileSystem.EncodingType.Base64,
           });
@@ -579,7 +581,7 @@ export default function OutScreen() {
 
   const handleChangeItem = (i: number, key: keyof ItemOut, value: string) => {
     const updated = [...itemList];
-    updated[i][key] = value;
+    (updated[i] as any)[key] = value;
     setItemList(updated);
   };
 
@@ -731,12 +733,52 @@ export default function OutScreen() {
     try {
       await setDoc(doc(db, "barangKeluar", docId), newEntry);
 
+      // ✅ Kirim ke Google Sheets: kolom utama = INPUT operator (L/M/S)
+      const itemsForExcel = hasilItems.map((it) => ({
+        namaBarang: it.namaBarang,
+        kode: it.kode,
+        principle: it.principle || "-",
+        ed: it.ed || "",
+        catatan: it.catatan || "",
+        large: String(it.large ?? "0"),
+        medium: String(it.medium ?? "0"),
+        small: String(it.small ?? "0"),
+      }));
+
+      const auditForStock = hasilItems.map((it) => ({
+        namaBarang: it.namaBarang,
+        kode: it.kode,
+        consumedL: String(it.consumedL ?? "0"),
+        consumedM: String(it.consumedM ?? "0"),
+        consumedS: String(it.consumedS ?? "0"),
+        leftoverM: String(it.leftoverM ?? "0"),
+        leftoverS: String(it.leftoverS ?? "0"),
+        netDL: String(it.netDL ?? "0"),
+        netDM: String(it.netDM ?? "0"),
+        netDS: String(it.netDS ?? "0"),
+      }));
+
       const sheetPayload = {
-        ...newEntry,
+        jenisGudang,
+        kodeGdng: kodeGdngFinal,
+        kodeApos,
+        kategori,
+        catatan,
+        nomorKendaraan,
+        namaSopir,
+        jenisForm,
+        waktuInput,
+        ...(jenisForm === "MB" && { tujuanGudang }),
+
         operatorName,
         operatorUsername,
         operatorGuestName,
+
+        items: itemsForExcel, // ⬅️ hanya INPUT yang dipakai Excel
+        audit: auditForStock, // ⬅️ opsional, catatan saja
+        sheetMode: "SHOW_INPUT",
       };
+
       try {
         await fetch(APPSCRIPT_OUT_URL, {
           method: "POST",
@@ -780,7 +822,7 @@ export default function OutScreen() {
             open={openJenisGudang}
             value={jenisGudang}
             setOpen={setOpenJenisGudang}
-            setValue={setJenisGudang}
+            setValue={setJenisGudang as any}
             items={allowedGdg.map((g) => ({ label: g, value: g }))}
             placeholder={
               allowedGdg.length ? "Pilih Gudang Asal" : "Tidak ada gudang"
@@ -796,7 +838,7 @@ export default function OutScreen() {
             open={openJenis}
             value={jenisForm}
             setOpen={setOpenJenis}
-            setValue={setJenisForm}
+            setValue={setJenisForm as any}
             items={[
               { label: "Pengiriman (DR)", value: "DR" },
               { label: "Mutasi Stock (MB)", value: "MB" },
@@ -843,7 +885,7 @@ export default function OutScreen() {
                 open={openTujuanGudang}
                 value={tujuanGudang}
                 setOpen={setOpenTujuanGudang}
-                setValue={setTujuanGudang}
+                setValue={setTujuanGudang as any}
                 items={allowedGdg.map((g) => ({ label: g, value: g }))}
                 style={styles.dropdown}
                 zIndex={4800}
@@ -867,7 +909,7 @@ export default function OutScreen() {
                 open={openNamaSopir}
                 value={namaSopir}
                 setOpen={setOpenNamaSopir}
-                setValue={setNamaSopir}
+                setValue={setNamaSopir as any}
                 items={[
                   { label: "Dedi - Deny Mp ", value: "Dedi - Deny MP" },
                   { label: "Deny SP - Eko", value: "Deny SP - Eko" },
@@ -886,7 +928,7 @@ export default function OutScreen() {
                 open={openPlat}
                 value={nomorKendaraan}
                 setOpen={setOpenPlat}
-                setValue={setNomorKendaraan}
+                setValue={setNomorKendaraan as any}
                 items={[
                   {
                     label: "AG 8574 AJ ( HIJAU ) ( KANVAS )",
@@ -928,7 +970,6 @@ export default function OutScreen() {
           {/* Item List */}
           {itemList.map((item, i) => {
             const gdg = item.gdg || "";
-            // 🔑 gunakan canonical saat mengambil kandidat dari map
             const candidates = gdg
               ? itemsByGudang[canonicalGudang(gdg)] || []
               : [];
@@ -938,14 +979,21 @@ export default function OutScreen() {
                 <DropDownPicker
                   open={openGudangPerItem[i] || false}
                   setOpen={(val) => {
+                    // val: boolean | (prev:boolean)=>boolean
+                    const next =
+                      typeof val === "function"
+                        ? val(openGudangPerItem[i] || false)
+                        : val;
                     const copy = [...openGudangPerItem];
-                    copy[i] = val;
+                    copy[i] = !!next;
                     setOpenGudangPerItem(copy);
                   }}
                   value={item.gdg}
-                  setValue={(cb) => {
-                    const val = cb(item.gdg);
-                    handleChangeItem(i, "gdg", val);
+                  setValue={(v) => {
+                    const val =
+                      typeof v === "function" ? v(item.gdg || null) : v;
+                    const str = String(val ?? "");
+                    handleChangeItem(i, "gdg", str);
                     // reset barang ketika ganti gudang
                     handleChangeItem(i, "namaBarang", "");
                     handleChangeItem(i, "kode", "");
@@ -962,18 +1010,23 @@ export default function OutScreen() {
                 <DropDownPicker
                   open={openNamaBarang[i] || false}
                   setOpen={(val) => {
+                    const next =
+                      typeof val === "function"
+                        ? val(openNamaBarang[i] || false)
+                        : val;
                     const copy = [...openNamaBarang];
-                    copy[i] = val;
+                    copy[i] = !!next;
                     setOpenNamaBarang(copy);
                   }}
                   value={item.namaBarang}
-                  setValue={(cb) => {
-                    const val = cb(item.namaBarang);
+                  setValue={(v) => {
+                    const val =
+                      typeof v === "function" ? v(item.namaBarang || null) : v;
                     if (!item.gdg && !jenisGudang) {
                       Alert.alert("Pilih gudang dulu");
                       return;
                     }
-                    handleSelectBarang(i, val);
+                    handleSelectBarang(i, String(val ?? ""));
                   }}
                   items={candidates}
                   placeholder="Pilih Nama Barang"

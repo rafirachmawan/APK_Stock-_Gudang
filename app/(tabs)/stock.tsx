@@ -1,3 +1,5 @@
+// StockScreen.tsx (final, with leftover fix integrated)
+
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import {
@@ -206,37 +208,29 @@ export default function StockScreen() {
         }
         const data = map.get(key)!;
 
-        // ✅ ADJ-OUT: pakai net* (bersih)
         const isAdjOut =
-          String(trx.jenisForm ?? "").toUpperCase() === "ADJ-OUT" &&
-          item._adjustment === true;
+          item._adjustment === true &&
+          toInt(item.large) === 0 &&
+          toInt(item.medium) === 0 &&
+          toInt(item.small) === 0;
 
         if (isAdjOut) {
-          const dL = Math.max(0, toIntAny(item.netDL));
-          const dM = Math.max(0, toIntAny(item.netDM));
-          const dS = Math.max(0, toIntAny(item.netDS));
-          data.L = Math.max(0, data.L - dL);
-          data.M = Math.max(0, data.M - dM);
-          data.S = Math.max(0, data.S - dS);
+          // ADJ-OUT: pakai net*
+          data.L = Math.max(0, data.L - Math.max(0, toIntAny(item.netDL)));
+          data.M = Math.max(0, data.M - Math.max(0, toIntAny(item.netDM)));
+          data.S = Math.max(0, data.S - Math.max(0, toIntAny(item.netDS)));
         } else {
-          // ✅ Transaksi biasa (DR/RB/MB): kurangi konsumsi, lalu tambah leftover
-          const consumedL = toInt(item.consumedL ?? item.large);
-          const consumedM = toInt(item.consumedM ?? item.medium);
-          const consumedS = toInt(item.consumedS ?? item.small);
+          // Transaksi biasa (DR/MB/RB): kurangi konsumsi, lalu kembalikan leftover (di-clamp ke konsumsi)
+          const cL = toInt(item.consumedL ?? item.large);
+          const cM = toInt(item.consumedM ?? item.medium);
+          const cS = toInt(item.consumedS ?? item.small);
+          // leftover adalah stok baru hasil konversi → jangan di-clamp ke konsumsi
+          const loM = Math.max(0, toInt(item.leftoverM));
+          const loS = Math.max(0, toInt(item.leftoverS));
 
-          // 1) kurangi stok
-          data.L = Math.max(0, data.L - consumedL);
-          data.M = Math.max(0, data.M - consumedM);
-          data.S = Math.max(0, data.S - consumedS);
-
-          // 2) tambahkan kembali leftover (dibatasi agar ≤ konsumsi)
-          const rawLeftoverM = toInt(item.leftoverM);
-          const rawLeftoverS = toInt(item.leftoverS);
-          const safeLeftoverM = Math.min(rawLeftoverM, consumedM);
-          const safeLeftoverS = Math.min(rawLeftoverS, consumedS);
-
-          data.M += safeLeftoverM;
-          data.S += safeLeftoverS;
+          data.L = Math.max(0, data.L - cL);
+          data.M = Math.max(0, data.M - cM + loM);
+          data.S = Math.max(0, data.S - cS + loS);
         }
       });
     });
@@ -353,11 +347,11 @@ export default function StockScreen() {
                   trx.gudangTujuan ?? trx.tujuanGudang
                 );
 
-                // a) Kalau MB dan TUJUAN = gudangDipilih -> nonaktifkan penambahan ke tujuan
+                // a) MB tujuan ke gudangDipilih → nonaktifkan penambahan ke tujuan
                 if (jenis === "MB" && tujuanNow === gudangDipilih) {
                   await updateDoc(doc(db, "barangKeluar", d.id), {
                     gudangTujuan: "__REMOVED__",
-                    tujuanGudang: "__REMOVED__",
+                    tujuanGudang: "__REMOVED__", // untuk kompatibilitas field lama
                   } as any);
                 }
 
