@@ -1,6 +1,8 @@
+// app/(tabs)/out.tsx
 // ✅ OutScreen.tsx — akses gudang berdasar user, alokasi dengan leftover,
-//    simpan consumed*, leftover*, dan net* (tanpa ubah logika),
-//    + PATCH anti-race & konsistensi gudang (canonicalGudang di semua lookup).
+//    simpan consumed*, leftover*, dan net*,
+//    + builder stok anti-race (konsisten dengan StockScreen) +
+//    perbaikan leftover (ditambahkan ke stok) dan scope variable (rowItem).
 
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useFocusEffect } from "@react-navigation/native";
@@ -45,7 +47,7 @@ interface ItemOut {
   principle: string;
   gdg?: string;
   ed?: string;
-  catatan?: string; // ✅ ditambahkan
+  catatan?: string;
 
   consumedL?: string;
   consumedM?: string;
@@ -109,7 +111,7 @@ const canonicalGudang = (g: any): string => {
   return x;
 };
 
-/* ====== PATCH: builder stok fresh anti-race (selaras StockScreen) ====== */
+/* ====== Builder stok fresh anti-race (selaras StockScreen) ====== */
 async function buildFreshNetStockMap() {
   const masukSnap = await getDocs(collection(db, "barangMasuk"));
   const keluarSnap = await getDocs(collection(db, "barangKeluar"));
@@ -129,73 +131,79 @@ async function buildFreshNetStockMap() {
     const trx = d.data() as any;
     const gudang = canonicalGudang(trx.gudang);
     const items = Array.isArray(trx.items) ? trx.items : [];
-    items.forEach((it: any) => {
-      const key = `${gudang}|${norm(it.kode)}`;
+    items.forEach((rowItem: any) => {
+      const key = `${gudang}|${norm(rowItem.kode)}`;
       if (!map.has(key)) {
         map.set(key, {
           L: 0,
           M: 0,
           S: 0,
-          nama: it.namaBarang || "",
-          principle: it.principle || trx.principle || "-",
+          nama: rowItem.namaBarang || "",
+          principle: rowItem.principle || trx.principle || "-",
         });
       }
       const row = map.get(key)!;
-      row.L += toInt(it.large);
-      row.M += toInt(it.medium);
-      row.S += toInt(it.small);
+      row.L += toIntAnyLocal(rowItem.large);
+      row.M += toIntAnyLocal(rowItem.medium);
+      row.S += toIntAnyLocal(rowItem.small);
     });
   });
 
-  // - barangKeluar (asal) — NET hanya untuk ADJ-OUT (selaras StockScreen)
+  // - barangKeluar (asal) — NET hanya utk ADJ-OUT, NORMAL: konsumsi + leftover ditambahkan ke stok
   keluarSnap.docs.forEach((d) => {
     const trx = d.data() as any;
     const items = Array.isArray(trx.items) ? trx.items : [];
-    items.forEach((it: any) => {
+    items.forEach((rowItem: any) => {
       const asal = canonicalGudang(
-        it.gdg && String(it.gdg).trim() !== "" ? it.gdg : trx.jenisGudang
+        rowItem.gdg && String(rowItem.gdg).trim() !== ""
+          ? rowItem.gdg
+          : trx.jenisGudang
       );
-      const key = `${asal}|${norm(it.kode)}`;
+      const key = `${asal}|${norm(rowItem.kode)}`;
       if (!map.has(key)) {
         map.set(key, {
           L: 0,
           M: 0,
           S: 0,
-          nama: it.namaBarang || "",
-          principle: it.principle || trx.principle || "-",
+          nama: rowItem.namaBarang || "",
+          principle: rowItem.principle || trx.principle || "-",
         });
       }
       const row = map.get(key)!;
 
       const isAdjOut =
-        it._adjustment === true &&
-        toInt(it.large) === 0 &&
-        toInt(it.medium) === 0 &&
-        toInt(it.small) === 0;
-
-      let useL = 0,
-        useM = 0,
-        useS = 0;
+        rowItem._adjustment === true &&
+        toIntAnyLocal(rowItem.large) === 0 &&
+        toIntAnyLocal(rowItem.medium) === 0 &&
+        toIntAnyLocal(rowItem.small) === 0;
 
       if (isAdjOut) {
-        useL = Math.max(0, toIntAnyLocal(it.netDL));
-        useM = Math.max(0, toIntAnyLocal(it.netDM));
-        useS = Math.max(0, toIntAnyLocal(it.netDS));
+        const useL = Math.max(0, toIntAnyLocal(rowItem.netDL));
+        const useM = Math.max(0, toIntAnyLocal(rowItem.netDM));
+        const useS = Math.max(0, toIntAnyLocal(rowItem.netDS));
+        row.L = Math.max(0, row.L - useL);
+        row.M = Math.max(0, row.M - useM);
+        row.S = Math.max(0, row.S - useS);
       } else {
-        const consumedL = toInt(it.consumedL ?? it.large);
-        const consumedM = toInt(it.consumedM ?? it.medium);
-        const consumedS = toInt(it.consumedS ?? it.small);
-        const leftoverM = toInt(it.leftoverM);
-        const leftoverS = toInt(it.leftoverS);
+        const consumedL = Math.max(
+          0,
+          toIntAnyLocal(rowItem.consumedL ?? rowItem.large)
+        );
+        const consumedM = Math.max(
+          0,
+          toIntAnyLocal(rowItem.consumedM ?? rowItem.medium)
+        );
+        const consumedS = Math.max(
+          0,
+          toIntAnyLocal(rowItem.consumedS ?? rowItem.small)
+        );
+        const leftoverM = Math.max(0, toIntAnyLocal(rowItem.leftoverM));
+        const leftoverS = Math.max(0, toIntAnyLocal(rowItem.leftoverS));
 
-        useL = Math.max(0, consumedL);
-        useM = Math.max(0, consumedM - leftoverM);
-        useS = Math.max(0, consumedS - leftoverS);
+        row.L = Math.max(0, row.L - consumedL);
+        row.M = Math.max(0, row.M - consumedM + leftoverM);
+        row.S = Math.max(0, row.S - consumedS + leftoverS);
       }
-
-      row.L = Math.max(0, row.L - useL);
-      row.M = Math.max(0, row.M - useM);
-      row.S = Math.max(0, row.S - useS);
     });
   });
 
@@ -205,21 +213,21 @@ async function buildFreshNetStockMap() {
     if (String(trx.jenisForm ?? "").toUpperCase() !== "MB") return;
     const tujuan = canonicalGudang(trx.tujuanGudang ?? trx.gudangTujuan);
     const items = Array.isArray(trx.items) ? trx.items : [];
-    items.forEach((it: any) => {
-      const key = `${tujuan}|${norm(it.kode)}`;
+    items.forEach((rowItem: any) => {
+      const key = `${tujuan}|${norm(rowItem.kode)}`;
       if (!map.has(key)) {
         map.set(key, {
           L: 0,
           M: 0,
           S: 0,
-          nama: it.namaBarang || "",
-          principle: it.principle || trx.principle || "-",
+          nama: rowItem.namaBarang || "",
+          principle: rowItem.principle || trx.principle || "-",
         });
       }
       const row = map.get(key)!;
-      row.L += toInt(it.large);
-      row.M += toInt(it.medium);
-      row.S += toInt(it.small);
+      row.L += toIntAnyLocal(rowItem.large);
+      row.M += toIntAnyLocal(rowItem.medium);
+      row.S += toIntAnyLocal(rowItem.small);
     });
   });
 
@@ -284,7 +292,7 @@ export default function OutScreen() {
     };
   }, []);
 
-  // Ambil file konversi
+  // Ambil file konversi (robust header)
   useFocusEffect(
     useCallback(() => {
       const loadKonversi = async () => {
@@ -297,28 +305,75 @@ export default function OutScreen() {
             localPath
           );
           const res = await downloadResumable.downloadAsync();
-          const uri = res?.uri ?? localPath; // ✅ handle undefined
+          const uri = res?.uri ?? localPath;
+
           const b64 = await FileSystem.readAsStringAsync(uri, {
             encoding: FileSystem.EncodingType.Base64,
           });
-          const workbook = XLSX.read(b64, { type: "base64" });
-          const wsname = workbook.SheetNames[0];
-          const sheet = XLSX.utils.sheet_to_json(workbook.Sheets[wsname]);
-          const konversiFinal = sheet.map((row: any) => ({
-            Kode: String(row["Kode"] ?? "").trim(),
-            KonversiL: parseInt(
-              (row["KonversiL"] ??
-                row["Konversi Dari Large Ke Medium"] ??
-                "0") as string,
-              10
-            ),
-            KonversiM: parseInt(
-              (row["KonversiM"] ??
-                row["Konversi Dari Medium Ke Small"] ??
-                "0") as string,
-              10
-            ),
-          }));
+          const wb = XLSX.read(b64, { type: "base64" });
+          const wsname = wb.SheetNames[0];
+          const rows: any[] = XLSX.utils.sheet_to_json(wb.Sheets[wsname], {
+            raw: true,
+          });
+
+          const normKey = (s: any) =>
+            String(s ?? "")
+              .toLowerCase()
+              .replace(/\s+/g, " ")
+              .trim();
+
+          const getNum = (v: any) => {
+            const n = Number(String(v ?? "").replace(/[^0-9.\-]/g, ""));
+            return Number.isFinite(n) ? n : 0;
+          };
+
+          const konversiFinal = rows.map((r) => {
+            const keys = Object.keys(r).reduce<Record<string, any>>(
+              (acc, k) => {
+                acc[normKey(k)] = r[k];
+                return acc;
+              },
+              {}
+            );
+
+            const kode =
+              keys["kode"] ??
+              keys["code"] ??
+              keys["product code"] ??
+              keys["item code"] ??
+              "";
+
+            // C = Large -> Medium
+            const cRaw =
+              keys["konversi dari large ke medium"] ??
+              keys["konversi large ke medium"] ??
+              keys["konversi l ke m"] ??
+              keys["konversil"] ??
+              keys["l->m"] ??
+              keys["l to m"] ??
+              keys["konversilargemedium"] ??
+              keys["konversi l"] ??
+              0;
+
+            // D = Medium -> Small
+            const dRaw =
+              keys["konversi dari medium ke small"] ??
+              keys["konversi medium ke small"] ??
+              keys["konversi m ke s"] ??
+              keys["konversim"] ??
+              keys["m->s"] ??
+              keys["m to s"] ??
+              keys["konversimediumsmall"] ??
+              keys["konversi m"] ??
+              0;
+
+            return {
+              Kode: String(kode ?? "").trim(),
+              KonversiL: getNum(cRaw), // L->M (kolom C)
+              KonversiM: getNum(dRaw), // M->S (kolom D)
+            };
+          });
+
           setKonversiData(konversiFinal);
         } catch (e) {
           console.error("Gagal ambil konversi:", e);
@@ -339,50 +394,75 @@ export default function OutScreen() {
     for (const trx of masukDocs) {
       const gudang = canonicalGudang(trx.gudang);
       const items = Array.isArray(trx.items) ? trx.items : [];
-      for (const it of items) {
-        const key = `${gudang}|${norm(it.kode)}`;
+      for (const rowItem of items) {
+        const key = `${gudang}|${norm(rowItem.kode)}`;
         if (!map.has(key)) {
           map.set(key, {
             L: 0,
             M: 0,
             S: 0,
-            nama: it.namaBarang || "",
-            principle: it.principle || trx.principle || "-",
+            nama: rowItem.namaBarang || "",
+            principle: rowItem.principle || trx.principle || "-",
           });
         }
         const row = map.get(key)!;
-        row.L += toInt(it.large);
-        row.M += toInt(it.medium);
-        row.S += toInt(it.small);
+        row.L += toInt(rowItem.large);
+        row.M += toInt(rowItem.medium);
+        row.S += toInt(rowItem.small);
       }
     }
 
-    // - barangKeluar (asal) → pakai net* kalau ada (untuk tampilan)
+    // - barangKeluar (asal) → konsumsi + leftover (untuk tampilan)
     for (const trx of keluarDocs) {
       const items = Array.isArray(trx.items) ? trx.items : [];
-      for (const it of items) {
+      for (const rowItem of items) {
         const asal = canonicalGudang(
-          it.gdg && String(it.gdg).trim() !== "" ? it.gdg : trx.jenisGudang
+          rowItem.gdg && String(rowItem.gdg).trim() !== ""
+            ? rowItem.gdg
+            : trx.jenisGudang
         );
-        const key = `${asal}|${norm(it.kode)}`;
+        const key = `${asal}|${norm(rowItem.kode)}`;
         if (!map.has(key)) {
           map.set(key, {
             L: 0,
             M: 0,
             S: 0,
-            nama: it.namaBarang || "",
-            principle: it.principle || trx.principle || "-",
+            nama: rowItem.namaBarang || "",
+            principle: rowItem.principle || trx.principle || "-",
           });
         }
         const row = map.get(key)!;
 
-        const useL = toInt((it as any).netDL ?? it.consumedL ?? it.large);
-        const useM = toInt((it as any).netDM ?? it.consumedM ?? it.medium);
-        const useS = toInt((it as any).netDS ?? it.consumedS ?? it.small);
+        const isAdjOut =
+          (rowItem as any)._adjustment === true &&
+          toInt((rowItem as any).large) === 0 &&
+          toInt((rowItem as any).medium) === 0 &&
+          toInt((rowItem as any).small) === 0;
 
-        row.L = Math.max(0, row.L - useL);
-        row.M = Math.max(0, row.M - useM);
-        row.S = Math.max(0, row.S - useS);
+        if (isAdjOut) {
+          const useL = toInt((rowItem as any).netDL);
+          const useM = toInt((rowItem as any).netDM);
+          const useS = toInt((rowItem as any).netDS);
+          row.L = Math.max(0, row.L - useL);
+          row.M = Math.max(0, row.M - useM);
+          row.S = Math.max(0, row.S - useS);
+        } else {
+          const consumedL = toInt(
+            (rowItem as any).consumedL ?? (rowItem as any).large
+          );
+          const consumedM = toInt(
+            (rowItem as any).consumedM ?? (rowItem as any).medium
+          );
+          const consumedS = toInt(
+            (rowItem as any).consumedS ?? (rowItem as any).small
+          );
+          const leftoverM = toInt((rowItem as any).leftoverM);
+          const leftoverS = toInt((rowItem as any).leftoverS);
+
+          row.L = Math.max(0, row.L - consumedL);
+          row.M = Math.max(0, row.M - consumedM + leftoverM);
+          row.S = Math.max(0, row.S - consumedS + leftoverS);
+        }
       }
     }
 
@@ -391,21 +471,21 @@ export default function OutScreen() {
       const tujuan = canonicalGudang(trx.tujuanGudang ?? trx.gudangTujuan);
       if (!tujuan) continue;
       const items = Array.isArray(trx.items) ? trx.items : [];
-      for (const it of items) {
-        const key = `${tujuan}|${norm(it.kode)}`;
+      for (const rowItem of items) {
+        const key = `${tujuan}|${norm(rowItem.kode)}`;
         if (!map.has(key)) {
           map.set(key, {
             L: 0,
             M: 0,
             S: 0,
-            nama: it.namaBarang || "",
-            principle: it.principle || trx.principle || "-",
+            nama: rowItem.namaBarang || "",
+            principle: rowItem.principle || trx.principle || "-",
           });
         }
         const row = map.get(key)!;
-        row.L += toInt(it.large);
-        row.M += toInt(it.medium);
-        row.S += toInt(it.small);
+        row.L += toInt(rowItem.large);
+        row.M += toInt(rowItem.medium);
+        row.S += toInt(rowItem.small);
       }
     }
 
@@ -436,7 +516,7 @@ export default function OutScreen() {
     return result;
   }, [netStockMap]);
 
-  /* ====== Alokasi permintaan dengan konversi ====== */
+  /* ====== Alokasi permintaan dengan konversi (alur tegas) ====== */
   function allocateOut(
     reqL: number,
     reqM: number,
@@ -450,81 +530,85 @@ export default function OutScreen() {
     let addBackM = 0,
       addBackS = 0;
 
-    // L
+    const { LtoM, MtoS } = konv;
+
+    // 1) L hanya dari stok L
     if (reqL > 0) {
-      const useL = Math.min(reqL, stock.L);
-      consumedL += useL;
-      stock.L -= useL;
-      reqL -= useL;
+      const take = Math.min(reqL, stock.L);
+      consumedL += take;
+      stock.L -= take;
+      reqL -= take;
       if (reqL > 0) return null;
     }
 
-    // M
+    // 2) M: stok M dulu, jika kurang baru dari L via C (L->M)
     if (reqM > 0) {
-      const useM = Math.min(reqM, stock.M);
-      consumedM += useM;
-      stock.M -= useM;
-      reqM -= useM;
+      const takeM = Math.min(reqM, stock.M);
+      consumedM += takeM;
+      stock.M -= takeM;
+      reqM -= takeM;
 
-      if (reqM > 0 && konv.LtoM > 0) {
-        const needL = Math.ceil(reqM / konv.LtoM);
-        const useFromL = Math.min(stock.L, needL);
-        consumedL += useFromL;
-        stock.L -= useFromL;
+      if (reqM > 0) {
+        if (LtoM <= 0) return null;
+        const needL = Math.ceil(reqM / LtoM);
+        const useL = Math.min(stock.L, needL);
+        consumedL += useL;
+        stock.L -= useL;
 
-        const producedM = useFromL * konv.LtoM;
-        const takeM = Math.min(reqM, producedM);
-        reqM -= takeM;
+        const producedM = useL * LtoM;
+        const takeM2 = Math.min(reqM, producedM);
+        reqM -= takeM2;
 
-        const leftoverM = producedM - takeM;
-        if (leftoverM > 0) {
-          addBackM += leftoverM;
-          stock.M += leftoverM;
+        const leftoverM2 = producedM - takeM2;
+        if (leftoverM2 > 0) {
+          addBackM += leftoverM2;
+          stock.M += leftoverM2;
         }
       }
 
       if (reqM > 0) return null;
     }
 
-    // S
+    // 3) S: stok S dulu, lalu dari M via D (M->S), terakhir dari L via C×D
     if (reqS > 0) {
-      const useS = Math.min(reqS, stock.S);
-      consumedS += useS;
-      stock.S -= useS;
-      reqS -= useS;
+      const takeS = Math.min(reqS, stock.S);
+      consumedS += takeS;
+      stock.S -= takeS;
+      reqS -= takeS;
 
-      if (reqS > 0 && konv.MtoS > 0) {
-        const needM = Math.ceil(reqS / konv.MtoS);
-        const useM2 = Math.min(stock.M, needM);
-        consumedM += useM2;
-        stock.M -= useM2;
+      if (reqS > 0 && MtoS > 0) {
+        const needM = Math.ceil(reqS / MtoS);
+        const useM = Math.min(stock.M, needM);
+        consumedM += useM;
+        stock.M -= useM;
 
-        const producedS1 = useM2 * konv.MtoS;
-        const takeS1 = Math.min(reqS, producedS1);
-        reqS -= takeS1;
+        const producedS = useM * MtoS;
+        const takeS2 = Math.min(reqS, producedS);
+        reqS -= takeS2;
 
-        const leftoverS1 = producedS1 - takeS1;
-        if (leftoverS1 > 0) {
-          addBackS += leftoverS1;
-          stock.S += leftoverS1;
+        const leftoverS2 = producedS - takeS2;
+        if (leftoverS2 > 0) {
+          addBackS += leftoverS2;
+          stock.S += leftoverS2;
         }
       }
 
-      if (reqS > 0 && konv.LtoM > 0 && konv.MtoS > 0) {
-        const sPerL = konv.LtoM * konv.MtoS;
+      if (reqS > 0) {
+        if (LtoM <= 0 || MtoS <= 0) return null;
+        const sPerL = LtoM * MtoS;
         const needL2 = Math.ceil(reqS / sPerL);
         const useL2 = Math.min(stock.L, needL2);
         consumedL += useL2;
         stock.L -= useL2;
 
         const producedS2 = useL2 * sPerL;
-        const takeS2 = Math.min(reqS, producedS2);
-        reqS -= takeS2;
+        const takeS3 = Math.min(reqS, producedS2);
+        reqS -= takeS3;
 
-        const leftoverS2 = producedS2 - takeS2;
-        if (leftoverS2 > 0) {
-          addBackS += leftoverS2;
-          stock.S += leftoverS2;
+        const leftoverS3 = producedS2 - takeS3;
+        if (leftoverS3 > 0) {
+          addBackS += leftoverS3;
+          stock.S += leftoverS3;
         }
       }
 
@@ -557,9 +641,7 @@ export default function OutScreen() {
       return;
     }
 
-    // 🔑 gunakan canonical untuk ambil kandidat
     const list = itemsByGudang[canonicalGudang(gdgDipilih)] || [];
-
     const found = list.find((x) => x.value === nama);
     if (!found) {
       Alert.alert("Barang tidak ada stoknya di gudang ini");
@@ -637,7 +719,7 @@ export default function OutScreen() {
       }
     }
 
-    // ⛳️ Ambil stok paling baru (selaras StockScreen)
+    // Ambil stok paling baru (selaras StockScreen)
     const freshMap = await buildFreshNetStockMap();
 
     const waktuInput = tanggalTransaksi.toISOString();
@@ -774,8 +856,8 @@ export default function OutScreen() {
         operatorUsername,
         operatorGuestName,
 
-        items: itemsForExcel, // ⬅️ hanya INPUT yang dipakai Excel
-        audit: auditForStock, // ⬅️ opsional, catatan saja
+        items: itemsForExcel, // ⬅️ hanya INPUT
+        audit: auditForStock, // ⬅️ catatan
         sheetMode: "SHOW_INPUT",
       };
 
@@ -979,7 +1061,6 @@ export default function OutScreen() {
                 <DropDownPicker
                   open={openGudangPerItem[i] || false}
                   setOpen={(val) => {
-                    // val: boolean | (prev:boolean)=>boolean
                     const next =
                       typeof val === "function"
                         ? val(openGudangPerItem[i] || false)
@@ -1026,7 +1107,7 @@ export default function OutScreen() {
                       Alert.alert("Pilih gudang dulu");
                       return;
                     }
-                    handleSelectBarang(i, String(val ?? ""));
+                    handleSelectBarang(i, String(val ?? "")); // set kode/principle otomatis
                   }}
                   items={candidates}
                   placeholder="Pilih Nama Barang"
