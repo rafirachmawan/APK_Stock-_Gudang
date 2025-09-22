@@ -1,4 +1,4 @@
-// StockScreen.tsx (final, with leftover fix integrated)
+// StockScreen.tsx (final, MB approved-only, leftover fix)
 
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
@@ -56,12 +56,15 @@ interface Item {
   _adjustment?: boolean;
 }
 
+type MutasiStatus = "PENDING" | "APPROVED" | "REJECTED";
+
 interface Transaksi {
   gudang?: string; // barangMasuk
   gudangTujuan?: string; // barangKeluar (beberapa data lama)
   tujuanGudang?: string; // barangKeluar (OutScreen)
   jenisGudang?: string; // barangKeluar (asal: header)
   jenisForm?: "DR" | "MB" | "RB" | "ADJ-IN" | "ADJ-OUT";
+  mutasiStatus?: MutasiStatus; // untuk MB
   principle: string;
   items: Item[];
   waktuInput?: any;
@@ -93,11 +96,12 @@ const toIntAny = (v: any) => {
   return Number.isNaN(n) ? 0 : n;
 };
 
+// ❗ Samakan kanon nama gudang: pakai "Gudang E"
 const canonicalGudang = (g: any): string => {
   const x = String(g ?? "").trim();
   const U = x.toUpperCase();
   if (!x) return "Unknown";
-  if (U.includes("E (BAD STOCK)")) return "Gudang E (Bad Stock)";
+  if (U.includes("E (BAD STOCK)") || U.includes("GUDANG E")) return "Gudang E";
   if (U.includes("BCD")) return "Gudang BCD";
   if (
     U.includes("GUDANG B") ||
@@ -123,7 +127,7 @@ export default function StockScreen() {
   const [gudangItems, setGudangItems] = useState([
     { label: "Gudang A", value: "Gudang A" },
     { label: "Gudang BCD", value: "Gudang BCD" },
-    { label: "Gudang E (Bad Stock)", value: "Gudang E (Bad Stock)" },
+    { label: "Gudang E", value: "Gudang E" },
   ]);
 
   // ====== Edit Modal State ======
@@ -189,7 +193,15 @@ export default function StockScreen() {
 
     // - barangKeluar asal (group asal per item)
     barangKeluar.forEach((trx) => {
+      const isMB = String(trx.jenisForm ?? "").toUpperCase() === "MB";
+      const mbApproved =
+        String((trx as any).mutasiStatus ?? "APPROVED").toUpperCase() ===
+        "APPROVED";
+
       trx.items?.forEach((item) => {
+        // ❗ Skip pengurangan asal kalau MB belum APPROVED
+        if (isMB && !mbApproved) return;
+
         const asalRaw =
           item.gdg && item.gdg.trim() !== "" ? item.gdg : trx.jenisGudang;
         const gGroup = canonicalGudang(asalRaw);
@@ -220,11 +232,10 @@ export default function StockScreen() {
           data.M = Math.max(0, data.M - Math.max(0, toIntAny(item.netDM)));
           data.S = Math.max(0, data.S - Math.max(0, toIntAny(item.netDS)));
         } else {
-          // Transaksi biasa (DR/MB/RB): kurangi konsumsi, lalu kembalikan leftover (di-clamp ke konsumsi)
+          // DR/MB/RB: konsumsi - leftover (leftover = stok baru)
           const cL = toInt(item.consumedL ?? item.large);
           const cM = toInt(item.consumedM ?? item.medium);
           const cS = toInt(item.consumedS ?? item.small);
-          // leftover adalah stok baru hasil konversi → jangan di-clamp ke konsumsi
           const loM = Math.max(0, toInt(item.leftoverM));
           const loS = Math.max(0, toInt(item.leftoverS));
 
@@ -235,9 +246,14 @@ export default function StockScreen() {
       });
     });
 
-    // + mutasi masuk (group tujuan) — HANYA untuk MB
+    // + mutasi masuk (group tujuan) — HANYA untuk MB APPROVED
     barangKeluar.forEach((trx) => {
       if (String(trx.jenisForm ?? "").toUpperCase() !== "MB") return;
+
+      const mbApproved =
+        String((trx as any).mutasiStatus ?? "APPROVED").toUpperCase() ===
+        "APPROVED";
+      if (!mbApproved) return;
 
       const tujuan = canonicalGudang(trx.gudangTujuan ?? trx.tujuanGudang);
       if (tujuan !== gudangDipilih) return;
@@ -696,7 +712,7 @@ export default function StockScreen() {
             </View>
 
             <View style={{ height: 16 }} />
-            <View style={styles.section}>
+            <View className="section" style={styles.section}>
               <Text style={styles.sectionTitle}>🔒 Password Admin</Text>
               <Text style={styles.sectionDesc}>
                 Wajib diisi untuk **Simpan** maupun **Hapus Barang**.

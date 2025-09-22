@@ -1,8 +1,9 @@
 // app/(tabs)/out.tsx
-// ✅ OutScreen.tsx — akses gudang berdasar user, alokasi dengan leftover,
-//    simpan consumed*, leftover*, dan net*,
-//    + builder stok anti-race (konsisten dengan StockScreen) +
-//    perbaikan leftover (ditambahkan ke stok) dan scope variable (rowItem).
+// ✅ OutScreen.tsx — mutasi dengan KONFIRMASI & NOTIFIKASI, aturan surat jalan GS↔BS,
+//    builder stok anti-race (tujuan hanya dihitung jika APPROVED),
+//    akses gudang berdasar user, alokasi dengan leftover (C/D), audit ke Sheet.
+//    + Tujuan MB dibatasi ke A/BCD/E dan tergantung asal (BCD→A/E, A→BCD/E, E→A/BCD)
+//    + FIX: Firestore error saat MB→A karena suratJalanNo undefined → kini selalu string atau null.
 
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useFocusEffect } from "@react-navigation/native";
@@ -61,6 +62,8 @@ interface ItemOut {
   netDS?: string;
 }
 
+type MutasiStatus = "PENDING" | "APPROVED" | "REJECTED";
+
 interface TransaksiOut {
   jenisGudang: string; // gudang asal
   kodeGdng: string;
@@ -71,11 +74,18 @@ interface TransaksiOut {
   namaSopir: string;
   waktuInput: string;
   jenisForm: "DR" | "MB" | "RB";
-  tujuanGudang?: string;
+  tujuanGudang?: string; // disimpan KANONIK (Gudang A/BCD/E)
   items: ItemOut[];
   createdAt?: any;
   gudangAsal?: string;
   runId?: string;
+
+  // Mutasi & Surat Jalan
+  mutasiStatus?: MutasiStatus; // default PENDING utk MB
+  suratJalanNo?: string | null; // ⬅️ tidak pernah undefined
+  needsSuratJalan?: boolean;
+  confirmedAt?: any;
+  confirmedBy?: string;
 }
 
 /* ===================== Helpers ===================== */
@@ -95,11 +105,12 @@ const norm = (s: any) =>
     .toUpperCase()
     .replace(/[\s\-_]/g, "");
 
+// Kanon nama gudang (A/BCD/E)
 const canonicalGudang = (g: any): string => {
   const x = String(g ?? "").trim();
   const U = x.toUpperCase();
   if (!x) return "Unknown";
-  if (U.includes("E (BAD STOCK)")) return "Gudang E (Bad Stock)";
+  if (U.includes("E (BAD STOCK)") || U.includes("GUDANG E")) return "Gudang E";
   if (U.includes("BCD")) return "Gudang BCD";
   if (
     U.includes("GUDANG B") ||
@@ -111,7 +122,26 @@ const canonicalGudang = (g: any): string => {
   return x;
 };
 
-/* ====== Builder stok fresh anti-race (selaras StockScreen) ====== */
+// GS/BS grouping
+const groupGudang = (g: string): "GS" | "BS" | "UNKNOWN" => {
+  const c = canonicalGudang(g);
+  if (c === "Gudang A" || c === "Gudang BCD") return "GS";
+  if (c === "Gudang E") return "BS";
+  return "UNKNOWN";
+};
+
+// Tujuan MB berdasar asal
+const DEST_BASE = ["Gudang A", "Gudang BCD", "Gudang E"] as const;
+const canon = (g: string) => canonicalGudang(g);
+function buildTujuanByAsal(asal: string) {
+  const c = canon(asal);
+  if (c === "Gudang BCD") return ["Gudang A", "Gudang E"];
+  if (c === "Gudang A") return ["Gudang BCD", "Gudang E"];
+  if (c === "Gudang E") return ["Gudang A", "Gudang BCD"];
+  return [...DEST_BASE];
+}
+
+/* ====== Builder stok fresh anti-race (tujuan hanya APPROVED) ====== */
 async function buildFreshNetStockMap() {
   const masukSnap = await getDocs(collection(db, "barangMasuk"));
   const keluarSnap = await getDocs(collection(db, "barangKeluar"));
@@ -149,7 +179,7 @@ async function buildFreshNetStockMap() {
     });
   });
 
-  // - barangKeluar (asal) — NET hanya utk ADJ-OUT, NORMAL: konsumsi + leftover ditambahkan ke stok
+  // - barangKeluar (asal) — semua form
   keluarSnap.docs.forEach((d) => {
     const trx = d.data() as any;
     const items = Array.isArray(trx.items) ? trx.items : [];
@@ -207,10 +237,14 @@ async function buildFreshNetStockMap() {
     });
   });
 
-  // + mutasi masuk (tujuan) — hanya MB
+  // + mutasi masuk (tujuan) — HANYA MB APPROVED
   keluarSnap.docs.forEach((d) => {
     const trx = d.data() as any;
     if (String(trx.jenisForm ?? "").toUpperCase() !== "MB") return;
+
+    const approved = (trx.mutasiStatus ?? "APPROVED") === "APPROVED";
+    if (!approved) return;
+
     const tujuan = canonicalGudang(trx.tujuanGudang ?? trx.gudangTujuan);
     const items = Array.isArray(trx.items) ? trx.items : [];
     items.forEach((rowItem: any) => {
@@ -241,7 +275,7 @@ export default function OutScreen() {
   const [openJenisGudang, setOpenJenisGudang] = useState(false);
   const [jenisForm, setJenisForm] = useState<"DR" | "MB" | "RB">("DR");
   const [openJenis, setOpenJenis] = useState(false);
-  const [tujuanGudang, setTujuanGudang] = useState("");
+  const [tujuanGudang, setTujuanGudang] = useState<string | null>(null);
   const [openTujuanGudang, setOpenTujuanGudang] = useState(false);
   const [kodeApos, setKodeApos] = useState("");
   const [kategori, setKategori] = useState("");
@@ -250,6 +284,18 @@ export default function OutScreen() {
   const [nomorKendaraan, setNomorKendaraan] = useState("");
   const [tanggalTransaksi, setTanggalTransaksi] = useState(new Date());
   const [showDate, setShowDate] = useState(false);
+
+  // Mutasi: surat jalan & status UI hint
+  const asalGroup = useMemo(() => groupGudang(jenisGudang), [jenisGudang]);
+  const tujuanGroup = useMemo(
+    () => groupGudang(tujuanGudang || ""),
+    [tujuanGudang]
+  );
+  const needsSuratJalan = useMemo(
+    () => jenisForm === "MB" && asalGroup === "GS" && tujuanGroup === "BS",
+    [jenisForm, asalGroup, tujuanGroup]
+  );
+  const [suratJalanNo, setSuratJalanNo] = useState("");
 
   // Items
   const [itemList, setItemList] = useState<ItemOut[]>([]);
@@ -292,7 +338,7 @@ export default function OutScreen() {
     };
   }, []);
 
-  // Ambil file konversi (robust header)
+  // Ambil file konversi
   useFocusEffect(
     useCallback(() => {
       const loadKonversi = async () => {
@@ -321,7 +367,6 @@ export default function OutScreen() {
               .toLowerCase()
               .replace(/\s+/g, " ")
               .trim();
-
           const getNum = (v: any) => {
             const n = Number(String(v ?? "").replace(/[^0-9.\-]/g, ""));
             return Number.isFinite(n) ? n : 0;
@@ -335,15 +380,12 @@ export default function OutScreen() {
               },
               {}
             );
-
             const kode =
               keys["kode"] ??
               keys["code"] ??
               keys["product code"] ??
               keys["item code"] ??
               "";
-
-            // C = Large -> Medium
             const cRaw =
               keys["konversi dari large ke medium"] ??
               keys["konversi large ke medium"] ??
@@ -354,8 +396,6 @@ export default function OutScreen() {
               keys["konversilargemedium"] ??
               keys["konversi l"] ??
               0;
-
-            // D = Medium -> Small
             const dRaw =
               keys["konversi dari medium ke small"] ??
               keys["konversi medium ke small"] ??
@@ -383,7 +423,23 @@ export default function OutScreen() {
     }, [])
   );
 
-  /* ====== Stok neto per (gudang,kode) untuk UI (pakai snapshot) ====== */
+  /* ====== Opsi Gudang Tujuan (khusus MB) berdasar Asal ====== */
+  const tujuanOptions = useMemo(() => {
+    if (jenisForm !== "MB") return [];
+    const allowedTargets = buildTujuanByAsal(jenisGudang);
+    return allowedTargets.map((g) => ({ label: g, value: g })); // sudah kanonik
+  }, [jenisForm, jenisGudang]);
+
+  // Reset tujuan jika asal berubah dan tujuan tidak valid
+  useEffect(() => {
+    if (jenisForm !== "MB") return;
+    const valid = buildTujuanByAsal(jenisGudang);
+    if (tujuanGudang && !valid.includes(canon(tujuanGudang))) {
+      setTujuanGudang(null);
+    }
+  }, [jenisForm, jenisGudang, tujuanGudang]);
+
+  /* ====== Stok neto untuk UI ====== */
   const netStockMap = useMemo(() => {
     const map = new Map<
       string,
@@ -412,7 +468,7 @@ export default function OutScreen() {
       }
     }
 
-    // - barangKeluar (asal) → konsumsi + leftover (untuk tampilan)
+    // - barangKeluar (asal)
     for (const trx of keluarDocs) {
       const items = Array.isArray(trx.items) ? trx.items : [];
       for (const rowItem of items) {
@@ -466,8 +522,12 @@ export default function OutScreen() {
       }
     }
 
-    // + mutasi masuk (tujuan)
+    // + mutasi masuk (tujuan) — hanya MB APPROVED
     for (const trx of keluarDocs) {
+      if (String(trx.jenisForm ?? "").toUpperCase() !== "MB") continue;
+      const approved = (trx.mutasiStatus ?? "APPROVED") === "APPROVED";
+      if (!approved) continue;
+
       const tujuan = canonicalGudang(trx.tujuanGudang ?? trx.gudangTujuan);
       if (!tujuan) continue;
       const items = Array.isArray(trx.items) ? trx.items : [];
@@ -506,7 +566,7 @@ export default function OutScreen() {
       result[gdg].push({
         label: val.nama || kodeKey,
         value: val.nama || kodeKey,
-        kode: kodeKey, // sudah norm
+        kode: kodeKey,
         principle: val.principle || "-",
       });
     });
@@ -516,7 +576,7 @@ export default function OutScreen() {
     return result;
   }, [netStockMap]);
 
-  /* ====== Alokasi permintaan dengan konversi (alur tegas) ====== */
+  /* ====== Alokasi permintaan ====== */
   function allocateOut(
     reqL: number,
     reqM: number,
@@ -541,7 +601,7 @@ export default function OutScreen() {
       if (reqL > 0) return null;
     }
 
-    // 2) M: stok M dulu, jika kurang baru dari L via C (L->M)
+    // 2) M prioritas stok M, lalu L->M
     if (reqM > 0) {
       const takeM = Math.min(reqM, stock.M);
       consumedM += takeM;
@@ -569,7 +629,7 @@ export default function OutScreen() {
       if (reqM > 0) return null;
     }
 
-    // 3) S: stok S dulu, lalu dari M via D (M->S), terakhir dari L via C×D
+    // 3) S prioritas stok S, lalu M->S, terakhir L->M->S
     if (reqS > 0) {
       const takeS = Math.min(reqS, stock.S);
       consumedS += takeS;
@@ -651,7 +711,7 @@ export default function OutScreen() {
     updated[index] = {
       ...updated[index],
       namaBarang: nama,
-      kode: found.kode, // sudah norm
+      kode: found.kode,
       principle: found.principle || "-",
       gdg: gdgDipilih,
       large: "",
@@ -715,6 +775,25 @@ export default function OutScreen() {
           "Akses ditolak",
           `Item #${i + 1}: gudang ${g} tidak diizinkan`
         );
+        return;
+      }
+    }
+
+    // Validasi mutasi (MB) + surat jalan GS->BS
+    let tujuanCanon = "";
+    if (jenisForm === "MB") {
+      if (!tujuanGudang) {
+        Alert.alert("Pilih Gudang Tujuan untuk mutasi");
+        return;
+      }
+      tujuanCanon = canonicalGudang(tujuanGudang);
+      const validTujuan = buildTujuanByAsal(jenisGudang);
+      if (!validTujuan.includes(tujuanCanon)) {
+        Alert.alert("Tujuan tidak valid untuk asal ini");
+        return;
+      }
+      if (needsSuratJalan && !suratJalanNo.trim()) {
+        Alert.alert("Surat Jalan wajib untuk mutasi GS → BS");
         return;
       }
     }
@@ -795,6 +874,10 @@ export default function OutScreen() {
     const operatorGuestName =
       (profileData?.guestName && String(profileData.guestName).trim()) || "";
 
+    // Status default untuk MB: PENDING
+    const mutasiStatus: MutasiStatus | undefined =
+      jenisForm === "MB" ? "PENDING" : undefined;
+
     const newEntry: TransaksiOut = {
       jenisGudang,
       kodeGdng: kodeGdngFinal,
@@ -808,14 +891,65 @@ export default function OutScreen() {
       items: hasilItems,
       createdAt: serverTimestamp(),
       gudangAsal: jenisGudang,
-      ...(jenisForm === "MB" && { tujuanGudang }),
+      ...(jenisForm === "MB" && {
+        tujuanGudang: tujuanCanon, // kanonik
+        mutasiStatus,
+        suratJalanNo: needsSuratJalan ? suratJalanNo.trim() : null, // ⬅️ string atau null (bukan undefined)
+        needsSuratJalan,
+      }),
       runId: docId,
     };
 
     try {
+      // 1) Simpan transaksi keluar
       await setDoc(doc(db, "barangKeluar", docId), newEntry);
 
-      // ✅ Kirim ke Google Sheets: kolom utama = INPUT operator (L/M/S)
+      // 2) Jika MB → kirim permintaan mutasi (inbox + notif)
+      if (jenisForm === "MB") {
+        const asalCanon = canonicalGudang(jenisGudang);
+
+        const inboxDoc = {
+          runId: docId,
+          createdAt: serverTimestamp(),
+          status: "PENDING" as MutasiStatus,
+          asal: asalCanon,
+          tujuan: tujuanCanon,
+          needsSuratJalan,
+          suratJalanNo: needsSuratJalan ? suratJalanNo.trim() : null, // ⬅️ aman
+          operatorName,
+          operatorUsername,
+          note: catatan || "",
+          items: hasilItems.map((it) => ({
+            namaBarang: it.namaBarang,
+            kode: it.kode,
+            large: it.large,
+            medium: it.medium,
+            small: it.small,
+          })),
+        };
+
+        await setDoc(doc(db, "mutasiRequests", docId), {
+          ...inboxDoc,
+          ref: { collection: "barangKeluar", id: docId },
+        });
+
+        await setDoc(doc(db, "mutasiInbox", `${tujuanCanon}-${docId}`), {
+          ...inboxDoc,
+          tujuanKey: tujuanCanon,
+        });
+
+        await setDoc(doc(db, "notifications", `mutasi-${docId}`), {
+          type: "MUTASI_REQUEST",
+          createdAt: serverTimestamp(),
+          targetGudang: tujuanCanon,
+          title: "Permintaan Mutasi Masuk",
+          message: `Mohon konfirmasi mutasi dari ${asalCanon} ke ${tujuanCanon}. RunId: ${docId}`,
+          runId: docId,
+          status: "UNREAD",
+        });
+      }
+
+      // 3) Kirim ke Google Sheets
       const itemsForExcel = hasilItems.map((it) => ({
         namaBarang: it.namaBarang,
         kode: it.kode,
@@ -850,14 +984,17 @@ export default function OutScreen() {
         namaSopir,
         jenisForm,
         waktuInput,
-        ...(jenisForm === "MB" && { tujuanGudang }),
-
+        ...(jenisForm === "MB" && {
+          tujuanGudang: tujuanCanon, // kanonik
+          mutasiStatus,
+          suratJalanNo: needsSuratJalan ? suratJalanNo.trim() : null, // ⬅️ aman
+          needsSuratJalan,
+        }),
         operatorName,
         operatorUsername,
         operatorGuestName,
-
-        items: itemsForExcel, // ⬅️ hanya INPUT
-        audit: auditForStock, // ⬅️ catatan
+        items: itemsForExcel,
+        audit: auditForStock,
         sheetMode: "SHOW_INPUT",
       };
 
@@ -871,14 +1008,20 @@ export default function OutScreen() {
         console.warn("Gagal kirim ke Spreadsheet:", e);
       }
 
-      Alert.alert("✅ Transaksi disimpan");
+      Alert.alert(
+        jenisForm === "MB"
+          ? "✅ Mutasi dibuat (menunggu konfirmasi gudang tujuan)"
+          : "✅ Transaksi disimpan"
+      );
+      // Reset form
       setItemList([]);
       setKodeApos("");
       setKategori("");
       setCatatan("");
       setNomorKendaraan("");
       setNamaSopir("");
-      setTujuanGudang("");
+      setTujuanGudang(null);
+      setSuratJalanNo("");
     } catch (err) {
       console.error("Gagal simpan:", err);
       Alert.alert("Gagal simpan ke server");
@@ -902,7 +1045,7 @@ export default function OutScreen() {
           <Text style={styles.label}>Jenis Gudang (Asal)</Text>
           <DropDownPicker
             open={openJenisGudang}
-            value={jenisGudang}
+            value={jenisGudang || null}
             setOpen={setOpenJenisGudang}
             setValue={setJenisGudang as any}
             items={allowedGdg.map((g) => ({ label: g, value: g }))}
@@ -913,6 +1056,11 @@ export default function OutScreen() {
             zIndex={6000}
             listMode="SCROLLVIEW"
           />
+          {jenisForm === "MB" && jenisGudang ? (
+            <Text style={styles.hint}>
+              Asal: {canonicalGudang(jenisGudang)} ({asalGroup})
+            </Text>
+          ) : null}
 
           {/* Jenis Form */}
           <Text style={styles.label}>Jenis Form</Text>
@@ -959,26 +1107,58 @@ export default function OutScreen() {
             onChangeText={setKodeApos}
           />
 
-          {/* Gudang Tujuan (MB) */}
+          {/* Gudang Tujuan (MB) + Surat Jalan Rule */}
           {jenisForm === "MB" && (
             <>
               <Text style={styles.label}>Gudang Tujuan</Text>
               <DropDownPicker
                 open={openTujuanGudang}
-                value={tujuanGudang}
+                value={tujuanGudang ?? null}
                 setOpen={setOpenTujuanGudang}
                 setValue={setTujuanGudang as any}
-                items={allowedGdg.map((g) => ({ label: g, value: g }))}
+                items={tujuanOptions}
+                placeholder={
+                  jenisGudang ? "Pilih Gudang Tujuan" : "Pilih gudang asal dulu"
+                }
+                disabled={!jenisGudang}
                 style={styles.dropdown}
                 zIndex={4800}
                 listMode="SCROLLVIEW"
               />
+              {tujuanGudang ? (
+                <Text style={styles.hint}>
+                  Tujuan: {canonicalGudang(tujuanGudang)} ({tujuanGroup})
+                </Text>
+              ) : null}
+
+              {needsSuratJalan ? (
+                <>
+                  <Text style={[styles.label, { color: "#b22222" }]}>
+                    Nomor Surat Jalan (WAJIB untuk GS → BS)
+                  </Text>
+                  <TextInput
+                    style={styles.input}
+                    value={suratJalanNo}
+                    onChangeText={setSuratJalanNo}
+                    placeholder="Isi nomor surat jalan"
+                  />
+                  <Text style={styles.hintSmall}>
+                    * GS = Gudang A/BCD, BS = Gudang E. Mutasi GS→BS wajib surat
+                    jalan dari depan.
+                  </Text>
+                </>
+              ) : tujuanGudang ? (
+                <Text style={styles.hintSmall}>
+                  * BS → GS tidak wajib surat jalan.
+                </Text>
+              ) : null}
 
               <Text style={styles.label}>Keterangan</Text>
               <TextInput
                 style={styles.input}
                 value={catatan}
                 onChangeText={setCatatan}
+                placeholder="Catatan mutasi (opsional)"
               />
             </>
           )}
@@ -989,7 +1169,7 @@ export default function OutScreen() {
               <Text style={styles.label}>Nama Sopir</Text>
               <DropDownPicker
                 open={openNamaSopir}
-                value={namaSopir}
+                value={namaSopir || null}
                 setOpen={setOpenNamaSopir}
                 setValue={setNamaSopir as any}
                 items={[
@@ -1008,7 +1188,7 @@ export default function OutScreen() {
               <Text style={styles.label}>Plat Nomor Kendaraan</Text>
               <DropDownPicker
                 open={openPlat}
-                value={nomorKendaraan}
+                value={nomorKendaraan || null}
                 setOpen={setOpenPlat}
                 setValue={setNomorKendaraan as any}
                 items={[
@@ -1069,7 +1249,7 @@ export default function OutScreen() {
                     copy[i] = !!next;
                     setOpenGudangPerItem(copy);
                   }}
-                  value={item.gdg}
+                  value={item.gdg ?? null}
                   setValue={(v) => {
                     const val =
                       typeof v === "function" ? v(item.gdg || null) : v;
@@ -1099,7 +1279,7 @@ export default function OutScreen() {
                     copy[i] = !!next;
                     setOpenNamaBarang(copy);
                   }}
-                  value={item.namaBarang}
+                  value={item.namaBarang || null}
                   setValue={(v) => {
                     const val =
                       typeof v === "function" ? v(item.namaBarang || null) : v;
@@ -1107,7 +1287,7 @@ export default function OutScreen() {
                       Alert.alert("Pilih gudang dulu");
                       return;
                     }
-                    handleSelectBarang(i, String(val ?? "")); // set kode/principle otomatis
+                    handleSelectBarang(i, String(val ?? ""));
                   }}
                   items={candidates}
                   placeholder="Pilih Nama Barang"
@@ -1182,6 +1362,8 @@ export default function OutScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16, backgroundColor: "#fff" },
   label: { marginBottom: 4, fontWeight: "bold" },
+  hint: { marginTop: -6, marginBottom: 8, color: "#333" },
+  hintSmall: { marginTop: -2, marginBottom: 10, color: "#666", fontSize: 12 },
   input: {
     borderWidth: 1,
     borderColor: "#ccc",
