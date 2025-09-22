@@ -3,7 +3,8 @@
 //    builder stok anti-race (tujuan hanya dihitung jika APPROVED),
 //    akses gudang berdasar user, alokasi dengan leftover (C/D), audit ke Sheet.
 //    + Tujuan MB dibatasi ke A/BCD/E dan tergantung asal (BCD→A/E, A→BCD/E, E→A/BCD)
-//    + FIX: Firestore error saat MB→A karena suratJalanNo undefined → kini selalu string atau null.
+//    + FIX1: Firestore error saat MB→A (suratJalanNo undefined) → selalu string/null.
+//    + FIX2: DR salah hitung leftover → pakai working stock per (gudang,kode) di 1 submit.
 
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useFocusEffect } from "@react-navigation/native";
@@ -338,7 +339,7 @@ export default function OutScreen() {
     };
   }, []);
 
-  // Ambil file konversi
+  // Ambil file konversi (robust header)
   useFocusEffect(
     useCallback(() => {
       const loadKonversi = async () => {
@@ -581,7 +582,7 @@ export default function OutScreen() {
     reqL: number,
     reqM: number,
     reqS: number,
-    stock: { L: number; M: number; S: number },
+    stock: { L: number; M: number; S: number }, // ⬅️ akan DIMUTASI (working stock)
     konv: { LtoM: number; MtoS: number }
   ) {
     let consumedL = 0,
@@ -622,7 +623,7 @@ export default function OutScreen() {
         const leftoverM2 = producedM - takeM2;
         if (leftoverM2 > 0) {
           addBackM += leftoverM2;
-          stock.M += leftoverM2;
+          stock.M += leftoverM2; // ⬅️ disimpan utk baris berikutnya
         }
       }
 
@@ -649,7 +650,7 @@ export default function OutScreen() {
         const leftoverS2 = producedS - takeS2;
         if (leftoverS2 > 0) {
           addBackS += leftoverS2;
-          stock.S += leftoverS2;
+          stock.S += leftoverS2; // ⬅️ disimpan utk baris berikutnya
         }
       }
 
@@ -668,7 +669,7 @@ export default function OutScreen() {
         const leftoverS3 = producedS2 - takeS3;
         if (leftoverS3 > 0) {
           addBackS += leftoverS3;
-          stock.S += leftoverS3;
+          stock.S += leftoverS3; // ⬅️ disimpan utk baris berikutnya
         }
       }
 
@@ -810,6 +811,9 @@ export default function OutScreen() {
     const kodeGdngFinal = jenisForm === "MB" ? itemList[0]?.gdg || "-" : "-";
     const hasilItems: ItemOut[] = [];
 
+    // ⬇️ FIX: working stock per (gudang,kode) supaya baris2 dalam 1 submit saling “nyambung”
+    const working = new Map<string, { L: number; M: number; S: number }>();
+
     for (const [i, item] of itemList.entries()) {
       const gdgRaw =
         item.gdg && item.gdg.trim() !== "" ? item.gdg : jenisGudang;
@@ -820,13 +824,20 @@ export default function OutScreen() {
       }
 
       const key = `${gdgKey}|${norm(item.kode)}`;
-      const cur = freshMap.get(key) || {
+      const base = freshMap.get(key) || {
         L: 0,
         M: 0,
         S: 0,
         nama: "",
         principle: "-",
       };
+
+      // Ambil reference working stock (akan dimutasi oleh allocateOut)
+      let ws = working.get(key);
+      if (!ws) {
+        ws = { L: base.L, M: base.M, S: base.S };
+        working.set(key, ws);
+      }
 
       const k = konversiData.find((z) => norm(z.Kode) === norm(item.kode));
       const LtoM = k?.KonversiL ?? 0;
@@ -836,24 +847,18 @@ export default function OutScreen() {
       const reqM = toInt(item.medium);
       const reqS = toInt(item.small);
 
-      const alloc = allocateOut(
-        reqL,
-        reqM,
-        reqS,
-        { L: cur.L, M: cur.M, S: cur.S },
-        { LtoM, MtoS }
-      );
+      const alloc = allocateOut(reqL, reqM, reqS, ws, { LtoM, MtoS });
       if (!alloc) {
         Alert.alert(
           "Stok tidak cukup",
-          `${item.namaBarang || item.kode} (L=${cur.L}, M=${cur.M}, S=${cur.S})`
+          `${item.namaBarang || item.kode} (L=${ws.L}, M=${ws.M}, S=${ws.S})`
         );
         return;
       }
 
       hasilItems.push({
         ...item,
-        principle: item.principle || cur.principle || "-",
+        principle: item.principle || base.principle || "-",
         consumedL: String(alloc.consumedL),
         consumedM: String(alloc.consumedM),
         consumedS: String(alloc.consumedS),
@@ -894,7 +899,7 @@ export default function OutScreen() {
       ...(jenisForm === "MB" && {
         tujuanGudang: tujuanCanon, // kanonik
         mutasiStatus,
-        suratJalanNo: needsSuratJalan ? suratJalanNo.trim() : null, // ⬅️ string atau null (bukan undefined)
+        suratJalanNo: needsSuratJalan ? suratJalanNo.trim() : null, // string/null
         needsSuratJalan,
       }),
       runId: docId,
@@ -915,7 +920,7 @@ export default function OutScreen() {
           asal: asalCanon,
           tujuan: tujuanCanon,
           needsSuratJalan,
-          suratJalanNo: needsSuratJalan ? suratJalanNo.trim() : null, // ⬅️ aman
+          suratJalanNo: needsSuratJalan ? suratJalanNo.trim() : null, // aman
           operatorName,
           operatorUsername,
           note: catatan || "",
@@ -987,7 +992,7 @@ export default function OutScreen() {
         ...(jenisForm === "MB" && {
           tujuanGudang: tujuanCanon, // kanonik
           mutasiStatus,
-          suratJalanNo: needsSuratJalan ? suratJalanNo.trim() : null, // ⬅️ aman
+          suratJalanNo: needsSuratJalan ? suratJalanNo.trim() : null,
           needsSuratJalan,
         }),
         operatorName,
